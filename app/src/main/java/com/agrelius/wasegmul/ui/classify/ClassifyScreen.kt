@@ -1,7 +1,9 @@
 package com.agrelius.wasegmul.ui.classify
 
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -18,10 +20,18 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.agrelius.wasegmul.WasegMulApp
 import com.agrelius.wasegmul.ui.components.GradientActionButton
-import com.agrelius.wasegmul.viewmodel.ClassificationViewModel
+import com.agrelius.wasegmul.ui.components.OrganicBackground
+import com.agrelius.wasegmul.ui.theme.*
+import com.agrelius.wasegmul.utils.EcoThoughts
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -31,18 +41,45 @@ fun ClassifyScreen(
     onNavigateToResult: () -> Unit,
     onBack: () -> Unit
 ) {
-    var isAnalyzing by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val soundManager = (context.applicationContext as WasegMulApp).soundManager
+    val capturedBitmap by viewModel.capturedBitmap.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val classificationResult by viewModel.classificationResult.collectAsState()
+    val error by viewModel.error.collectAsState()
+    val loadingThought = remember { EcoThoughts.getRandom() }
+
+    LaunchedEffect(Unit) {
+        viewModel.initModel(context)
+    }
+
+    LaunchedEffect(isLoading) {
+        if (isLoading) {
+            while (isLoading) {
+                soundManager.playAnalyzingPulse()
+                delay(800)
+            }
+        }
+    }
+
+    LaunchedEffect(classificationResult) {
+        if (classificationResult != null) {
+            soundManager.playNeuralLock()
+            onNavigateToResult()
+        }
+    }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = DarkBackground,
         topBar = {
             CenterAlignedTopAppBar(
                 title = { 
                     Text(
-                        "Neural Scanner",
+                        "SCAN INTERFACE",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
+                        color = EmeraldVibrant,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
                     ) 
                 },
                 navigationIcon = {
@@ -50,7 +87,7 @@ fun ClassifyScreen(
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack, 
                             contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onSurface
+                            tint = TextPrimary
                         )
                     }
                 },
@@ -60,83 +97,121 @@ fun ClassifyScreen(
             )
         }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Interactive Scan Area
-            Box(
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            OrganicBackground()
+            
+            Column(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(32.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f))
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(32.dp)
-                    ),
-                contentAlignment = Alignment.Center
+                    .fillMaxSize()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Placeholder content
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = null,
-                        modifier = Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        "Awaiting Visual Input",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                if (isAnalyzing) {
-                    ScanningOverlay()
-                }
-            }
-
-            Spacer(modifier = Modifier.height(40.dp))
-
-            GradientActionButton(
-                text = if (isAnalyzing) "Analyzing..." else "Analyze Material",
-                icon = Icons.Default.AutoAwesome,
-                onClick = {
-                    isAnalyzing = true
-                    // Simulate processing
-                    scope.apply {
-                        // In a real app, this would be a launched effect or handled in VM
+                // Immersive Preview Area
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(32.dp))
+                        .background(DeepCharcoal.copy(alpha = 0.5f))
+                        .border(
+                            width = 1.dp,
+                            color = ForestGreen.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(32.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (capturedBitmap != null) {
+                        Image(
+                            bitmap = capturedBitmap!!.asImageBitmap(),
+                            contentDescription = "Captured Image",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp),
+                                tint = EmeraldVibrant.copy(alpha = 0.3f)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                "Awaiting Visual Input",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextSecondary
+                            )
+                        }
                     }
-                },
-                modifier = Modifier.alpha(if (isAnalyzing) 0.7f else 1f)
-            )
 
-            if (isAnalyzing) {
-                LaunchedEffect(Unit) {
-                    delay(2500)
-                    onNavigateToResult()
+                    if (isLoading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.8f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(24.dp)
+                            ) {
+                                CircularProgressIndicator(color = EmeraldVibrant)
+                                Spacer(modifier = Modifier.height(24.dp))
+                                Text(
+                                    text = loadingThought,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White,
+                                    textAlign = TextAlign.Center,
+                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                                )
+                            }
+                        }
+                        ScanningOverlay()
+                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                if (error != null) {
+                    Card(
+                        modifier = Modifier.padding(top = 16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                    ) {
+                        Text(
+                            text = error!!,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                }
 
-            TextButton(
-                onClick = onBack,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !isAnalyzing
-            ) {
-                Icon(Icons.Default.Refresh, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "Retake Photo",
-                    style = MaterialTheme.typography.labelLarge
+                Spacer(modifier = Modifier.height(40.dp))
+
+                GradientActionButton(
+                    text = if (isLoading) "Processing..." else "Launch Scanner",
+                    icon = Icons.Default.AutoAwesome,
+                    onClick = {
+                        soundManager.playTick()
+                        viewModel.classify(context)
+                    },
+                    modifier = Modifier.alpha(if (isLoading) 0.7f else 1f),
+                    containerColor = ForestGreen
                 )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                TextButton(
+                    onClick = onBack,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLoading
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, tint = SageGreen)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Retake Image",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = SageGreen
+                    )
+                }
             }
         }
     }
@@ -161,7 +236,7 @@ fun ScanningOverlay() {
             brush = Brush.horizontalGradient(
                 colors = listOf(
                     Color.Transparent,
-                    Color(0xFF2ECC71),
+                    EmeraldVibrant,
                     Color.Transparent
                 )
             ),
@@ -172,7 +247,7 @@ fun ScanningOverlay() {
         
         drawRect(
             brush = Brush.verticalGradient(
-                0f to Color(0xFF2ECC71).copy(alpha = 0.1f),
+                0f to EmeraldVibrant.copy(alpha = 0.1f),
                 scanY to Color.Transparent,
                 startY = y - 100f,
                 endY = y

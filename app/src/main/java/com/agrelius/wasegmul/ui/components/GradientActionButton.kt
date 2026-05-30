@@ -14,6 +14,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -25,6 +27,7 @@ fun GradientActionButton(
     modifier: Modifier = Modifier,
     containerColor: Color = MaterialTheme.colorScheme.primary
 ) {
+    val haptic = LocalHapticFeedback.current
     val gradient = Brush.horizontalGradient(
         colors = listOf(
             containerColor,
@@ -38,7 +41,10 @@ fun GradientActionButton(
             .height(64.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(gradient)
-            .clickable(onClick = onClick),
+            .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onClick()
+            },
         contentAlignment = Alignment.Center
     ) {
         Row(

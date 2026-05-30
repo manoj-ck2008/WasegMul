@@ -1,0 +1,30 @@
+Air-Conditioner
+Battery
+Cardboard
+Electronic Component
+Electronic Device
+Glass
+Keyboard
+Laptop
+Metal
+Microwave
+Miscellaneous Trash
+Mobile
+Mouse
+Organic
+PCB
+Paper
+Plastic
+Player
+Printer
+Refrigerator
+Television
+Textile Trash
+Washing Machine
+automobile wastes
+clothing
+disposable_plastic_cutlery
+light bulbs
+shoes
+styrofoam_cups
+styrofoam_food_containers
