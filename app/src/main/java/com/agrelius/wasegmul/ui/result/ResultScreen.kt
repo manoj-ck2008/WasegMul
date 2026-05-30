@@ -1,17 +1,24 @@
 package com.agrelius.wasegmul.ui.result
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.agrelius.wasegmul.ui.components.PrimaryActionButton
-import com.agrelius.wasegmul.ui.components.ResultCard
-import com.agrelius.wasegmul.ui.components.SectionHeader
+import androidx.compose.ui.unit.sp
+import com.agrelius.wasegmul.ui.components.*
 import com.agrelius.wasegmul.viewmodel.ResultViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -20,15 +27,30 @@ fun ResultScreen(
     viewModel: ResultViewModel,
     onNavigateToHome: () -> Unit
 ) {
+    var showContent by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        showContent = true
+    }
+
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = { Text("Classification Results") },
+            CenterAlignedTopAppBar(
+                title = { 
+                    Text(
+                        "Material Analysis Report", 
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    ) 
+                },
                 actions = {
                     IconButton(onClick = onNavigateToHome) {
-                        Icon(Icons.Default.Home, contentDescription = "Home")
+                        Icon(Icons.Default.Home, contentDescription = "Home", tint = MaterialTheme.colorScheme.onSurface)
                     }
-                }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = Color.Transparent
+                )
             )
         }
     ) { innerPadding ->
@@ -39,28 +61,96 @@ fun ResultScreen(
                 .padding(horizontal = 24.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            SectionHeader(text = "Primary Detection")
-
-            ResultCard(title = "Category", content = "Plastic (Placeholder)")
-            ResultCard(title = "Subclass", content = "PET Bottle (Placeholder)")
-            ResultCard(title = "Confidence", content = "98.5% (Placeholder)")
-
             Spacer(modifier = Modifier.height(16.dp))
-            SectionHeader(text = "Insights")
 
-            ResultCard(title = "Top Predictions", content = "1. PET Bottle (98%)\n2. Glass Bottle (1.2%)\n3. Metal Can (0.3%)")
-            ResultCard(title = "Disposal Guide", content = "Rinse with water, remove the cap, and place in the yellow recycling bin.")
-            ResultCard(title = "Environmental Impact", content = "Plastic takes up to 450 years to decompose in landfills.")
-            ResultCard(title = "Recycling Benefits", content = "Recycling one plastic bottle saves enough energy to power a 60W light bulb for 3 hours.")
+            AnimatedVisibility(
+                visible = showContent,
+                enter = fadeIn(tween(800)) + slideInVertically(tween(800)) { 50 }
+            ) {
+                Column {
+                    // Hero Result Card with Glass Effect
+                    HeroCard {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Plastic",
+                                    style = MaterialTheme.typography.displaySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    letterSpacing = 1.sp
+                                )
+                                Text(
+                                    text = "PET Bottle • Type 01",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            ConfidenceBadge(confidence = 0.985f)
+                        }
+                    }
 
-            Spacer(modifier = Modifier.height(32.dp))
+                    SectionTitle(text = "AI Insights")
+                    
+                    InsightCard(
+                        title = "Prediction Confidence",
+                        content = "PET Bottle (98%)\nGlass Bottle (1.2%)\nMetal Can (0.3%)",
+                        icon = Icons.Default.Assessment
+                    )
 
-            PrimaryActionButton(
-                text = "Back to Home",
-                onClick = onNavigateToHome
-            )
+                    InsightCard(
+                        title = "Disposal Protocol",
+                        content = "Rinse thoroughly. Compress to save space. Remove label if possible. Deposit in Category A Recycling.",
+                        icon = Icons.Default.TipsAndUpdates
+                    )
 
-            Spacer(modifier = Modifier.height(24.dp))
+                    InsightCard(
+                        title = "Ecological Footprint",
+                        content = "Estimated decomposition: 450 years.\nRecycling saves 75% energy vs virgin production.",
+                        icon = Icons.Default.Public
+                    )
+
+                    SectionTitle(text = "Spatial Analysis")
+                    
+                    // Future YOLO Placeholder
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp)
+                            .background(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f),
+                                MaterialTheme.shapes.large
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.Dashboard, 
+                                contentDescription = null, 
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Real-time Object Map Placeholder",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(40.dp))
+
+                    GradientActionButton(
+                        text = "Finish Session",
+                        onClick = onNavigateToHome
+                    )
+                    
+                    Spacer(modifier = Modifier.height(48.dp))
+                }
+            }
         }
     }
 }
