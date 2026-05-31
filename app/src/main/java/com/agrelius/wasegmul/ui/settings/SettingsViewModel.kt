@@ -18,10 +18,29 @@ class SettingsViewModel(
     val volume: StateFlow<Float> = settingsManager.volume
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.5f)
 
+    val themeMode: StateFlow<String> = settingsManager.themeMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "DARK")
+
+    val isImageSharingEnabled: StateFlow<Boolean> = settingsManager.isImageSharingEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     fun setVolume(value: Float) {
         viewModelScope.launch {
             settingsManager.setVolume(value)
             soundManager.updateVolume()
+            // playTick removed as per request
+        }
+    }
+
+    fun setThemeMode(value: String) {
+        viewModelScope.launch {
+            settingsManager.setThemeMode(value)
+        }
+    }
+
+    fun setImageSharing(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsManager.setImageSharing(enabled)
             soundManager.playTick()
         }
     }

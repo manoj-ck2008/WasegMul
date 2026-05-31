@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [WasteRecord::class], version = 5, exportSchema = false)
+@Database(entities = [WasteRecord::class], version = 6, exportSchema = false)
 abstract class WasteDatabase : RoomDatabase() {
     abstract fun wasteDao(): WasteDao
 

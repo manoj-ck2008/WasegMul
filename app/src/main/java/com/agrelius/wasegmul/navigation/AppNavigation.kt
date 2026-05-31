@@ -1,11 +1,14 @@
 package com.agrelius.wasegmul.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.agrelius.wasegmul.WasegMulApp
 import com.agrelius.wasegmul.ui.classify.ClassificationViewModel
 import com.agrelius.wasegmul.ui.classify.ClassifyScreen
@@ -23,9 +26,10 @@ fun AppNavigation() {
     val app = context.applicationContext as WasegMulApp
     val repository = app.repository
     val soundManager = app.soundManager
+    val settingsManager = app.settingsManager
 
     val classificationViewModel: ClassificationViewModel = viewModel(
-        factory = ClassificationViewModel.Factory(repository, soundManager)
+        factory = ClassificationViewModel.Factory(repository, soundManager, settingsManager)
     )
     val homeViewModel: HomeViewModel = viewModel(
         factory = HomeViewModel.Factory(repository)
@@ -78,7 +82,20 @@ fun AppNavigation() {
             )
         }
 
-        composable(Screen.Result.route) {
+        composable(
+            route = Screen.Result.route + "?recordId={recordId}",
+            arguments = listOf(navArgument("recordId") { 
+                type = NavType.LongType
+                defaultValue = -1L
+            })
+        ) { backStackEntry ->
+            val recordId = backStackEntry.arguments?.getLong("recordId") ?: -1L
+            LaunchedEffect(recordId) {
+                if (recordId != -1L) {
+                    classificationViewModel.loadRecord(recordId)
+                }
+            }
+            
             ResultScreen(
                 viewModel = classificationViewModel,
                 onNavigateToHome = {
@@ -92,7 +109,10 @@ fun AppNavigation() {
         composable("history") {
             HistoryScreen(
                 viewModel = homeViewModel,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onNavigateToResult = { id ->
+                    navController.navigate(Screen.Result.route + "?recordId=$id")
+                }
             )
         }
     }

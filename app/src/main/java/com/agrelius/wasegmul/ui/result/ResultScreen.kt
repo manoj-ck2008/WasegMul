@@ -26,6 +26,7 @@ fun ResultScreen(
     onNavigateToHome: () -> Unit
 ) {
     val result by viewModel.classificationResult.collectAsState()
+    val record by viewModel.currentRecord.collectAsState()
     var showContent by remember { mutableStateOf(false) }
     
     LaunchedEffect(Unit) {
@@ -33,20 +34,20 @@ fun ResultScreen(
     }
 
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             CenterAlignedTopAppBar(
                 title = { 
                     Text(
-                        "SYNTHESIS REPORT", 
+                        "ANALYSIS REPORT", 
                         style = MaterialTheme.typography.labelSmall,
-                        color = EmeraldVibrant,
+                        color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
                     ) 
                 },
                 actions = {
                     IconButton(onClick = onNavigateToHome) {
-                        Icon(Icons.Default.Home, contentDescription = "Home", tint = TextPrimary)
+                        Icon(Icons.Default.Home, contentDescription = "Home", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -72,7 +73,6 @@ fun ResultScreen(
                         enter = fadeIn(tween(800)) + slideInVertically(tween(800)) { 50 }
                     ) {
                         Column {
-                            // Hero Result Card with Glass Effect
                             HeroCard {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -84,13 +84,13 @@ fun ResultScreen(
                                             text = result!!.subclass,
                                             style = MaterialTheme.typography.displaySmall,
                                             fontWeight = FontWeight.Black,
-                                            color = if (result!!.category == "Uncertain") LowConfidence else TextPrimary,
+                                            color = if (result!!.category == "Uncertain") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                                             letterSpacing = 1.sp
                                         )
                                         Text(
                                             text = if (result!!.category == "Uncertain") "LOW CONFIDENCE MATCH" else result!!.category.uppercase(),
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = if (result!!.category == "Uncertain") LowConfidence else EmeraldVibrant,
+                                            color = if (result!!.category == "Uncertain") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                                             fontWeight = FontWeight.Bold,
                                             letterSpacing = 2.sp
                                         )
@@ -102,31 +102,22 @@ fun ResultScreen(
                             if (result!!.category == "Uncertain") {
                                 Card(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                                    colors = CardDefaults.cardColors(containerColor = LowConfidence.copy(alpha = 0.1f))
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                                 ) {
                                     Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.Warning, contentDescription = null, tint = LowConfidence)
+                                        Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Text(
-                                            "Neural Variance Detected: The visual signature is outside standard thresholds. Please verify manually.",
+                                            "Neural Variance: The visual signature is outside standard thresholds. Manual verification required.",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = TextPrimary
+                                            color = MaterialTheme.colorScheme.onErrorContainer
                                         )
                                     }
                                 }
                             }
 
-                            SectionTitle(text = "Neural Insights")
+                            SectionTitle(text = "Environmental Insights")
                             
-                            InsightCard(
-                                title = "Prediction Variance",
-                                content = if (result!!.topPredictions.isEmpty()) "Single signature detected." 
-                                          else result!!.topPredictions.joinToString("\n") { 
-                                              "${it.first}: ${(it.second * 100).toInt()}% match" 
-                                          },
-                                icon = Icons.Default.QueryStats
-                            )
-
                             InsightCard(
                                 title = "Disposal Protocol",
                                 content = result!!.disposalGuide,
@@ -134,20 +125,46 @@ fun ResultScreen(
                             )
 
                             InsightCard(
-                                title = "Environmental Infographic",
+                                title = "Ecological Footprint",
                                 content = result!!.environmentalImpact,
                                 icon = Icons.Default.AutoGraph
                             )
                             
                             InsightCard(
                                 title = "Verification Sources",
-                                content = "Data verified against IPCC & EPA Sustainability Frameworks.",
+                                content = "Data verified against global Sustainability Frameworks.",
                                 icon = Icons.Default.Science
                             )
+
+                            // NEW: Feature Vector & Technical Meta
+                            if (record != null) {
+                                SectionTitle(text = "Neural Material Signature")
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f))
+                                ) {
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        Text(
+                                            text = "Feature Vector: ${record!!.featureVector ?: "Generating..."}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "Storage: ${if (record!!.imagePath != null) "Full Image Sync" else "Metadata Only"}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = TextSecondary
+                                        )
+                                    }
+                                }
+                            }
 
                             SectionTitle(text = "Validation")
                             
                             FeedbackSection(
+                                initialFeedback = record?.feedback,
+                                initialCorrection = record?.correctedSubclass,
                                 onFeedbackSelected = { feedback ->
                                     viewModel.setFeedback(feedback)
                                 },
@@ -161,7 +178,7 @@ fun ResultScreen(
                             GradientActionButton(
                                 text = "Acknowledge & Close",
                                 onClick = onNavigateToHome,
-                                containerColor = ForestGreen
+                                containerColor = MaterialTheme.colorScheme.primary
                             )
                             
                             Spacer(modifier = Modifier.height(48.dp))

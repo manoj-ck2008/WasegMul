@@ -10,6 +10,8 @@ data class WasteRecord(
     val subclass: String,
     val confidence: Float,
     val estimatedWeight: Double = 0.05,
+    val featureVector: String? = null, // Base64 encoded or string representation
+    val imagePath: String? = null, // Local file path if sharing is allowed
     val feedback: String? = null,
     val correctedSubclass: String? = null,
     val timestamp: Long = System.currentTimeMillis()

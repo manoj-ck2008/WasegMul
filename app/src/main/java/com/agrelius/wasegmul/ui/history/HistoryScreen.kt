@@ -29,7 +29,8 @@ import com.agrelius.wasegmul.viewmodel.HomeViewModel
 @Composable
 fun HistoryScreen(
     viewModel: HomeViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onNavigateToResult: (Long) -> Unit
 ) {
     val allHistory by viewModel.allHistory.collectAsState()
     var editingRecord by remember { mutableStateOf<WasteRecord?>(null) }
@@ -68,7 +69,8 @@ fun HistoryScreen(
                     items(allHistory) { record ->
                         HistoryCard(
                             record = record,
-                            onEditFeedback = { editingRecord = record }
+                            onEditFeedback = { editingRecord = record },
+                            onClick = { onNavigateToResult(record.id) }
                         )
                     }
                 }
@@ -94,7 +96,8 @@ fun HistoryScreen(
 @Composable
 fun HistoryCard(
     record: WasteRecord,
-    onEditFeedback: () -> Unit
+    onEditFeedback: () -> Unit,
+    onClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
@@ -102,7 +105,7 @@ fun HistoryCard(
             .padding(vertical = 6.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f))
-            .clickable { onEditFeedback() }
+            .clickable { onClick() }
             .padding(14.dp)
     ) {
         Row(
@@ -123,7 +126,9 @@ fun HistoryCard(
             
             Row(verticalAlignment = Alignment.CenterVertically) {
                 FeedbackBadge(feedback = record.feedback)
-                Spacer(modifier = Modifier.width(12.dp))
+                IconButton(onClick = onEditFeedback) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit Feedback", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                }
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))

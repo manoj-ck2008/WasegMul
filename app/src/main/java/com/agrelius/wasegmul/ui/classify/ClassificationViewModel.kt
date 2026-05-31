@@ -10,14 +10,20 @@ import com.agrelius.wasegmul.data.WasteRecord
 import com.agrelius.wasegmul.knowledge.WasteKnowledgeBase
 import com.agrelius.wasegmul.ml.ModelManager
 import com.agrelius.wasegmul.repository.WasteRepository
+import com.agrelius.wasegmul.utils.SettingsManager
 import com.agrelius.wasegmul.utils.SoundManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
+import java.util.*
 
 class ClassificationViewModel(
     private val repository: WasteRepository,
-    private val soundManager: SoundManager
+    private val soundManager: SoundManager,
+    private val settingsManager: SettingsManager
 ) : ViewModel() {
 
     private var modelManager: ModelManager? = null
@@ -35,7 +41,8 @@ class ClassificationViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
-    private var currentRecordId: Long = -1
+    private val _currentRecord = MutableStateFlow<WasteRecord?>(null)
+    val currentRecord: StateFlow<WasteRecord?> = _currentRecord
 
     fun initModel(context: Context) {
         if (modelManager == null) {
@@ -47,6 +54,7 @@ class ClassificationViewModel(
         _capturedBitmap.value = bitmap
         _classificationResult.value = null
         _error.value = null
+        _currentRecord.value = null
     }
 
     fun classify(context: Context) {
@@ -76,24 +84,34 @@ class ClassificationViewModel(
 
                     _classificationResult.value = result
                     
-                    // AUDITORY FEEDBACK
                     if (isUncertain) {
                         soundManager.playWarning()
                     } else {
                         soundManager.playSuccess()
                     }
 
-                    // Save to history - persistent storage
+                    // Save to history
                     val estimatedWeight = if (isUncertain) 0.0 else WasteKnowledgeBase.getEstimatedWeight(result.subclass)
-                    
-                    currentRecordId = repository.insert(WasteRecord(
+                    val featureVector = "vec_" + UUID.randomUUID().toString().take(8)
+
+                    var savedPath: String? = null
+                    val isSharingEnabled = settingsManager.isImageSharingEnabled.first()
+                    if (isSharingEnabled) {
+                        savedPath = saveImageLocally(context, bitmap)
+                    }
+
+                    val record = WasteRecord(
                         category = result.category,
                         subclass = result.subclass,
                         confidence = result.confidence,
-                        estimatedWeight = estimatedWeight
-                    ))
+                        estimatedWeight = estimatedWeight,
+                        featureVector = featureVector,
+                        imagePath = savedPath
+                    )
+                    val id = repository.insert(record)
+                    _currentRecord.value = record.copy(id = id)
                 } else {
-                    _error.value = "Hardware Sync: Interface Error"
+                    _error.value = "Hardware Sync Error"
                 }
             } catch (e: Exception) {
                 _error.value = "System Error: ${e.message}"
@@ -103,18 +121,48 @@ class ClassificationViewModel(
         }
     }
 
+    private fun saveImageLocally(context: Context, bitmap: Bitmap): String {
+        val dir = File(context.filesDir, "training_data")
+        if (!dir.exists()) dir.mkdirs()
+        val file = File(dir, "waste_${System.currentTimeMillis()}.jpg")
+        FileOutputStream(file).use { out ->
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+        }
+        return file.absolutePath
+    }
+
     fun setFeedback(feedback: String) {
-        if (currentRecordId != -1L) {
-            viewModelScope.launch {
-                repository.updateFeedback(currentRecordId, feedback)
-            }
+        val recordId = _currentRecord.value?.id ?: return
+        viewModelScope.launch {
+            repository.updateFeedback(recordId, feedback)
+            // Update local state
+            _currentRecord.value = _currentRecord.value?.copy(feedback = feedback)
         }
     }
 
     fun setCorrection(correction: String) {
-        if (currentRecordId != -1L) {
-            viewModelScope.launch {
-                repository.updateCorrection(currentRecordId, correction)
+        val recordId = _currentRecord.value?.id ?: return
+        viewModelScope.launch {
+            repository.updateCorrection(recordId, correction)
+            // Update local state
+            _currentRecord.value = _currentRecord.value?.copy(correctedSubclass = correction)
+        }
+    }
+
+    fun loadRecord(recordId: Long) {
+        viewModelScope.launch {
+            repository.allHistory.first().find { it.id == recordId }?.let { record ->
+                val info = WasteKnowledgeBase.getInfo(record.category, record.subclass)
+                _classificationResult.value = ClassificationResult(
+                    category = record.category,
+                    subclass = record.subclass,
+                    confidence = record.confidence,
+                    topPredictions = emptyList(),
+                    disposalGuide = info.disposalGuide,
+                    environmentalImpact = info.environmentalImpact,
+                    recyclingBenefits = info.recyclingBenefits
+                )
+                _currentRecord.value = record
             }
         }
     }
@@ -122,17 +170,17 @@ class ClassificationViewModel(
     override fun onCleared() {
         super.onCleared()
         modelManager?.close()
-        // Note: releasing soundManager here as it's shared/provided by Activity context via App
     }
 
     class Factory(
         private val repository: WasteRepository,
-        private val soundManager: SoundManager
+        private val soundManager: SoundManager,
+        private val settingsManager: SettingsManager
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(ClassificationViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return ClassificationViewModel(repository, soundManager) as T
+                return ClassificationViewModel(repository, soundManager, settingsManager) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

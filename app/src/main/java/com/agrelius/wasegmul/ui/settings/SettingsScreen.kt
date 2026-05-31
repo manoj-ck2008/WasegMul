@@ -1,10 +1,12 @@
 package com.agrelius.wasegmul.ui.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -14,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.agrelius.wasegmul.WasegMulApp
 import androidx.compose.ui.platform.LocalContext
+import com.agrelius.wasegmul.ui.theme.AppThemeMode
 import com.agrelius.wasegmul.viewmodel.HomeViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -29,6 +32,8 @@ fun SettingsScreen(
     )
     
     val volume by settingsViewModel.volume.collectAsState()
+    val themeMode by settingsViewModel.themeMode.collectAsState()
+    val isImageSharingEnabled by settingsViewModel.isImageSharingEnabled.collectAsState()
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -50,6 +55,7 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(24.dp)
+                .verticalScroll(rememberScrollState())
         ) {
             Text(
                 "SYSTEM PARAMETERS",
@@ -63,16 +69,93 @@ fun SettingsScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Auditory Feedback", style = MaterialTheme.typography.bodyMedium)
-                        Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, modifier = Modifier.size(20.dp))
-                    }
+                    Text("Master Volume (Music & UI)", style = MaterialTheme.typography.bodyMedium)
                     Slider(
                         value = volume,
                         onValueChange = { settingsViewModel.setVolume(it) },
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+            Text(
+                "PRIVACY & RESEARCH",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Anonymous Data Sharing", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "Securely share misclassified images to improve future AI accuracy.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = isImageSharingEnabled,
+                        onCheckedChange = { settingsViewModel.setImageSharing(it) }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+            Text(
+                "INTERFACE PREFERENCE",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    listOf("DARK", "LIGHT", "COLOUR").forEach { mode ->
+                        Row(
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { settingsViewModel.setThemeMode(mode) }
+                                .padding(vertical = 8.dp)
+                        ) {
+                            RadioButton(
+                                selected = themeMode == mode,
+                                onClick = { settingsViewModel.setThemeMode(mode) }
+                            )
+                            Text(
+                                text = when(mode) {
+                                    "DARK" -> "Dark Mode (Optimized)"
+                                    "LIGHT" -> "Light Mode (Eye Strain / High Carbon)"
+                                    else -> "Eco-Vibrant (Nature Palette)"
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (mode == "LIGHT") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (themeMode == "LIGHT") {
+                Text(
+                    "Warning: Light Mode causes eye strain, is out of GenZ trends, and increases carbon impact (higher OLED draw).",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 8.dp, start = 4.dp)
+                )
             }
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -97,10 +180,10 @@ fun SettingsScreen(
                 Text("Purge Neural History")
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(64.dp))
 
             Text(
-                "V 2.1.5 • agrelius industrial AI",
+                "V 2.2.0 • agrelius neural os",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                 modifier = Modifier.fillMaxWidth(),
