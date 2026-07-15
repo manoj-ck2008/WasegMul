@@ -8,14 +8,9 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-// Reads version from version.properties at repo root.
-val versionPropsFile = rootProject.file("version.properties")
-val versionProps = Properties()
-if (versionPropsFile.exists()) {
-    versionProps.load(FileInputStream(versionPropsFile))
-}
-val versionName = versionProps.getProperty("versionName", "1.0.0")
-val versionCode = versionProps.getProperty("versionCode", "1").toInt()
+// Version from gradle.properties (single source of truth).
+val appVersionName = project.property("VERSION_NAME").toString()
+val appVersionCode = project.property("VERSION_CODE").toString().toInt()
 
 // Reads optional release signing credentials from the project root (keystore.properties).
 // This file is NOT committed to VCS — see README for the expected keys.
@@ -33,14 +28,14 @@ android {
         applicationId = "com.agrelius.wasegmul"
         minSdk = 29
         targetSdk = 35
-        versionCode = versionCode
-        versionName = versionName
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Make version available in BuildConfig
-        buildConfigField("String", "VERSION_NAME", "\"$versionName\"")
-        buildConfigField("int", "VERSION_CODE", versionCode.toString())
+        buildConfigField("String", "VERSION_NAME", "\"$appVersionName\"")
+        buildConfigField("int", "VERSION_CODE", "$appVersionCode")
     }
 
     signingConfigs {

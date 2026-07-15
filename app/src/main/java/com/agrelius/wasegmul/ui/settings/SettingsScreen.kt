@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.agrelius.wasegmul.WasegMulApp
+import com.agrelius.wasegmul.BuildConfig
 import androidx.compose.ui.platform.LocalContext
 import com.agrelius.wasegmul.ui.theme.AppThemeMode
 import com.agrelius.wasegmul.viewmodel.HomeViewModel
@@ -183,7 +184,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(64.dp))
 
             Text(
-                "V 2.2.0 • agrelius neural os",
+                "V ${BuildConfig.VERSION_NAME} • agrelius neural os",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                 modifier = Modifier.fillMaxWidth(),
