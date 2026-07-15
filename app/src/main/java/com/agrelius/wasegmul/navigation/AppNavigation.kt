@@ -29,7 +29,7 @@ fun AppNavigation() {
     val settingsManager = app.settingsManager
 
     val classificationViewModel: ClassificationViewModel = viewModel(
-        factory = ClassificationViewModel.Factory(repository, soundManager, settingsManager)
+        factory = ClassificationViewModel.Factory(repository, settingsManager)
     )
     val homeViewModel: HomeViewModel = viewModel(
         factory = HomeViewModel.Factory(repository)

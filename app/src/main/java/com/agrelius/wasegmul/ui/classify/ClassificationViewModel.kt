@@ -2,32 +2,35 @@ package com.agrelius.wasegmul.ui.classify
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.agrelius.wasegmul.data.ClassificationResult
-import com.agrelius.wasegmul.data.WasteRecord
-import com.agrelius.wasegmul.knowledge.WasteKnowledgeBase
+import com.agrelius.wasegmul.ClassificationResult
+import com.agrelius.wasegmul.MLArbitrator
+import com.agrelius.wasegmul.ml.ClassificationOutcome
+import com.agrelius.wasegmul.ml.FailureReason
+import com.agrelius.wasegmul.ml.ModelInitException
+import com.agrelius.wasegmul.PredictionCodec
+import com.agrelius.wasegmul.WasteKnowledgeBase
+import com.agrelius.wasegmul.WasteMapping
+import com.agrelius.wasegmul.WasteRecord
 import com.agrelius.wasegmul.ml.ModelManager
 import com.agrelius.wasegmul.repository.WasteRepository
 import com.agrelius.wasegmul.utils.SettingsManager
-import com.agrelius.wasegmul.utils.SoundManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
-import java.util.*
 
 class ClassificationViewModel(
     private val repository: WasteRepository,
-    private val soundManager: SoundManager,
     private val settingsManager: SettingsManager
 ) : ViewModel() {
 
     private var modelManager: ModelManager? = null
-    private val CONFIDENCE_THRESHOLD = 0.50f
 
     private val _capturedBitmap = MutableStateFlow<Bitmap?>(null)
     val capturedBitmap: StateFlow<Bitmap?> = _capturedBitmap
@@ -51,6 +54,7 @@ class ClassificationViewModel(
     }
 
     fun setBitmap(bitmap: Bitmap) {
+        _capturedBitmap.value?.takeIf { !it.isRecycled }?.recycle()
         _capturedBitmap.value = bitmap
         _classificationResult.value = null
         _error.value = null
@@ -59,66 +63,92 @@ class ClassificationViewModel(
 
     fun classify(context: Context) {
         val bitmap = _capturedBitmap.value ?: return
-        
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
-            
             try {
-                val prediction = modelManager?.classify(bitmap)
-                if (prediction != null) {
-                    val info = WasteKnowledgeBase.getInfo(prediction.category, prediction.subcategory)
-                    val isUncertain = prediction.subcategoryConfidence < CONFIDENCE_THRESHOLD
-                    
-                    val result = ClassificationResult(
-                        category = if (isUncertain) "Uncertain" else prediction.category,
-                        subclass = prediction.subcategory,
-                        confidence = prediction.categoryConfidence,
-                        topPredictions = prediction.topSubcategories,
-                        disposalGuide = if (isUncertain) 
-                            "CAUTION: Low confidence match detected.\n\n" + info.disposalGuide 
-                            else info.disposalGuide,
-                        environmentalImpact = info.environmentalImpact,
-                        recyclingBenefits = info.recyclingBenefits
-                    )
-
-                    _classificationResult.value = result
-                    
-                    if (isUncertain) {
-                        soundManager.playWarning()
-                    } else {
-                        soundManager.playSuccess()
+                val outcome = modelManager?.classify(bitmap)
+                    ?: run {
+                        _error.value = "Models not initialised. Please restart the app."
+                        _isLoading.value = false
+                        return@launch
                     }
 
-                    // Save to history
-                    val estimatedWeight = if (isUncertain) 0.0 else WasteKnowledgeBase.getEstimatedWeight(result.subclass)
-                    val featureVector = "vec_" + UUID.randomUUID().toString().take(8)
+                when (outcome) {
+                    is ClassificationOutcome.Success -> {
+                        val prediction = outcome.prediction
+                        val finalPrediction = MLArbitrator.arbitrate(prediction)
+                        val info = WasteKnowledgeBase.getInfo(finalPrediction.category, finalPrediction.subcategory)
+                        val isUncertain =
+                            finalPrediction.category == WasteMapping.UNCERTAIN ||
+                                finalPrediction.category == WasteMapping.UNKNOWN
 
-                    var savedPath: String? = null
-                    val isSharingEnabled = settingsManager.isImageSharingEnabled.first()
-                    if (isSharingEnabled) {
-                        savedPath = saveImageLocally(context, bitmap)
+                        val result = ClassificationResult(
+                            category = finalPrediction.category,
+                            subclass = finalPrediction.subcategory,
+                            confidence = if (isUncertain) finalPrediction.categoryConfidence
+                            else finalPrediction.subcategoryConfidence,
+                            topPredictions = finalPrediction.topSubcategories,
+                            disposalGuide = info.disposalGuide,
+                            environmentalImpact = info.environmentalImpact,
+                            recyclingBenefits = info.recyclingBenefits,
+                            sources = info.sources
+                        )
+
+                        _classificationResult.value = result
+
+                        val estimatedWeight = if (isUncertain) 0.0
+                        else WasteMapping.getWeight(result.subclass)
+
+                        var savedPath: String? = null
+                        val isSharingEnabled = settingsManager.isImageSharingEnabled.first()
+                        if (isSharingEnabled) {
+                            savedPath = saveImageLocally(context, bitmap)
+                        }
+
+                        val record = WasteRecord(
+                            category = result.category,
+                            subclass = result.subclass,
+                            confidence = result.confidence,
+                            estimatedWeight = estimatedWeight,
+                            featureVector = null,
+                            imagePath = savedPath,
+                            topPredictions = PredictionCodec.encode(result.topPredictions)
+                        )
+                        val id = repository.insert(record)
+                        _currentRecord.value = record.copy(id = id)
                     }
-
-                    val record = WasteRecord(
-                        category = result.category,
-                        subclass = result.subclass,
-                        confidence = result.confidence,
-                        estimatedWeight = estimatedWeight,
-                        featureVector = featureVector,
-                        imagePath = savedPath
-                    )
-                    val id = repository.insert(record)
-                    _currentRecord.value = record.copy(id = id)
-                } else {
-                    _error.value = "Hardware Sync Error"
+                    is ClassificationOutcome.Failure -> {
+                        val msg = when (outcome.reason) {
+                            FailureReason.MODEL_LOAD_FAILED ->
+                                "Unable to load the AI models. Please restart the app or check available storage."
+                            FailureReason.CATEGORY_INFERENCE_FAILED ->
+                                "The category model failed to process the image. Please try again with a clearer photo."
+                            FailureReason.SUBCLASS_INFERENCE_FAILED ->
+                                "The subclass model failed to process the image. Please try again with a clearer photo."
+                            FailureReason.NOT_INITIALIZED ->
+                                "Models have not been initialised. Please restart the app."
+                            FailureReason.UNKNOWN ->
+                                outcome.message.ifBlank { "An unexpected error occurred. Please try again." }
+                        }
+                        Log.e(TAG, "Classification failed: ${outcome.reason} — $msg", outcome.cause)
+                        _error.value = msg
+                    }
                 }
+            } catch (e: ModelInitException) {
+                Log.e(TAG, "Model initialisation failed", e)
+                _error.value = "Unable to load the AI models. Restart the app or check available storage."
             } catch (e: Exception) {
-                _error.value = "System Error: ${e.message}"
+                Log.e(TAG, "Unexpected error during classification", e)
+                _error.value = "An unexpected error occurred: ${e.message ?: "Unknown error"}. Please try again."
             } finally {
                 _isLoading.value = false
             }
         }
+    }
+
+    fun clearError() {
+        _error.value = null
     }
 
     private fun saveImageLocally(context: Context, bitmap: Bitmap): String {
@@ -135,7 +165,6 @@ class ClassificationViewModel(
         val recordId = _currentRecord.value?.id ?: return
         viewModelScope.launch {
             repository.updateFeedback(recordId, feedback)
-            // Update local state
             _currentRecord.value = _currentRecord.value?.copy(feedback = feedback)
         }
     }
@@ -144,45 +173,48 @@ class ClassificationViewModel(
         val recordId = _currentRecord.value?.id ?: return
         viewModelScope.launch {
             repository.updateCorrection(recordId, correction)
-            // Update local state
             _currentRecord.value = _currentRecord.value?.copy(correctedSubclass = correction)
         }
     }
 
     fun loadRecord(recordId: Long) {
         viewModelScope.launch {
-            repository.allHistory.first().find { it.id == recordId }?.let { record ->
-                val info = WasteKnowledgeBase.getInfo(record.category, record.subclass)
-                _classificationResult.value = ClassificationResult(
-                    category = record.category,
-                    subclass = record.subclass,
-                    confidence = record.confidence,
-                    topPredictions = emptyList(),
-                    disposalGuide = info.disposalGuide,
-                    environmentalImpact = info.environmentalImpact,
-                    recyclingBenefits = info.recyclingBenefits
-                )
-                _currentRecord.value = record
-            }
+            val record = repository.getRecordById(recordId) ?: return@launch
+            val info = WasteKnowledgeBase.getInfo(record.category, record.subclass)
+            _classificationResult.value = ClassificationResult(
+                category = record.category,
+                subclass = record.subclass,
+                confidence = record.confidence,
+                topPredictions = PredictionCodec.decode(record.topPredictions),
+                disposalGuide = info.disposalGuide,
+                environmentalImpact = info.environmentalImpact,
+                recyclingBenefits = info.recyclingBenefits,
+                sources = info.sources
+            )
+            _currentRecord.value = record
         }
     }
 
     override fun onCleared() {
         super.onCleared()
         modelManager?.close()
+        _capturedBitmap.value?.takeIf { !it.isRecycled }?.recycle()
     }
 
     class Factory(
         private val repository: WasteRepository,
-        private val soundManager: SoundManager,
         private val settingsManager: SettingsManager
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(ClassificationViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return ClassificationViewModel(repository, soundManager, settingsManager) as T
+                return ClassificationViewModel(repository, settingsManager) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }
+    }
+
+    companion object {
+        private const val TAG = "ClassificationVM"
     }
 }
