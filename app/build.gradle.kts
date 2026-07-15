@@ -1,8 +1,28 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+}
+
+// Reads version from version.properties at repo root.
+val versionPropsFile = rootProject.file("version.properties")
+val versionProps = Properties()
+if (versionPropsFile.exists()) {
+    versionProps.load(FileInputStream(versionPropsFile))
+}
+val versionName = versionProps.getProperty("versionName", "1.0.0")
+val versionCode = versionProps.getProperty("versionCode", "1").toInt()
+
+// Reads optional release signing credentials from the project root (keystore.properties).
+// This file is NOT committed to VCS — see README for the expected keys.
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
 android {
@@ -13,19 +33,43 @@ android {
         applicationId = "com.agrelius.wasegmul"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = versionCode
+        versionName = versionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Make version available in BuildConfig
+        buildConfigField("String", "VERSION_NAME", "\"$versionName\"")
+        buildConfigField("int", "VERSION_CODE", versionCode.toString())
+    }
+
+    signingConfigs {
+        create("release") {
+            keystoreProperties["storeFile"]?.let { storeFile = rootProject.file(it) }
+            storePassword = keystoreProperties["storePassword"] as String?
+            keyAlias = keystoreProperties["keyAlias"] as String?
+            keyPassword = keystoreProperties["keyPassword"] as String?
+        }
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+            isDebuggable = true
+        }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true      // R8 code shrinking + obfuscation
+            isShrinkResources = true    // Remove unused resources
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Falls back to the debug signing config when keystore.properties is absent,
+            // so CI/local builds without a release keystore still produce an installable APK.
+            signingConfig =
+                if (keystoreProperties.isNotEmpty()) signingConfigs.getByName("release")
+                else signingConfigs.getByName("debug")
         }
     }
     compileOptions {
@@ -37,10 +81,18 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+    packaging {
+        jniLibs {
+            // Required by TFLite native libraries for 16 KB page-size support.
+            useLegacyPackaging = true
+        }
     }
 }
 
 dependencies {
+    implementation(project(":shared"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
@@ -54,7 +106,11 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
 
     // ML & Camera
+    implementation(libs.tensorflow.lite)
+    implementation(libs.tensorflowLiteCoreApi)
     implementation(libs.tensorflow.lite.support)
+    implementation(libs.playServicesTflite)
+    implementation(libs.kotlinxCoroutinesPlayServices)
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
