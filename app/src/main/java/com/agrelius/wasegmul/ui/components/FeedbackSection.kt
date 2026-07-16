@@ -23,9 +23,14 @@ fun FeedbackSection(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
-    
+
     var showResults by remember { mutableStateOf(initialFeedback != null) }
     var step by remember { mutableIntStateOf(if (initialFeedback == "incorrect") 1 else 0) }
+
+    LaunchedEffect(initialFeedback, initialCorrection) {
+        showResults = initialFeedback != null
+        step = if (initialFeedback == "incorrect") 1 else 0
+    }
 
     Card(
         modifier = modifier

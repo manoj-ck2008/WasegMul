@@ -45,17 +45,15 @@ abstract class WasteDatabase : RoomDatabase() {
 
         fun getDatabase(context: Context): WasteDatabase {
             return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
+                INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     WasteDatabase::class.java,
                     "wasegmul_industrial_v1.db"
                 )
                     .addMigrations(MIGRATION_6_7, MIGRATION_7_8)
-                    // Last-resort safety net only; do NOT rely on this for intentional changes.
                     .fallbackToDestructiveMigration()
                     .build()
-                INSTANCE = instance
-                instance
+                    .also { INSTANCE = it }
             }
         }
     }

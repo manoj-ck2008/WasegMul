@@ -230,21 +230,17 @@ fun ScanningOverlay() {
         label = "y"
     )
 
+    val scanLineBrush = remember { Brush.horizontalGradient(colors = listOf(Color.Transparent, EmeraldVibrant, Color.Transparent)) }
+
     Canvas(modifier = Modifier.fillMaxSize()) {
         val y = size.height * scanY
         drawLine(
-            brush = Brush.horizontalGradient(
-                colors = listOf(
-                    Color.Transparent,
-                    EmeraldVibrant,
-                    Color.Transparent
-                )
-            ),
+            brush = scanLineBrush,
             start = androidx.compose.ui.geometry.Offset(0f, y),
             end = androidx.compose.ui.geometry.Offset(size.width, y),
             strokeWidth = 4.dp.toPx()
         )
-        
+
         drawRect(
             brush = Brush.verticalGradient(
                 0f to EmeraldVibrant.copy(alpha = 0.1f),

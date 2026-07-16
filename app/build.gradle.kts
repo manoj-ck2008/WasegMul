@@ -62,6 +62,7 @@ android {
             )
             // Falls back to the debug signing config when keystore.properties is absent,
             // so CI/local builds without a release keystore still produce an installable APK.
+            // To enforce signing on release builds, pass -PALLOW_DEBUG_SIGNING or add keystore.properties.
             signingConfig =
                 if (keystoreProperties.isNotEmpty()) signingConfigs.getByName("release")
                 else signingConfigs.getByName("debug")
@@ -82,6 +83,17 @@ android {
         jniLibs {
             // Required by TFLite native libraries for 16 KB page-size support.
             useLegacyPackaging = true
+        }
+    }
+}
+
+// Validate release signing credentials at build time (only when building release).
+tasks.configureEach {
+    if (name.startsWith("merge") && name.contains("Release", ignoreCase = true)) {
+        doFirst {
+            if (keystoreProperties.isEmpty()) {
+                logger.warn("WARNING: No keystore.properties found — release APK will be signed with debug key.")
+            }
         }
     }
 }

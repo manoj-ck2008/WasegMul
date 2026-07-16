@@ -20,8 +20,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import com.agrelius.wasegmul.WasteRecord
-import com.agrelius.wasegmul.ui.home.RecentItem
 import com.agrelius.wasegmul.ui.home.toRelativeTime
 import com.agrelius.wasegmul.viewmodel.HomeViewModel
 
@@ -140,11 +140,13 @@ fun HistoryCard(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = if (record.feedback == "incorrect" && record.correctedSubclass != null) 
-                        "${record.subclass} ➔ ${record.correctedSubclass}" 
+                    text = if (record.feedback == "incorrect" && record.correctedSubclass != null)
+                        "${record.subclass} ➔ ${record.correctedSubclass}"
                         else record.subclass,
-                    style = MaterialTheme.typography.titleSmall, 
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(text = record.timestamp.toRelativeTime(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
             }

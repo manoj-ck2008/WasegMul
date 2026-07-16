@@ -1,0 +1,9 @@
+com.agrelius.wasegmul.shared-pngs-0 C:\Users\manoj\AndroidStudioProjects\WasegMul\shared\build\generated\res\pngs\release
+com.agrelius.wasegmul.shared-resValues-1 C:\Users\manoj\AndroidStudioProjects\WasegMul\shared\build\generated\res\resValues\release
+com.agrelius.wasegmul.shared-mergeReleaseResources-2 C:\Users\manoj\AndroidStudioProjects\WasegMul\shared\build\intermediates\incremental\release\mergeReleaseResources\merged.dir
+com.agrelius.wasegmul.shared-mergeReleaseResources-3 C:\Users\manoj\AndroidStudioProjects\WasegMul\shared\build\intermediates\incremental\release\mergeReleaseResources\stripped.dir
+com.agrelius.wasegmul.shared-release-4 C:\Users\manoj\AndroidStudioProjects\WasegMul\shared\build\intermediates\merged_res\release\mergeReleaseResources
+com.agrelius.wasegmul.shared-androidMain-5 C:\Users\manoj\AndroidStudioProjects\WasegMul\shared\src\androidMain\res
+com.agrelius.wasegmul.shared-androidRelease-6 C:\Users\manoj\AndroidStudioProjects\WasegMul\shared\src\androidRelease\res
+com.agrelius.wasegmul.shared-main-7 C:\Users\manoj\AndroidStudioProjects\WasegMul\shared\src\main\res
+com.agrelius.wasegmul.shared-release-8 C:\Users\manoj\AndroidStudioProjects\WasegMul\shared\src\release\res

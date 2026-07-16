@@ -44,7 +44,7 @@ class ClassificationViewModel(
     private val _currentRecord = MutableStateFlow<WasteRecord?>(null)
     val currentRecord: StateFlow<WasteRecord?> = _currentRecord
 
-    private val _navigateToResult = Channel<Unit>(Channel.CONFLATED)
+    private val _navigateToResult = Channel<Unit>(Channel.BUFFERED)
     val navigateToResult = _navigateToResult.receiveAsFlow()
 
     fun initModel(context: Context) {
@@ -67,6 +67,9 @@ class ClassificationViewModel(
             _isLoading.value = true
             _error.value = null
             try {
+                // Ensure models are loaded before inference.
+                modelManager?.ensureInitialized()
+
                 val outcome = modelManager?.classify(bitmap)
                     ?: run {
                         _error.value = "Models not initialised. Please restart the app."

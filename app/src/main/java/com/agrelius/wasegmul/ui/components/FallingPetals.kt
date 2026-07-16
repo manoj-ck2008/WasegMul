@@ -13,13 +13,15 @@ import com.agrelius.wasegmul.ui.theme.EmeraldVibrant
 import com.agrelius.wasegmul.ui.theme.SageGreen
 import kotlin.math.sin
 
-data class Petal(
-    var x: Float,
-    var y: Float,
-    var speed: Float,
-    var angle: Float,
-    var rotationSpeed: Float,
-    var color: Color
+private data class PetalData(
+    val startX: Float,
+    val startY: Float,
+    val speed: Float,
+    val angle: Float,
+    val rotationSpeed: Float,
+    val color: Color,
+    val xWavePhase: Float,
+    val xWaveAmplitude: Float
 )
 
 @Composable
@@ -28,36 +30,45 @@ fun FallingPetals() {
     val time by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1000f,
-        animationSpec = infiniteRepeatable(tween(20000, easing = LinearEasing)),
+        animationSpec = infiniteRepeatable(
+            animation = tween(20000, easing = LinearEasing)
+        ),
         label = "time"
     )
 
     val petals = remember {
-        List(20) {
-            Petal(
-                x = (0..1000).random().toFloat() / 1000f,
-                y = (0..1000).random().toFloat() / 1000f,
-                speed = 0.001f + (0..1000).random().toFloat() / 500000f,
-                angle = (0..360).random().toFloat(),
-                rotationSpeed = (1..5).random().toFloat(),
-                color = if ((0..1).random() == 0) EmeraldVibrant.copy(alpha = 0.15f) else SageGreen.copy(alpha = 0.15f)
+        List(20) { i ->
+            PetalData(
+                startX = (i * 137.508f % 1f),
+                startY = (i * 73.137f % 1f),
+                speed = 0.003f + (i * 0.0004f),
+                angle = (i * 47f) % 360f,
+                rotationSpeed = 0.5f + (i % 5) * 0.3f,
+                color = if (i % 2 == 0) EmeraldVibrant.copy(alpha = 0.12f) else SageGreen.copy(alpha = 0.10f),
+                xWavePhase = i * 0.7f,
+                xWaveAmplitude = 0.02f + (i % 3) * 0.015f
             )
         }
     }
 
+    val petalPath = remember { Path() }
+
     Canvas(modifier = Modifier.fillMaxSize()) {
         petals.forEach { petal ->
-            val currentY = ((petal.y + time * petal.speed) % 1.0f) * size.height
-            val currentX = ((petal.x + sin(time * 0.01f + petal.x) * 0.05f) % 1.0f) * size.width
-            val currentRotation = petal.angle + time * petal.rotationSpeed
+            val rawY = (petal.startY + time * petal.speed)
+            val currentY = (rawY % 1f) * size.height
+            val xWave = sin(time * 0.8f + petal.xWavePhase) * petal.xWaveAmplitude
+            val currentX = ((petal.startX + xWave) % 1f) * size.width
+            val currentRotation = petal.angle + time * petal.rotationSpeed * 30f
 
-            rotate(currentRotation, pivot = Offset(currentX, currentY)) {
+            petalPath.reset()
+            petalPath.moveTo(currentX, currentY - 15f)
+            petalPath.quadraticTo(currentX + 10f, currentY, currentX, currentY + 15f)
+            petalPath.quadraticTo(currentX - 10f, currentY, currentX, currentY - 15f)
+
+            rotate(currentRotation, pivot = Offset(x = currentX, y = currentY)) {
                 drawPath(
-                    path = Path().apply {
-                        moveTo(currentX, currentY - 15f)
-                        quadraticTo(currentX + 10f, currentY, currentX, currentY + 15f)
-                        quadraticTo(currentX - 10f, currentY, currentX, currentY - 15f)
-                    },
+                    path = petalPath,
                     color = petal.color
                 )
             }

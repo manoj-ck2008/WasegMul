@@ -83,5 +83,33 @@ val Typography = Typography(
         fontSize = 14.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.1.sp
+    ),
+    headlineSmall = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Bold,
+        fontSize = 24.sp,
+        lineHeight = 32.sp,
+        letterSpacing = 0.sp
+    ),
+    titleSmall = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.1.sp
+    ),
+    bodySmall = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Normal,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.4.sp
+    ),
+    labelMedium = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Medium,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.5.sp
     )
 )

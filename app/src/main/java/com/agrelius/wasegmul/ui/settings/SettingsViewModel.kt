@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.agrelius.wasegmul.utils.SettingsManager
+import com.agrelius.wasegmul.utils.ThemeMode
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -13,10 +14,10 @@ class SettingsViewModel(
     private val settingsManager: SettingsManager
 ) : ViewModel() {
 
-    val themeMode: StateFlow<String> = settingsManager.themeMode
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "DARK")
+    val themeMode: StateFlow<ThemeMode> = settingsManager.themeMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemeMode.DARK)
 
-    fun setThemeMode(value: String) {
+    fun setThemeMode(value: ThemeMode) {
         viewModelScope.launch { settingsManager.setThemeMode(value) }
     }
 

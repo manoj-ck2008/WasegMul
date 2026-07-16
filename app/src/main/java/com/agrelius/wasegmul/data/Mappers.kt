@@ -32,5 +32,5 @@ fun SharedWasteRecord.toEntity(): WasteRecord = WasteRecord(
     feedback = feedback,
     correctedSubclass = correctedSubclass,
     topPredictions = topPredictions,
-    timestamp = timestamp
+    timestamp = if (timestamp > 0L) timestamp else System.currentTimeMillis()
 )

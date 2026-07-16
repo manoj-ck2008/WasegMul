@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.WasegMul" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">#FF0D1117</item>
+        <item name="android:windowBackground">#FF020408</item>
     </style>
 </resources>

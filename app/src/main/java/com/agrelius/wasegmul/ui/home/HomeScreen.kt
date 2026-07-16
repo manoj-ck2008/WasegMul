@@ -1,7 +1,7 @@
 package com.agrelius.wasegmul.ui.home
 
 import android.graphics.Bitmap
-import android.graphics.ImageDecoder
+import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -40,6 +40,9 @@ import com.agrelius.wasegmul.ui.theme.*
 import com.agrelius.wasegmul.viewmodel.HomeViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun HomeScreen(
@@ -52,7 +55,7 @@ fun HomeScreen(
     val recentHistory by viewModel.recentHistory.collectAsState()
     var showImpactDetail by remember { mutableStateOf(false) }
     var visible by remember { mutableStateOf(false) }
-    
+
     val totalImpact by remember(recentHistory) {
         derivedStateOf { recentHistory.sumOf { it.estimatedWeight } }
     }
@@ -65,14 +68,14 @@ fun HomeScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
-            try {
-                val source = ImageDecoder.createSource(context.contentResolver, it)
-                val bitmap = ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
-                    decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            val contextRef = context
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                val bitmap = withContext(Dispatchers.IO) {
+                    decodeSampledBitmap(contextRef, it, 1024, 1024)
                 }
-                onImageSelected(bitmap)
-            } catch (e: Exception) {
-                android.util.Log.e("HomeScreen", "Failed to decode gallery image", e)
+                if (bitmap != null) {
+                    onImageSelected(bitmap)
+                }
             }
         }
     }
@@ -109,7 +112,7 @@ fun HomeScreen(
                 )
                 .padding(innerPadding)
         ) {
-            OrganicBackground() // Animated Leaf Pattern
+            OrganicBackground()
             BackgroundGlows()
 
             Column(
@@ -157,7 +160,6 @@ fun HomeScreen(
 
                 Spacer(modifier = Modifier.height(48.dp))
 
-                // Stats Dashboard
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -165,8 +167,8 @@ fun HomeScreen(
                     GlassCard(
                         modifier = Modifier.weight(1f)
                     ) {
-                        Column(modifier = Modifier.clickable { 
-                            showImpactDetail = true 
+                        Column(modifier = Modifier.clickable {
+                            showImpactDetail = true
                         }) {
                             Icon(Icons.Default.Public, contentDescription = null, tint = EmeraldVibrant, modifier = Modifier.size(24.dp))
                             Spacer(modifier = Modifier.height(12.dp))
@@ -177,8 +179,8 @@ fun HomeScreen(
                     GlassCard(
                         modifier = Modifier.weight(1f)
                     ) {
-                        Column(modifier = Modifier.clickable { 
-                            onNavigateToHistory() 
+                        Column(modifier = Modifier.clickable {
+                            onNavigateToHistory()
                         }) {
                             Icon(Icons.Default.Dataset, contentDescription = null, tint = EmeraldVibrant, modifier = Modifier.size(24.dp))
                             Spacer(modifier = Modifier.height(12.dp))
@@ -251,7 +253,6 @@ fun HomeScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Redesigned Device Import Action
                 Button(
                     onClick = { galleryLauncher.launch("image/*") },
                     modifier = Modifier
@@ -301,7 +302,7 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.height(64.dp))
 
                 Text(
-                    text = "V ${BuildConfig.VERSION_NAME} • agrelius industrial AI",
+                    text = "V ${BuildConfig.VERSION_NAME} \u2022 agrelius industrial AI",
                     style = MaterialTheme.typography.labelSmall,
                     color = TextSecondary.copy(alpha = 0.4f),
                     fontWeight = FontWeight.Bold
@@ -331,7 +332,7 @@ fun ImpactDetailDialog(onDismiss: () -> Unit, history: List<WasteRecord>) {
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(modifier = Modifier.height(20.dp))
-                
+
                 val groups = history.groupBy { it.category }
                 groups.forEach { (cat, items) ->
                     val weight = items.sumOf { it.estimatedWeight }
@@ -343,12 +344,12 @@ fun ImpactDetailDialog(onDismiss: () -> Unit, history: List<WasteRecord>) {
                         Text("${weight.format(3)} kg", style = MaterialTheme.typography.bodySmall, color = TextPrimary)
                     }
                 }
-                
+
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 12.dp),
                     color = GlassBorder
                 )
-                
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -418,23 +419,52 @@ fun RecentItem(name: String, time: String, type: String, feedback: String?) {
     }
 }
 
-
 @Composable
 fun BackgroundGlows() {
+    val topGlow = remember { Brush.radialGradient(colors = listOf(ForestGreen.copy(alpha = 0.08f), Color.Transparent)) }
+    val bottomGlow = remember { Brush.radialGradient(colors = listOf(OchreSand.copy(alpha = 0.05f), Color.Transparent)) }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
                 .size(400.dp)
                 .align(Alignment.TopEnd)
                 .offset(x = 150.dp, y = (-100).dp)
-                .background(Brush.radialGradient(colors = listOf(ForestGreen.copy(alpha = 0.08f), Color.Transparent)))
+                .background(topGlow)
         )
         Box(
             modifier = Modifier
                 .size(500.dp)
                 .align(Alignment.BottomStart)
                 .offset(x = (-200).dp, y = 150.dp)
-                .background(Brush.radialGradient(colors = listOf(OchreSand.copy(alpha = 0.05f), Color.Transparent)))
+                .background(bottomGlow)
         )
     }
+}
+
+private fun decodeSampledBitmap(context: android.content.Context, uri: Uri, reqWidth: Int, reqHeight: Int): Bitmap? {
+    return try {
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+        options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight)
+        options.inJustDecodeBounds = false
+        options.inPreferredConfig = Bitmap.Config.ARGB_8888
+        context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+    } catch (e: Exception) {
+        android.util.Log.e("HomeScreen", "Failed to decode sampled bitmap", e)
+        null
+    }
+}
+
+private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+    val (height, width) = options.outHeight to options.outWidth
+    var inSampleSize = 1
+    if (height > reqHeight || width > reqWidth) {
+        val halfHeight = height / 2
+        val halfWidth = width / 2
+        while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+            inSampleSize *= 2
+        }
+    }
+    return inSampleSize
 }

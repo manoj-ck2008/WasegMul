@@ -1,5 +1,6 @@
 package com.agrelius.wasegmul.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -11,7 +12,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class HomeViewModel(private val repository: WasteRepository) : ViewModel() {
-    
+
     val recentHistory: StateFlow<List<WasteRecord>> = repository.recentHistory
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -20,19 +21,31 @@ class HomeViewModel(private val repository: WasteRepository) : ViewModel() {
 
     fun clearHistory() {
         viewModelScope.launch {
-            repository.clear()
+            try {
+                repository.clear()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to clear history", e)
+            }
         }
     }
 
     fun updateFeedback(recordId: Long, feedback: String) {
         viewModelScope.launch {
-            repository.updateFeedback(recordId, feedback)
+            try {
+                repository.updateFeedback(recordId, feedback)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to update feedback", e)
+            }
         }
     }
 
     fun updateCorrection(recordId: Long, correction: String) {
         viewModelScope.launch {
-            repository.updateCorrection(recordId, correction)
+            try {
+                repository.updateCorrection(recordId, correction)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to update correction", e)
+            }
         }
     }
 
@@ -44,5 +57,9 @@ class HomeViewModel(private val repository: WasteRepository) : ViewModel() {
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }
+    }
+
+    companion object {
+        private const val TAG = "HomeVM"
     }
 }

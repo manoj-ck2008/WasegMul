@@ -1,12 +1,9 @@
 package com.agrelius.wasegmul.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,6 +22,7 @@ fun GradientActionButton(
     icon: ImageVector? = null,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     containerColor: Color = MaterialTheme.colorScheme.primary
 ) {
     val haptic = LocalHapticFeedback.current
@@ -35,37 +33,57 @@ fun GradientActionButton(
         )
     )
 
-    Box(
+    Button(
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            onClick()
+        },
         modifier = modifier
             .fillMaxWidth()
-            .height(64.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(gradient)
-            .clickable {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                onClick()
-            },
-        contentAlignment = Alignment.Center
+            .height(64.dp),
+        enabled = enabled,
+        shape = RoundedCornerShape(16.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            disabledContainerColor = Color.Transparent,
+            disabledContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.38f)
+        ),
+        contentPadding = PaddingValues(0.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = if (enabled) gradient else Brush.horizontalGradient(
+                        colors = listOf(
+                            containerColor.copy(alpha = 0.38f),
+                            containerColor.copy(alpha = 0.2f)
+                        )
+                    )
+                ),
+            contentAlignment = Alignment.Center
         ) {
-            if (icon != null) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(24.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                if (icon != null) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                }
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    fontWeight = FontWeight.Bold
                 )
-                Spacer(modifier = Modifier.width(12.dp))
             }
-            Text(
-                text = text,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onPrimary,
-                fontWeight = FontWeight.Bold
-            )
         }
     }
 }

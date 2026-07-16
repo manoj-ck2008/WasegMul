@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.agrelius.wasegmul.BuildConfig
+import com.agrelius.wasegmul.utils.ThemeMode
 import kotlinx.coroutines.launch
 import com.agrelius.wasegmul.viewmodel.HomeViewModel
 
@@ -72,7 +73,7 @@ fun SettingsScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    listOf("DARK", "LIGHT", "COLOUR").forEach { mode ->
+                    listOf(ThemeMode.DARK, ThemeMode.LIGHT).forEach { mode ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
@@ -86,19 +87,19 @@ fun SettingsScreen(
                             )
                             Text(
                                 text = when(mode) {
-                                    "DARK" -> "Dark Mode (Optimized)"
-                                    "LIGHT" -> "Light Mode (Eye Strain / High Carbon)"
-                                    else -> "Eco-Vibrant (Nature Palette)"
+                                    ThemeMode.DARK -> "Dark Mode (Optimized)"
+                                    ThemeMode.LIGHT -> "Light Mode (Eye Strain / High Carbon)"
+                                    ThemeMode.SYSTEM -> "System Default"
                                 },
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = if (mode == "LIGHT") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                                color = if (mode == ThemeMode.LIGHT) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
                 }
             }
 
-            if (themeMode == "LIGHT") {
+            if (themeMode == ThemeMode.LIGHT) {
                 Text(
                     "Warning: Light Mode causes eye strain, is out of GenZ trends, and increases carbon impact (higher OLED draw).",
                     style = MaterialTheme.typography.labelSmall,
