@@ -22,6 +22,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.ui.components.AppLogo
 import com.agrelius.wasegmul.ui.components.VisionImagery
 import com.agrelius.wasegmul.ui.components.FallingPetals
@@ -34,7 +36,7 @@ fun SplashScreen(onTimeout: () -> Unit) {
     val currentThought = remember { EcoThoughts.getRandom() }
     var navigated by remember { mutableStateOf(false) }
     
-    val fullTitle = "WasegMul"
+    val fullTitle = stringResource(R.string.app_name)
     var displayedTitle by remember { mutableStateOf("") }
     
     val visionAlpha by animateFloatAsState(
@@ -144,7 +146,7 @@ fun SplashScreen(onTimeout: () -> Unit) {
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = "Waste Segregation Multi-model AI",
+                                    text = stringResource(R.string.home_subtitle),
                                     style = MaterialTheme.typography.headlineMedium,
                                     color = MaterialTheme.colorScheme.primary,
                                     textAlign = TextAlign.Center,

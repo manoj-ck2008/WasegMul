@@ -16,6 +16,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.ui.classify.ClassificationViewModel
 import com.agrelius.wasegmul.ui.components.*
 import com.agrelius.wasegmul.ui.theme.*
@@ -41,7 +43,7 @@ fun ResultScreen(
             CenterAlignedTopAppBar(
                 title = { 
                     Text(
-                        "ANALYSIS REPORT", 
+                        stringResource(R.string.result_title), 
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
@@ -49,12 +51,12 @@ fun ResultScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
                     }
                 },
                 actions = {
                     IconButton(onClick = onNavigateToHome) {
-                        Icon(Icons.Default.Home, contentDescription = "Home", tint = MaterialTheme.colorScheme.onSurface)
+                        Icon(Icons.Default.Home, contentDescription = stringResource(R.string.common_home), tint = MaterialTheme.colorScheme.onSurface)
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -96,7 +98,7 @@ fun ResultScreen(
                                             letterSpacing = 1.sp
                                         )
                                         Text(
-                                            text = if (r.category == "Uncertain") "LOW CONFIDENCE MATCH" else r.category.uppercase(),
+                                            text = if (r.category == "Uncertain") stringResource(R.string.result_low_confidence_match) else r.category.uppercase(),
                                             style = MaterialTheme.typography.labelSmall,
                                             color = if (r.category == "Uncertain") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                                             fontWeight = FontWeight.Bold,
@@ -117,7 +119,7 @@ fun ResultScreen(
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Text(
                                             text = r.classificationMessage.ifBlank {
-                                                "Neural Variance: The visual signature is outside standard thresholds. Manual verification required."
+                                                stringResource(R.string.result_neural_variance)
                                             },
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onErrorContainer
@@ -148,35 +150,35 @@ fun ResultScreen(
                                 }
                             }
 
-                            SectionTitle(text = "Environmental Insights")
+                            SectionTitle(text = stringResource(R.string.result_environmental_insights))
                             
                             InsightCard(
-                                title = "Disposal Protocol",
+                                title = stringResource(R.string.result_disposal_protocol),
                                 content = r.disposalGuide,
                                 icon = Icons.Default.VerifiedUser
                             )
 
                             InsightCard(
-                                title = "Ecological Footprint",
+                                title = stringResource(R.string.result_ecological_footprint),
                                 content = r.environmentalImpact,
                                 icon = Icons.Default.AutoGraph
                             )
 
                             InsightCard(
-                                title = "Recycling Benefits",
+                                title = stringResource(R.string.result_recycling_benefits),
                                 content = r.recyclingBenefits,
                                 icon = Icons.Default.Recycling
                             )
 
                             InsightCard(
-                                title = "Verification Sources",
+                                title = stringResource(R.string.result_verification_sources),
                                 content = r.sources,
                                 icon = Icons.Default.Science
                             )
 
                             // Top model predictions + storage metadata.
                             if (r.topPredictions.isNotEmpty()) {
-                                SectionTitle(text = "Model Confidence Breakdown")
+                                SectionTitle(text = stringResource(R.string.result_confidence_breakdown))
                                 Card(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                                     colors = CardDefaults.cardColors(
@@ -210,7 +212,7 @@ fun ResultScreen(
                                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                                             Spacer(modifier = Modifier.height(8.dp))
                                             Text(
-                                                text = "Storage: ${if (record?.imagePath != null) "Image saved for review" else "Metadata only"}",
+                                                text = if (record?.imagePath != null) stringResource(R.string.result_storage_image) else stringResource(R.string.result_storage_metadata),
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -219,7 +221,7 @@ fun ResultScreen(
                                 }
                             }
 
-                            SectionTitle(text = "Validation")
+                            SectionTitle(text = stringResource(R.string.result_validation))
                             
                             FeedbackSection(
                                 initialFeedback = record?.feedback,
@@ -235,7 +237,7 @@ fun ResultScreen(
                             Spacer(modifier = Modifier.height(32.dp))
 
                             GradientActionButton(
-                                text = "Acknowledge & Close",
+                                text = stringResource(R.string.result_acknowledge_close),
                                 onClick = onNavigateToHome,
                                 containerColor = MaterialTheme.colorScheme.primary
                             )

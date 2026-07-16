@@ -21,6 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
+import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.WasteRecord
 import com.agrelius.wasegmul.ui.home.toRelativeTime
 import com.agrelius.wasegmul.viewmodel.HomeViewModel
@@ -40,16 +42,16 @@ fun HistoryScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Neural History", style = MaterialTheme.typography.titleMedium) },
+                title = { Text(stringResource(R.string.history_title), style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
                     }
                 },
                 actions = {
                     if (allHistory.isNotEmpty()) {
                         IconButton(onClick = { showClearAllConfirm = true }) {
-                            Icon(Icons.Default.DeleteSweep, contentDescription = "Clear All", tint = MaterialTheme.colorScheme.error)
+                            Icon(Icons.Default.DeleteSweep, contentDescription = stringResource(R.string.common_delete_all), tint = MaterialTheme.colorScheme.error)
                         }
                     }
                 },
@@ -94,19 +96,19 @@ fun HistoryScreen(
             if (showClearAllConfirm) {
                 AlertDialog(
                     onDismissRequest = { showClearAllConfirm = false },
-                    title = { Text("Clear All Records?") },
-                    text = { Text("This will permanently delete all classification history from this device. This action cannot be undone.") },
+                    title = { Text(stringResource(R.string.history_clear_title)) },
+                    text = { Text(stringResource(R.string.history_clear_message)) },
                     confirmButton = {
                         TextButton(onClick = {
                             viewModel.clearHistory()
                             showClearAllConfirm = false
                         }) {
-                            Text("Delete All", color = MaterialTheme.colorScheme.error)
+                            Text(stringResource(R.string.common_delete_all), color = MaterialTheme.colorScheme.error)
                         }
                     },
                     dismissButton = {
                         TextButton(onClick = { showClearAllConfirm = false }) {
-                            Text("Cancel")
+                            Text(stringResource(R.string.common_cancel))
                         }
                     },
                     containerColor = MaterialTheme.colorScheme.surface,
@@ -153,7 +155,7 @@ fun HistoryCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 FeedbackBadge(feedback = record.feedback)
                 IconButton(onClick = onEditFeedback) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit Feedback", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                    Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.common_edit_feedback), modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
                 }
                 Box(
                     modifier = Modifier
@@ -191,14 +193,15 @@ fun FeedbackDialog(
     onFeedbackSelected: (String, String?) -> Unit
 ) {
     var showCorrection by remember { mutableStateOf(false) }
-    val options = listOf("Plastic", "Metal", "Glass", "Paper", "Cardboard", "E-Waste", "Organic", "Trash")
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val options = context.resources.getStringArray(R.array.material_options).toList()
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (!showCorrection) "Refine Prediction" else "Select Actual Material") },
+        title = { Text(if (!showCorrection) stringResource(R.string.history_refine) else stringResource(R.string.history_select_material)) },
         text = {
             if (!showCorrection) {
-                Text("Help us improve. Was the classification of '${record.subclass}' correct?")
+                Text(stringResource(R.string.history_feedback_help, record.subclass))
             } else {
                 Column {
                     options.chunked(2).forEach { row ->
@@ -218,7 +221,7 @@ fun FeedbackDialog(
         confirmButton = {
             if (!showCorrection) {
                 TextButton(onClick = { onFeedbackSelected("correct", null) }) {
-                    Text("Correct", color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(R.string.common_correct), color = MaterialTheme.colorScheme.primary)
                 }
             }
         },
@@ -226,15 +229,15 @@ fun FeedbackDialog(
             if (!showCorrection) {
                 Row {
                     TextButton(onClick = { showCorrection = true }) {
-                        Text("Incorrect", color = MaterialTheme.colorScheme.error)
+                        Text(stringResource(R.string.common_incorrect), color = MaterialTheme.colorScheme.error)
                     }
                     TextButton(onClick = onDismiss) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.common_cancel))
                     }
                 }
             } else {
                 TextButton(onClick = { showCorrection = false }) {
-                    Text("Back")
+                    Text(stringResource(R.string.common_back))
                 }
             }
         },
@@ -257,6 +260,6 @@ fun EmptyHistoryState() {
             tint = MaterialTheme.colorScheme.surfaceVariant
         )
         Spacer(modifier = Modifier.height(16.dp))
-        Text("No classification records found.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(R.string.history_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

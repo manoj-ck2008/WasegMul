@@ -10,7 +10,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
+import com.agrelius.wasegmul.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -48,16 +51,16 @@ fun FeedbackSection(
             if (showResults && step != 1) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "Validation Recorded",
+                        text = stringResource(R.string.feedback_recorded),
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = if (initialFeedback == "correct") "Verified Accurate" 
-                               else if (initialCorrection != null) "Corrected to: $initialCorrection"
-                               else "Uncertain Feedback",
+                        text = if (initialFeedback == "correct") stringResource(R.string.feedback_verified) 
+                               else if (initialCorrection != null) stringResource(R.string.feedback_corrected_to, initialCorrection)
+                               else stringResource(R.string.feedback_uncertain),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -65,7 +68,7 @@ fun FeedbackSection(
                         showResults = false
                         step = 0
                     }) {
-                        Text("Edit Feedback")
+                        Text(stringResource(R.string.feedback_edit))
                     }
                 }
             } else {
@@ -120,7 +123,7 @@ private fun InitialFeedbackView(
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            text = "Was this prediction accurate?",
+            text = stringResource(R.string.feedback_accurate_question),
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurface
         )
@@ -129,9 +132,9 @@ private fun InitialFeedbackView(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            FeedbackButton(icon = Icons.Default.Check, label = "Correct", onClick = onCorrect)
-            FeedbackButton(icon = Icons.Default.Close, label = "Incorrect", onClick = onIncorrect)
-            FeedbackButton(icon = Icons.Default.QuestionMark, label = "Not Sure", onClick = onNotSure)
+            FeedbackButton(icon = Icons.Default.Check, label = stringResource(R.string.common_correct), onClick = onCorrect)
+            FeedbackButton(icon = Icons.Default.Close, label = stringResource(R.string.common_incorrect), onClick = onIncorrect)
+            FeedbackButton(icon = Icons.Default.QuestionMark, label = stringResource(R.string.feedback_not_sure), onClick = onNotSure)
         }
     }
 }
@@ -139,13 +142,14 @@ private fun InitialFeedbackView(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CorrectionView(onSelected: (String) -> Unit, onBack: () -> Unit) {
-    val options = listOf("Plastic", "Metal", "Glass", "Paper", "Cardboard", "E-Waste", "Organic", "Trash")
+    val context = LocalContext.current
+    val options = context.resources.getStringArray(R.array.material_options).toList()
     
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Go back") }
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_go_back)) }
             Text(
-                text = "Actual Material?",
+                text = stringResource(R.string.feedback_actual_material),
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface
             )

@@ -52,6 +52,20 @@
     <string name="history_refine">Refine Prediction</string>
     <string name="history_select_material">Select Actual Material</string>
 
+    <string name="history_feedback_help">Help us improve. Was the classification of \'%1$s\' correct?</string>
+
+    <!-- Material Options (shared by FeedbackSection & HistoryScreen) -->
+    <string-array name="material_options">
+        <item>Plastic</item>
+        <item>Metal</item>
+        <item>Glass</item>
+        <item>Paper</item>
+        <item>Cardboard</item>
+        <item>E-Waste</item>
+        <item>Organic</item>
+        <item>Trash</item>
+    </string-array>
+
     <!-- Settings Screen -->
     <string name="settings_title">Neural Configuration</string>
     <string name="settings_interface_preference">INTERFACE PREFERENCE</string>

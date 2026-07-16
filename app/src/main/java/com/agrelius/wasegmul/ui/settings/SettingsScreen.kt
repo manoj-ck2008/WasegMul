@@ -16,7 +16,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.res.stringResource
 import com.agrelius.wasegmul.BuildConfig
+import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.utils.ThemeMode
 import kotlinx.coroutines.launch
 import com.agrelius.wasegmul.viewmodel.HomeViewModel
@@ -44,10 +46,10 @@ fun SettingsScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Neural Configuration", style = MaterialTheme.typography.titleMedium) },
+                title = { Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
@@ -62,7 +64,7 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             Text(
-                "INTERFACE PREFERENCE",
+                stringResource(R.string.settings_interface_preference),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(bottom = 16.dp)
@@ -87,9 +89,9 @@ fun SettingsScreen(
                             )
                             Text(
                                 text = when(mode) {
-                                    ThemeMode.DARK -> "Dark Mode (Optimized)"
-                                    ThemeMode.LIGHT -> "Light Mode (Eye Strain / High Carbon)"
-                                    ThemeMode.SYSTEM -> "System Default"
+                                    ThemeMode.DARK -> stringResource(R.string.settings_dark_mode)
+                                    ThemeMode.LIGHT -> stringResource(R.string.settings_light_mode)
+                                    ThemeMode.SYSTEM -> stringResource(R.string.settings_system_default)
                                 },
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = if (mode == ThemeMode.LIGHT) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
@@ -101,7 +103,7 @@ fun SettingsScreen(
 
             if (themeMode == ThemeMode.LIGHT) {
                 Text(
-                    "Warning: Light Mode causes eye strain, is out of GenZ trends, and increases carbon impact (higher OLED draw).",
+                    stringResource(R.string.settings_light_warning),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(top = 8.dp, start = 4.dp)
@@ -110,7 +112,7 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
             Text(
-                "DATA ARCHIVE",
+                stringResource(R.string.settings_data_archive),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(bottom = 16.dp)
@@ -127,13 +129,13 @@ fun SettingsScreen(
             ) {
                 Icon(Icons.Default.DeleteSweep, contentDescription = null)
                 Spacer(modifier = Modifier.width(12.dp))
-                Text("Purge Neural History")
+                Text(stringResource(R.string.settings_purge_history))
             }
 
             Spacer(modifier = Modifier.height(64.dp))
 
             Text(
-                "V ${BuildConfig.VERSION_NAME} • agrelius neural os",
+                stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                 modifier = Modifier.fillMaxWidth(),
@@ -144,22 +146,23 @@ fun SettingsScreen(
         if (showDeleteConfirm) {
             AlertDialog(
                 onDismissRequest = { showDeleteConfirm = false },
-                title = { Text("Purge Database?") },
-                text = { Text("All local classification logs and impact metrics will be permanently erased from this device.") },
+                title = { Text(stringResource(R.string.settings_purge_title)) },
+                text = { Text(stringResource(R.string.settings_purge_message)) },
                 confirmButton = {
+                    val purgeSnackbarText = stringResource(R.string.settings_purged_snackbar)
                     TextButton(onClick = {
                         homeViewModel.clearHistory()
                         showDeleteConfirm = false
                         scope.launch {
-                            snackbarHostState.showSnackbar("Neural history purged")
+                            snackbarHostState.showSnackbar(purgeSnackbarText)
                         }
                     }) {
-                        Text("Execute Purge", color = MaterialTheme.colorScheme.error)
+                        Text(stringResource(R.string.settings_execute_purge), color = MaterialTheme.colorScheme.error)
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showDeleteConfirm = false }) {
-                        Text("Abort")
+                        Text(stringResource(R.string.common_abort))
                     }
                 },
                 containerColor = MaterialTheme.colorScheme.surface,
