@@ -72,6 +72,7 @@ fun ResultScreen(
                         visible = showContent,
                         enter = fadeIn(tween(800)) + slideInVertically(tween(800)) { 50 }
                     ) {
+                        result?.let { r ->
                         Column {
                             HeroCard {
                                 Row(
@@ -81,25 +82,25 @@ fun ResultScreen(
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = result!!.subclass,
+                                            text = r.subclass,
                                             style = MaterialTheme.typography.displaySmall,
                                             fontWeight = FontWeight.Black,
-                                            color = if (result!!.category == "Uncertain") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                                            color = if (r.category == "Uncertain") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                                             letterSpacing = 1.sp
                                         )
                                         Text(
-                                            text = if (result!!.category == "Uncertain") "LOW CONFIDENCE MATCH" else result!!.category.uppercase(),
+                                            text = if (r.category == "Uncertain") "LOW CONFIDENCE MATCH" else r.category.uppercase(),
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = if (result!!.category == "Uncertain") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                            color = if (r.category == "Uncertain") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                                             fontWeight = FontWeight.Bold,
                                             letterSpacing = 2.sp
                                         )
                                     }
-                                    ConfidenceBadge(confidence = result!!.confidence)
+                                    ConfidenceBadge(confidence = r.confidence)
                                 }
                             }
 
-                            if (result!!.category == "Uncertain") {
+                            if (r.category == "Uncertain") {
                                 Card(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
@@ -108,9 +109,33 @@ fun ResultScreen(
                                         Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Text(
-                                            "Neural Variance: The visual signature is outside standard thresholds. Manual verification required.",
+                                            text = r.classificationMessage.ifBlank {
+                                                "Neural Variance: The visual signature is outside standard thresholds. Manual verification required."
+                                            },
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    }
+                                }
+                            } else if (r.classificationMessage.isNotBlank()) {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                    )
+                                ) {
+                                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
+                                        Icon(
+                                            Icons.Default.AutoGraph,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(top = 2.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            text = r.classificationMessage,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
                                         )
                                     }
                                 }
@@ -120,42 +145,69 @@ fun ResultScreen(
                             
                             InsightCard(
                                 title = "Disposal Protocol",
-                                content = result!!.disposalGuide,
+                                content = r.disposalGuide,
                                 icon = Icons.Default.VerifiedUser
                             )
 
                             InsightCard(
                                 title = "Ecological Footprint",
-                                content = result!!.environmentalImpact,
+                                content = r.environmentalImpact,
                                 icon = Icons.Default.AutoGraph
                             )
-                            
+
+                            InsightCard(
+                                title = "Recycling Benefits",
+                                content = r.recyclingBenefits,
+                                icon = Icons.Default.Recycling
+                            )
+
                             InsightCard(
                                 title = "Verification Sources",
-                                content = "Data verified against global Sustainability Frameworks.",
+                                content = r.sources,
                                 icon = Icons.Default.Science
                             )
 
-                            // NEW: Feature Vector & Technical Meta
-                            if (record != null) {
-                                SectionTitle(text = "Neural Material Signature")
+                            // Top model predictions + storage metadata.
+                            if (r.topPredictions.isNotEmpty()) {
+                                SectionTitle(text = "Model Confidence Breakdown")
                                 Card(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f))
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)
+                                    )
                                 ) {
                                     Column(modifier = Modifier.padding(16.dp)) {
-                                        Text(
-                                            text = "Feature Vector: ${record!!.featureVector ?: "Generating..."}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                                        )
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = "Storage: ${if (record!!.imagePath != null) "Full Image Sync" else "Metadata Only"}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = TextSecondary
-                                        )
+                                        r.topPredictions.forEach { (label, conf) ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 4.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text(
+                                                    text = label,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Text(
+                                                    text = "${(conf * 100).toInt()}%",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                                )
+                                            }
+                                        }
+                                        if (record != null) {
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                text = "Storage: ${if (record?.imagePath != null) "Image saved for review" else "Metadata only"}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = TextSecondary
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -182,6 +234,7 @@ fun ResultScreen(
                             )
                             
                             Spacer(modifier = Modifier.height(48.dp))
+                        }
                         }
                     }
                 }

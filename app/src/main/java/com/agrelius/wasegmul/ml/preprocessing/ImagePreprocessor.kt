@@ -2,29 +2,51 @@ package com.agrelius.wasegmul.ml.preprocessing
 
 import android.graphics.Bitmap
 import org.tensorflow.lite.DataType
-import org.tensorflow.lite.support.image.ImageProcessor
 import org.tensorflow.lite.support.image.TensorImage
 import org.tensorflow.lite.support.image.ops.ResizeOp
 
 /**
- * Optimized Preprocessor for EfficientNet-based models.
- * EfficientNet models typically expect [0, 255] range for FLOAT32 if using the 
- * standard preprocessing layer inside the model, OR specific normalization if not.
- * Based on user feedback, removed manual 1/255.0 normalization as it was 
- * causing 'keyboard' bias/incorrect outputs.
+ * Preprocessing for the EfficientNet-based category & subclass models.
+ *
+ * EfficientNet models trained for this project handle input scaling internally, so we feed
+ * raw [0, 255] FLOAT32 pixels after a center-crop-then-resize to 224x224.
+ *
+ * The center-crop preserves aspect ratio: a tall portrait image is cropped to its central
+ * square region before resizing, preventing the distortion that a raw stretch would cause.
+ *
+ * This object is thread-safe: each call to [preprocess] builds its own [ResizeOp] internally.
  */
 object ImagePreprocessor {
     private const val INPUT_SIZE = 224
 
     fun preprocess(bitmap: Bitmap): TensorImage {
-        val imageProcessor = ImageProcessor.Builder()
-            .add(ResizeOp(INPUT_SIZE, INPUT_SIZE, ResizeOp.ResizeMethod.BILINEAR))
-            // Removed NormalizeOp(0.0f, 255.0f) as EfficientNet trained models 
-            // often handle scaling internally or expect raw 0-255 float values.
-            .build()
-
+        val cropped = centerCropToSquare(bitmap)
         val tensorImage = TensorImage(DataType.FLOAT32)
-        tensorImage.load(bitmap)
-        return imageProcessor.process(tensorImage)
+        tensorImage.load(cropped)
+        // Build a fresh ImageProcessor per call to avoid thread-safety issues with ResizeOp.
+        val processor = org.tensorflow.lite.support.image.ImageProcessor.Builder()
+            .add(ResizeOp(INPUT_SIZE, INPUT_SIZE, ResizeOp.ResizeMethod.BILINEAR))
+            .build()
+        val result = processor.process(tensorImage)
+        // Recycle the intermediate cropped bitmap if it was created (not the original).
+        if (cropped !== bitmap) {
+            cropped.recycle()
+        }
+        return result
+    }
+
+    /**
+     * Center-crops [bitmap] to its largest inscribed square.
+     * If the bitmap is already square, returns it unchanged.
+     */
+    private fun centerCropToSquare(bitmap: Bitmap): Bitmap {
+        val w = bitmap.width
+        val h = bitmap.height
+        if (w == h) return bitmap
+
+        val size = minOf(w, h)
+        val x = (w - size) / 2
+        val y = (h - size) / 2
+        return Bitmap.createBitmap(bitmap, x, y, size, size)
     }
 }

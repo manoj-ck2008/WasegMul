@@ -26,6 +26,13 @@ enum class FailureReason {
     UNKNOWN
 }
 
+/**
+ * Manages the TFLite model lifecycle and runs inference through both classifiers.
+ *
+ * Supports **degraded classification**: if one classifier fails at inference time,
+ * the other's output is still used. The [MLArbitrator] downstream handles the
+ * reduced-confidence result. Both models must fail for a total [ClassificationOutcome.Failure].
+ */
 class ModelManager(private val context: Context) {
 
     private var categoryClassifier: CategoryClassifier? = null
@@ -35,6 +42,7 @@ class ModelManager(private val context: Context) {
     private var isInitialized = false
 
     private val initMutex = Mutex()
+    private val classifyMutex = Mutex()
 
     suspend fun ensureInitialized() {
         if (isInitialized) return
@@ -54,6 +62,11 @@ class ModelManager(private val context: Context) {
         }
     }
 
+    /**
+     * Runs both classifiers on [bitmap].  If one classifier fails the other's
+     * output is used (degraded mode).  Only returns [ClassificationOutcome.Failure]
+     * when **both** classifiers fail or the models are not initialised.
+     */
     suspend fun classify(bitmap: Bitmap): ClassificationOutcome = withContext(Dispatchers.Default) {
         if (!isInitialized) {
             return@withContext ClassificationOutcome.Failure(
@@ -63,47 +76,78 @@ class ModelManager(private val context: Context) {
             )
         }
 
-        try {
-            val catResult = categoryClassifier?.classify(bitmap)
-            if (catResult == null) {
-                Log.e(TAG, "Category classifier returned null")
-                return@withContext ClassificationOutcome.Failure(
-                    FailureReason.CATEGORY_INFERENCE_FAILED,
-                    "The category model failed to process the image. Please try again with a clearer photo.",
+        classifyMutex.withLock {
+            // Capture local references to prevent TOCTOU race with close()/cleanup().
+            val catClassifier = categoryClassifier
+            val subClassifier = subclassClassifier
+
+            var catResult: com.agrelius.wasegmul.InternalResult? = null
+            var subResult: com.agrelius.wasegmul.InternalResult? = null
+            var catError: String? = null
+            var subError: String? = null
+
+            // Run category classifier (non-fatal on failure).
+            try {
+                if (catClassifier != null) {
+                    catResult = catClassifier.classify(bitmap)
+                } else {
+                    catError = "Category classifier not available (closed)"
+                }
+                if (catResult == null && catError == null) catError = "Category classifier returned null"
+            } catch (e: Exception) {
+                Log.e(TAG, "Category classifier threw", e)
+                catError = e.message ?: "Category classifier error"
+            }
+
+            // Run subclass classifier (non-fatal on failure).
+            try {
+                if (subClassifier != null) {
+                    subResult = subClassifier.classify(bitmap)
+                } else {
+                    subError = "Subclass classifier not available (closed)"
+                }
+                if (subResult == null && subError == null) subError = "Subclass classifier returned null"
+            } catch (e: Exception) {
+                Log.e(TAG, "Subclass classifier threw", e)
+                subError = e.message ?: "Subclass classifier error"
+            }
+
+            // Both failed → total failure.
+            if (catResult == null && subResult == null) {
+                val detail = listOfNotNull(catError, subError).joinToString("; ")
+                Log.e(TAG, "Both classifiers failed: $detail")
+                return@withLock ClassificationOutcome.Failure(
+                    FailureReason.UNKNOWN,
+                    "Classification failed: $detail. Please try again.",
                     null
                 )
             }
 
-            val subResult = subclassClassifier?.classify(bitmap)
-            if (subResult == null) {
-                Log.e(TAG, "Subclass classifier returned null")
-                return@withContext ClassificationOutcome.Failure(
-                    FailureReason.SUBCLASS_INFERENCE_FAILED,
-                    "The subclass model failed to process the image. Please try again with a clearer photo.",
-                    null
-                )
-            }
+            if (catError != null) Log.w(TAG, "Degraded mode — category model failed: $catError")
+            if (subError != null) Log.w(TAG, "Degraded mode — subclass model failed: $subError")
 
             ClassificationOutcome.Success(
                 PredictionResult(
-                    category = catResult.label,
-                    categoryConfidence = catResult.confidence,
-                    subcategory = subResult.label,
-                    subcategoryConfidence = subResult.confidence,
-                    topSubcategories = subResult.topPredictions
+                    category = catResult?.label ?: "Unknown",
+                    categoryConfidence = catResult?.confidence ?: 0f,
+                    subcategory = subResult?.label ?: "Unknown",
+                    subcategoryConfidence = subResult?.confidence ?: 0f,
+                    topSubcategories = subResult?.topPredictions ?: emptyList(),
+                    topCategories = catResult?.topPredictions ?: emptyList()
                 )
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "Classification error during inference", e)
-            ClassificationOutcome.Failure(
-                FailureReason.UNKNOWN,
-                "Classification failed: ${e.message ?: "Unknown error"}. Please try again.",
-                e
             )
         }
     }
 
-    fun close() { cleanup() }
+    fun close() {
+        kotlinx.coroutines.runBlocking {
+            classifyMutex.withLock {
+                initMutex.withLock {
+                    cleanup()
+                }
+            }
+        }
+    }
 
     private fun cleanup() {
         runCatching { categoryClassifier?.close() }

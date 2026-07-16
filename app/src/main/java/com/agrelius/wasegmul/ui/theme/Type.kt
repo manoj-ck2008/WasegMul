@@ -36,10 +36,10 @@ val Typography = Typography(
         letterSpacing = 4.sp // Techy spaced feel
     ),
     headlineMedium = TextStyle(
-        fontFamily = FontFamily.Monospace, // Futuristic tech feel
+        fontFamily = FontFamily.Monospace,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 14.sp,
-        lineHeight = 20.sp,
+        fontSize = 20.sp,
+        lineHeight = 28.sp,
         letterSpacing = 1.sp
     ),
     labelSmall = TextStyle(

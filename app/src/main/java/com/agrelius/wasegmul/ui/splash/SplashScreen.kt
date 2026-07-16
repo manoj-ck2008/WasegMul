@@ -18,12 +18,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.agrelius.wasegmul.WasegMulApp
 import com.agrelius.wasegmul.ui.components.AppLogo
 import com.agrelius.wasegmul.ui.components.VisionImagery
 import com.agrelius.wasegmul.ui.components.FallingPetals
@@ -32,10 +30,6 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun SplashScreen(onTimeout: () -> Unit) {
-    val context = LocalContext.current
-    val app = context.applicationContext as WasegMulApp
-    val soundManager = app.soundManager
-    
     var stage by remember { mutableIntStateOf(0) }
     val currentThought = remember { EcoThoughts.getRandom() }
     
@@ -69,7 +63,6 @@ fun SplashScreen(onTimeout: () -> Unit) {
     )
 
     LaunchedEffect(Unit) {
-        soundManager.playStartupMusic()
         delay(1500)
         stage = 1 // Logo emerges from darkness
         
@@ -84,7 +77,6 @@ fun SplashScreen(onTimeout: () -> Unit) {
         stage = 2 // Vision & Petals Bloom
         
         delay(5000)
-        soundManager.stopMusic()
         onTimeout()
     }
 
@@ -184,14 +176,16 @@ fun CircularRsAnimation() {
         label = "rotation"
     )
 
+    val primaryColor = MaterialTheme.colorScheme.primary
+
     Canvas(modifier = Modifier.size(280.dp).rotate(rotation)) {
         val strokeWidth = 2.dp.toPx()
         for (i in 0..2) {
             drawArc(
                 brush = Brush.sweepGradient(
-                    0.0f to Color(0xFF2ECC71).copy(alpha = 0f),
-                    0.5f to Color(0xFF2ECC71).copy(alpha = 0.3f),
-                    1.0f to Color(0xFF2ECC71).copy(alpha = 0f)
+                    0.0f to primaryColor.copy(alpha = 0f),
+                    0.5f to primaryColor.copy(alpha = 0.3f),
+                    1.0f to primaryColor.copy(alpha = 0f)
                 ),
                 startAngle = i * 120f,
                 sweepAngle = 90f,

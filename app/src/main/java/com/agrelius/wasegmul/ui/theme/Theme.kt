@@ -1,6 +1,7 @@
 package com.agrelius.wasegmul.ui.theme
 
 import android.app.Activity
+import android.os.Build
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -16,8 +17,8 @@ enum class AppThemeMode {
 private val DarkColorScheme = darkColorScheme(
     primary = EmeraldVibrant,
     secondary = SageGreen,
-    surface = SurfaceGray, // Darker surface
-    background = DarkBackground, // Extremely dark background
+    surface = SurfaceGray,
+    background = DarkBackground,
     onPrimary = Color.Black,
     onSurface = TextPrimary,
     onBackground = TextPrimary
@@ -59,9 +60,12 @@ fun WasegMulTheme(
         SideEffect {
             val window = (view.context as? Activity)?.window
             if (window != null) {
-                // True edge-to-edge
                 WindowCompat.setDecorFitsSystemWindows(window, false)
+                // statusBarColor and navigationBarColor are deprecated on API 35+;
+                // on API 35+ they are ignored and edge-to-edge is enforced.
+                @Suppress("DEPRECATION")
                 window.statusBarColor = Color.Transparent.toArgb()
+                @Suppress("DEPRECATION")
                 window.navigationBarColor = Color.Transparent.toArgb()
                 
                 val controller = WindowCompat.getInsetsController(window, view)

@@ -27,7 +27,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.agrelius.wasegmul.WasegMulApp
 import com.agrelius.wasegmul.ui.components.GradientActionButton
 import com.agrelius.wasegmul.ui.components.OrganicBackground
 import com.agrelius.wasegmul.ui.theme.*
@@ -42,7 +41,6 @@ fun ClassifyScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val soundManager = (context.applicationContext as WasegMulApp).soundManager
     val capturedBitmap by viewModel.capturedBitmap.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val classificationResult by viewModel.classificationResult.collectAsState()
@@ -53,18 +51,8 @@ fun ClassifyScreen(
         viewModel.initModel(context)
     }
 
-    LaunchedEffect(isLoading) {
-        if (isLoading) {
-            while (isLoading) {
-                soundManager.playAnalyzingPulse()
-                delay(800)
-            }
-        }
-    }
-
-    LaunchedEffect(classificationResult) {
-        if (classificationResult != null) {
-            soundManager.playNeuralLock()
+    LaunchedEffect(Unit) {
+        viewModel.navigateToResult.collect {
             onNavigateToResult()
         }
     }
@@ -120,9 +108,10 @@ fun ClassifyScreen(
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (capturedBitmap != null) {
+                    val bitmap = capturedBitmap
+                    if (bitmap != null) {
                         Image(
-                            bitmap = capturedBitmap!!.asImageBitmap(),
+                            bitmap = bitmap.asImageBitmap(),
                             contentDescription = "Captured Image",
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
@@ -177,7 +166,7 @@ fun ClassifyScreen(
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(
-                                text = error!!,
+                                text = error.orEmpty(),
                                 color = MaterialTheme.colorScheme.onErrorContainer,
                                 style = MaterialTheme.typography.bodySmall
                             )
@@ -185,7 +174,7 @@ fun ClassifyScreen(
                             TextButton(
                                 onClick = {
                                     viewModel.clearError()
-                                    viewModel.classify(context)
+                                    viewModel.classify()
                                 }
                             ) {
                                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -202,8 +191,7 @@ fun ClassifyScreen(
                     text = if (isLoading) "Processing..." else "Launch Scanner",
                     icon = Icons.Default.AutoAwesome,
                     onClick = {
-                        soundManager.playTick()
-                        viewModel.classify(context)
+                        viewModel.classify()
                     },
                     modifier = Modifier.alpha(if (isLoading) 0.7f else 1f),
                     containerColor = ForestGreen

@@ -3,17 +3,16 @@ package com.agrelius.wasegmul.ui.components
 import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.agrelius.wasegmul.WasegMulApp
 
 @Composable
 fun FeedbackSection(
@@ -24,8 +23,6 @@ fun FeedbackSection(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
-    val context = LocalContext.current
-    val soundManager = (context.applicationContext as WasegMulApp).soundManager
     
     var showResults by remember { mutableStateOf(initialFeedback != null) }
     var step by remember { mutableIntStateOf(if (initialFeedback == "incorrect") 1 else 0) }
@@ -77,19 +74,16 @@ fun FeedbackSection(
                             InitialFeedbackView(
                                 onCorrect = {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    soundManager.playTick()
                                     onFeedbackSelected("correct")
                                     showResults = true
                                 },
                                 onIncorrect = {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    soundManager.playWarning()
                                     onFeedbackSelected("incorrect")
                                     step = 1
                                 },
                                 onNotSure = {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    soundManager.playTick()
                                     onFeedbackSelected("not_sure")
                                     showResults = true
                                 }
@@ -99,7 +93,6 @@ fun FeedbackSection(
                             CorrectionView(
                                 onSelected = { choice ->
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    soundManager.playTick()
                                     onCorrectionSelected(choice)
                                     step = 0
                                     showResults = true
@@ -145,7 +138,7 @@ private fun CorrectionView(onSelected: (String) -> Unit, onBack: () -> Unit) {
     
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = null) }
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null) }
             Text(
                 text = "Actual Material?",
                 style = MaterialTheme.typography.titleSmall,

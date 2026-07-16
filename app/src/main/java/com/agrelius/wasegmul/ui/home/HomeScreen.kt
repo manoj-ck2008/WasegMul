@@ -34,7 +34,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agrelius.wasegmul.BuildConfig
-import com.agrelius.wasegmul.WasegMulApp
 import com.agrelius.wasegmul.WasteRecord
 import com.agrelius.wasegmul.ui.components.*
 import com.agrelius.wasegmul.ui.theme.*
@@ -50,7 +49,6 @@ fun HomeScreen(
     onNavigateToSettings: () -> Unit
 ) {
     val context = LocalContext.current
-    val soundManager = (context.applicationContext as WasegMulApp).soundManager
     val recentHistory by viewModel.recentHistory.collectAsState()
     var showImpactDetail by remember { mutableStateOf(false) }
     var visible by remember { mutableStateOf(false) }
@@ -67,10 +65,15 @@ fun HomeScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
-            soundManager.playTick()
-            val source = ImageDecoder.createSource(context.contentResolver, it)
-            val bitmap = ImageDecoder.decodeBitmap(source)
-            onImageSelected(bitmap.copy(Bitmap.Config.ARGB_8888, true))
+            try {
+                val source = ImageDecoder.createSource(context.contentResolver, it)
+                val bitmap = ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
+                    decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                }
+                onImageSelected(bitmap)
+            } catch (e: Exception) {
+                android.util.Log.e("HomeScreen", "Failed to decode gallery image", e)
+            }
         }
     }
 
@@ -78,7 +81,6 @@ fun HomeScreen(
         contract = ActivityResultContracts.TakePicturePreview()
     ) { bitmap: Bitmap? ->
         bitmap?.let {
-            soundManager.playTick()
             onImageSelected(it.copy(Bitmap.Config.ARGB_8888, true))
         }
     }
@@ -88,6 +90,8 @@ fun HomeScreen(
     ) { isGranted: Boolean ->
         if (isGranted) {
             cameraLauncher.launch()
+        } else {
+            galleryLauncher.launch("image/*")
         }
     }
 
@@ -118,7 +122,6 @@ fun HomeScreen(
                 Box(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
                     IconButton(
                         onClick = {
-                            soundManager.playTick()
                             onNavigateToSettings()
                         },
                         modifier = Modifier.align(Alignment.TopEnd)
@@ -163,7 +166,6 @@ fun HomeScreen(
                         modifier = Modifier.weight(1f)
                     ) {
                         Column(modifier = Modifier.clickable { 
-                            soundManager.playTick()
                             showImpactDetail = true 
                         }) {
                             Icon(Icons.Default.Public, contentDescription = null, tint = EmeraldVibrant, modifier = Modifier.size(24.dp))
@@ -176,7 +178,6 @@ fun HomeScreen(
                         modifier = Modifier.weight(1f)
                     ) {
                         Column(modifier = Modifier.clickable { 
-                            soundManager.playTick()
                             onNavigateToHistory() 
                         }) {
                             Icon(Icons.Default.Dataset, contentDescription = null, tint = EmeraldVibrant, modifier = Modifier.size(24.dp))
@@ -193,7 +194,7 @@ fun HomeScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
-                        modifier = Modifier.fillMaxWidth().clickable { soundManager.playWarning() }
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
@@ -243,7 +244,6 @@ fun HomeScreen(
                     text = "Launch Scanner",
                     icon = Icons.Default.CameraAlt,
                     onClick = {
-                        soundManager.playTick()
                         permissionLauncher.launch(android.Manifest.permission.CAMERA)
                     },
                     containerColor = ForestGreen

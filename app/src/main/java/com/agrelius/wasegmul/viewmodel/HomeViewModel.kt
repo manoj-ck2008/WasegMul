@@ -3,7 +3,7 @@ package com.agrelius.wasegmul.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.agrelius.wasegmul.data.WasteRecord
+import com.agrelius.wasegmul.WasteRecord
 import com.agrelius.wasegmul.repository.WasteRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow

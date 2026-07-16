@@ -24,3 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "WasegMul"
 include(":app")
+include(":shared")

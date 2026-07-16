@@ -1,8 +1,13 @@
 package com.agrelius.wasegmul.data
 
-import com.agrelius.wasegmul.WasteRecord as CommonWasteRecord
+import com.agrelius.wasegmul.WasteRecord as SharedWasteRecord
 
-fun WasteRecord.toCommon(): CommonWasteRecord = CommonWasteRecord(
+/**
+ * Mappers between the Room entity [WasteRecord] and the shared domain model.
+ * Fields are 1:1; keep these in sync when either model changes.
+ */
+
+fun WasteRecord.toCommon(): SharedWasteRecord = SharedWasteRecord(
     id = id,
     category = category,
     subclass = subclass,
@@ -12,10 +17,11 @@ fun WasteRecord.toCommon(): CommonWasteRecord = CommonWasteRecord(
     imagePath = imagePath,
     feedback = feedback,
     correctedSubclass = correctedSubclass,
+    topPredictions = topPredictions,
     timestamp = timestamp
 )
 
-fun CommonWasteRecord.toEntity(): WasteRecord = WasteRecord(
+fun SharedWasteRecord.toEntity(): WasteRecord = WasteRecord(
     id = id,
     category = category,
     subclass = subclass,
@@ -25,5 +31,6 @@ fun CommonWasteRecord.toEntity(): WasteRecord = WasteRecord(
     imagePath = imagePath,
     feedback = feedback,
     correctedSubclass = correctedSubclass,
+    topPredictions = topPredictions,
     timestamp = timestamp
 )

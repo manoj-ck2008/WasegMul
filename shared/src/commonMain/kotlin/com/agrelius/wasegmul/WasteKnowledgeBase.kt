@@ -1,71 +1,217 @@
 package com.agrelius.wasegmul
 
+/**
+ * Authoritative disposal, environmental-impact, and recycling knowledge for every
+ * subclass the model can emit (see `subclass_classes.txt`).
+ *
+ * Every entry is keyed off the exact label string the TFLite subclass model emits, so
+ * the app shows real, actionable guidance for 100% of predictions rather than falling
+ * through to a generic message.
+ *
+ * Sources are cited per-entry so the UI can surface provenance to the user.
+ */
 object WasteKnowledgeBase {
 
+    /**
+     * @param category resolved category ("E-Waste", "Recyclable", "Organic", "Trash",
+     *                  "Uncertain", or "Unknown").
+     * @param subclass  raw label emitted by the subclass model.
+     */
     fun getInfo(category: String, subclass: String): WasteInfo {
-        if (category == "Uncertain") {
-            return getGeneralInfo("Low confidence detection. Please verify manually.")
+        if (category == "Uncertain" || category == "Unknown") {
+            return getGeneralInfo(
+                "We couldn't identify this item with enough confidence. " +
+                    "Please verify manually before disposing of it."
+            )
         }
 
         return when (subclass.trim()) {
+            // ── Hazardous / batteries ──────────────────────────────────────────────
             "Battery" -> WasteInfo(
-                disposalGuide = "• HAZARD: Fire risk. Do NOT put in regular trash or recycling bins.\n• TAPE: Cover terminals with clear tape to prevent short circuits.\n• SPECIALIST: Drop off at dedicated battery recycling kiosks or e-waste centers.",
-                environmentalImpact = "Prevents toxic chemicals (Cadmium, Lead, Lithium) from leaking into soil and water tables.",
-                recyclingBenefits = "Rare metals like Cobalt and Lithium are recovered for new battery production.",
-                sources = "EPA Hazardous Waste Guidelines"
+                disposalGuide = "• HAZARD: Fire risk — never place in regular trash or recycling bins.\n" +
+                    "• TAPE: Cover both terminals with clear tape to prevent short circuits.\n" +
+                    "• DROP-OFF: Take to a dedicated battery recycling kiosk, electronics store, or household hazardous-waste facility.",
+                environmentalImpact = "Prevents toxic heavy metals (Cadmium, Lead, Lithium, Mercury) from leaking into soil and groundwater.",
+                recyclingBenefits = "Recovers Cobalt, Lithium, Nickel and steel for new battery production, reducing destructive mining.",
+                sources = "EPA — Battery Recycling Guidelines; Call2Recycle"
             )
+
+            // ── Large appliances (white goods) ─────────────────────────────────────
+            "Air-Conditioner" -> WasteInfo(
+                disposalGuide = "• COOLANT: Contains refrigerants that must be professionally recovered — never vent or dismantle yourself.\n" +
+                    "• PICK-UP: Arrange municipal bulky-waste collection or a retailer take-back when buying a replacement.\n" +
+                    "• CERTIFIED RECYCLER: Deliver to an R2 / e-Stewards facility so coolant and components are handled safely.",
+                environmentalImpact = "Refrigerants (HFCs) have thousands of times the global-warming potential of CO₂ if released; proper recovery is essential.",
+                recyclingBenefits = "Steel, copper and aluminum from the casing and compressor are recovered for manufacturing.",
+                sources = "EPA Section 608 (Refrigerant Recycling); RAD Program"
+            )
+            "Refrigerator" -> WasteInfo(
+                disposalGuide = "• COOLANT & FOAM: Contains refrigerant and blowing-agent gases that require licensed recovery.\n" +
+                    "• TAKE-BACK: Many utility companies and appliance retailers offer collection rebates.\n" +
+                    "• CERTIFIED RECYCLER: Use an RAD (Responsible Appliance Disposal) partner.",
+                environmentalImpact = "Proper handling stops CFC/HCFC/HFC release, protecting the ozone layer and avoiding potent greenhouse emissions.",
+                recyclingBenefits = "Recovers roughly 75% of unit weight as recyclable metal and plastic.",
+                sources = "EPA Responsible Appliance Disposal (RAD) Program"
+            )
+            "Washing Machine" -> WasteInfo(
+                disposalGuide = "• BULKY WASTE: Schedule municipal pick-up or use a scrap-metal recycler.\n" +
+                    "• RETAILER TAKE-BACK: Often available on delivery of a new unit.\n" +
+                    "• DONATE: If functional, donate to a charity or resale shop.",
+                environmentalImpact = "Recycling the steel and concrete components avoids the high energy cost of refining virgin ore.",
+                recyclingBenefits = "Steel drum and motor copper are highly recyclable and retain value across multiple lifecycles.",
+                sources = "Institute of Scrap Recycling Industries (ISRI)"
+            )
+            "Microwave" -> WasteInfo(
+                disposalGuide = "• HAZARD: Contains a capacitor that can retain a lethal charge — do not disassemble.\n" +
+                    "• E-WASTE: Drop off at an e-waste center, not curbside recycling.\n" +
+                    "• METAL RECYCLER: Some scrap dealers accept the bare metal casing once electronics are removed by a professional.",
+                environmentalImpact = "Keeps the magnetron and circuit boards out of landfills where they leach heavy metals.",
+                recyclingBenefits = "Steel casing and copper wiring are recovered; circuit boards yield reusable metals.",
+                sources = "Earth911; R2 Recycling Standard"
+            )
+            "Television" -> WasteInfo(
+                disposalGuide = "• HAZARD: CRT TVs contain leaded glass; flat-screens contain mercury lamps — handle as e-waste.\n" +
+                    "• DATA: Remove any streaming sticks / accounts before disposal.\n" +
+                    "• DROP-OFF: Take to an R2/e-Stewards recycler or a retailer TV take-back event.",
+                environmentalImpact = "Prevents lead, mercury and flame retardants from contaminating soil and water.",
+                recyclingBenefits = "Glass, plastics and precious metals are recovered; reduces demand for virgin materials.",
+                sources = "UN Global E-waste Monitor; EPA eCycling"
+            )
+            "Printer" -> WasteInfo(
+                disposalGuide = "• CONSUMABLES: Remove and recycle ink/toner cartridges separately (most manufacturers offer free mail-back).\n" +
+                    "• DATA: Clear any stored print jobs or network settings.\n" +
+                    "• DROP-OFF: Take to an electronics recycler; many office-supply stores accept working units.",
+                environmentalImpact = "Keeps plastic casing and circuit boards out of landfill and prevents ink residue leaching.",
+                recyclingBenefits = "Plastics and metals are recovered; cartridges can be refilled and reused multiple times.",
+                sources = "EPA Sustainable Materials Management; manufacturer take-back programs"
+            )
+
+            // ── Consumer electronics ───────────────────────────────────────────────
+            "Mobile", "Laptop", "Keyboard", "Mouse", "Electronic Device", "Player" -> WasteInfo(
+                disposalGuide = "• DATA: Back up and then securely wipe all personal storage (factory reset / disk wipe).\n" +
+                    "• ACCESSORIES: Keep chargers and cables with the device if possible.\n" +
+                    "• CERTIFIED RECYCLER: Take to an R2 or e-Stewards certified facility, or a retailer trade-in program.",
+                environmentalImpact = "Electronics contain heavy metals and flame retardants that contaminate groundwater if landfilled.",
+                recyclingBenefits = "Recovers gold, silver, copper and rare-earth elements, reducing destructive mining.",
+                sources = "UN Global E-waste Monitor; e-Stewards / R2 Certification"
+            )
+            "Electronic Component", "PCB" -> WasteInfo(
+                disposalGuide = "• HAZARD: Circuit boards contain lead solder and brominated flame retardants — never landfill.\n" +
+                    "• E-WASTE: Drop off at a certified electronics recycler that accepts bare boards.\n" +
+                    "• BULK: For large volumes, use a specialist board buyer/refiner.",
+                environmentalImpact = "Prevents lead and brominated compounds from leaching into the environment.",
+                recyclingBenefits = "Printed circuit boards are one of the richest sources of recoverable gold, copper, palladium and silver.",
+                sources = "Geological Survey Mineral Commodity Summaries; R2 Standard"
+            )
+
+            // ── Recyclables ────────────────────────────────────────────────────────
             "Plastic" -> WasteInfo(
-                disposalGuide = "• RINSE: Remove food residue.\n• CHECK: Ensure it's Resin Code #1, #2, or #5 (most common recyclables).\n• BINS: Place in yellow/blue recycling bins.",
-                environmentalImpact = "Diverts material from 450-year decomposition cycles in landfills.",
-                recyclingBenefits = "Reduces petroleum demand for virgin plastic production.",
-                sources = "Sustainable Packaging Coalition"
+                disposalGuide = "• RINSE: Remove food residue and let dry.\n" +
+                    "• CHECK: Confirm the Resin Identification Code — #1 (PET), #2 (HDPE) and #5 (PP) are the most widely accepted.\n" +
+                    "• BINS: Place in your yellow/blue recycling bin; keep caps on unless local rules say otherwise.",
+                environmentalImpact = "Diverts material from a 450-year landfill decomposition cycle and keeps it out of waterways.",
+                recyclingBenefits = "Cuts petroleum demand for virgin plastic and uses far less energy than producing new resin.",
+                sources = "Sustainable Packaging Coalition; How2Recycle"
             )
             "Paper", "Cardboard" -> WasteInfo(
-                disposalGuide = "• DRY: Wet paper/cardboard cannot be recycled.\n• FLATTEN: Save space in transport to reduce carbon emissions.\n• REMOVE: Strip off excessive tape or plastic wrapping.",
-                environmentalImpact = "Saves trees and reduces methane produced by organic decomposition in landfills.",
-                recyclingBenefits = "Uses 40% less energy than manufacturing from virgin wood pulp.",
-                sources = "American Forest & Paper Association"
-            )
-            "Electronic Device", "Mobile", "Laptop", "Keyboard", "Mouse", "Printer" -> WasteInfo(
-                disposalGuide = "• DATA: Wipe all personal storage before disposal.\n• CABLES: Keep power cords with the device if possible.\n• RECOVERY: Take to an R2 or e-Stewards certified recycler.",
-                environmentalImpact = "Electronics contain heavy metals that contaminate groundwater if landfilled.",
-                recyclingBenefits = "Recovers gold, silver, and copper, reducing the need for destructive mining.",
-                sources = "UN Global E-waste Monitor"
-            )
-            "Organic" -> WasteInfo(
-                disposalGuide = "• COMPOST: Best for garden soil enhancement.\n• NO PLASTIC: Ensure no stickers or plastic liners are included.\n• BINS: Use dedicated brown/green organic bins.",
-                environmentalImpact = "Reduces landfill methane (a potent greenhouse gas).",
-                recyclingBenefits = "Returns nutrients to the soil, supporting local biodiversity.",
-                sources = "Composting Council"
+                disposalGuide = "• DRY: Wet paper and cardboard cannot be recycled — keep them dry.\n" +
+                    "• FLATTEN: Break down boxes to save transport space and emissions.\n" +
+                    "• REMOVE: Strip off plastic tape, bubble wrap and food-soiled portions.",
+                environmentalImpact = "Saves trees and cuts the methane released when organics decompose in landfill.",
+                recyclingBenefits = "Recycled paper uses roughly 40% less energy and far less water than virgin wood pulp.",
+                sources = "American Forest & Paper Association (AF&PA)"
             )
             "Metal" -> WasteInfo(
-                disposalGuide = "• CLEAN: Rinse out food or paint residue.\n• TYPES: Aluminum and Steel are infinitely recyclable.\n• SORT: Do not mix with plastic if using single-stream.",
-                environmentalImpact = "Mining ore is 95% more energy-intensive than recycling existing metal.",
-                recyclingBenefits = "Metals maintain structural integrity throughout multiple recycling loops.",
-                sources = "International Aluminum Institute"
+                disposalGuide = "• CLEAN: Rinse out food, paint or chemical residue.\n" +
+                    "• TYPES: Aluminum and steel are infinitely recyclable — a magnet will tell them apart (steel sticks).\n" +
+                    "• SORT: In single-stream systems, keep loose metal from tangling in sorting machines.",
+                environmentalImpact = "Mining ore is up to 95% more energy-intensive than recycling existing metal.",
+                recyclingBenefits = "Metals retain their structural quality through unlimited recycling loops.",
+                sources = "International Aluminum Institute; Institute of Scrap Recycling Industries"
             )
             "Glass" -> WasteInfo(
-                disposalGuide = "• RINSE: Wash away sugars or oils.\n• SORT: Separate by color if required by local municipality.\n• NO CERAMICS: Pyrex or ceramics contaminate glass recycling melts.",
-                environmentalImpact = "Glass takes 1 million years to decompose; recycling is the only sustainable path.",
-                recyclingBenefits = "Cullet (crushed glass) reduces furnace temperatures and CO2 emissions.",
-                sources = "Glass Packaging Institute"
+                disposalGuide = "• RINSE: Wash away sugars or oils.\n" +
+                    "• SORT: Separate by color where your municipality requires it.\n" +
+                    "• NO CERAMICS: Pyrex, ceramics and mirrors contaminate glass-melt batches — bin them as trash.",
+                environmentalImpact = "Glass takes up to a million years to decompose; recycling is the only sustainable path.",
+                recyclingBenefits = "Cullet (crushed glass) lowers furnace temperatures, saving energy and cutting CO₂ emissions.",
+                sources = "Glass Packaging Institute (GPI)"
             )
-            "light bulbs" -> WasteInfo(
-                disposalGuide = "• FRAGILE: Wrap in paper to prevent injury if broken.\n• MERCURY: CFLs contain mercury; must go to hazardous waste drop-off.\n• LED/INCANDESCENT: Check local rules; often treated as special trash.",
-                environmentalImpact = "Prevents mercury vapor release into the atmosphere.",
-                recyclingBenefits = "Glass and metal components can be recovered safely.",
-                sources = "Energy Star Disposal Guide"
+            "clothing", "shoes" -> WasteInfo(
+                disposalGuide = "• REUSE: Donate wearable items to charity shops or textile banks.\n" +
+                    "• RETAILER: Many fashion brands now accept old textiles for recycling in-store.\n" +
+                    "• RAGS: Even worn-out textiles can be recycled into insulation or cleaning cloths — don't bin them.",
+                environmentalImpact = "Keeps textiles out of landfill where they release methane during decomposition.",
+                recyclingBenefits = "Reduces water and pesticide demand of virgin cotton and lowers synthetic fiber production.",
+                sources = "Council for Textile Recycling; Ellen MacArthur Foundation"
+            )
+
+            // ── Organic ────────────────────────────────────────────────────────────
+            "Organic" -> WasteInfo(
+                disposalGuide = "• COMPOST: Ideal for garden soil enrichment.\n" +
+                    "• NO PLASTIC: Remove produce stickers, rubber bands and plastic liners.\n" +
+                    "• BINS: Use your dedicated brown/green organic-waste bin if available.",
+                environmentalImpact = "Diverts organic waste from landfill where it produces methane, a potent greenhouse gas.",
+                recyclingBenefits = "Returns nutrients to soil and supports local biodiversity and food production.",
+                sources = "US Composting Council"
+            )
+
+            // ── Trash / hard-to-recycle ────────────────────────────────────────────
+            "Miscellaneous Trash" -> WasteInfo(
+                disposalGuide = "• SORT: Check each item against the other categories first — most 'trash' is actually recyclable.\n" +
+                    "• COMPACT: Crush items to reduce landfill volume.\n" +
+                    "• BINS: Place genuinely non-recyclable residue in the general-waste bin.",
+                environmentalImpact = "Correct sorting upstream is the single biggest lever for reducing landfill mass.",
+                recyclingBenefits = "Properly binned recyclables avoid contamination that would spoil whole batches.",
+                sources = "EPA Sustainable Materials Management"
+            )
+            "Textile Trash" -> WasteInfo(
+                disposalGuide = "• TEXTILE BANK: Even damaged fabric can be recycled at textile collection points.\n" +
+                    "• DONATE: Give re-usable items to charity.\n" +
+                    "• TRASH: Only non-recyclable, soiled textiles go to general waste.",
+                environmentalImpact = "Diverts textiles from landfill, avoiding methane from decomposition.",
+                recyclingBenefits = "Recycled fibers become insulation, upholstery padding and cleaning rags.",
+                sources = "Council for Textile Recycling"
+            )
+            "disposable_plastic_cutlery" -> WasteInfo(
+                disposalGuide = "• TRASH: Most curbside programs do NOT accept cutlery (wrong shape for sorters, often #6 PS).\n" +
+                    "• REUSE: Wash and reuse if possible before disposal.\n" +
+                    "• REDUCE: Switch to reusable or compostable cutlery where you can.",
+                environmentalImpact = "Single-use plastic cutlery is a leading contributor to plastic pollution in waterways.",
+                recyclingBenefits = "Limited recyclability, but refusing and reducing has the highest positive impact.",
+                sources = "Ocean Conservancy; National Geographic Plastic Toolkit"
             )
             "styrofoam_cups", "styrofoam_food_containers" -> WasteInfo(
-                disposalGuide = "• TRASH: Usually NOT recyclable in curbside bins.\n• CLEAN: If your city accepts EPS, it must be spotless.\n• REDUCE: Switch to reusable containers.",
-                environmentalImpact = "Extremely persistent in ocean eco systems; breaks into microplastics.",
-                recyclingBenefits = "While technically possible, low density makes transport energy-inefficient.",
-                sources = "Ocean Conservancy"
+                disposalGuide = "• TRASH: Usually NOT accepted in curbside recycling.\n" +
+                    "• CLEAN: If your city accepts EPS, it must be completely clean and dry.\n" +
+                    "• DROP-OFF: Look for dedicated foam #6 drop-off sites; otherwise bin as trash.",
+                environmentalImpact = "EPS is extremely persistent in ocean ecosystems and breaks into harmful microplastics.",
+                recyclingBenefits = "Technically recyclable, but its low density makes collection transport energy-inefficient.",
+                sources = "Ocean Conservancy; Earth911 EPS recycling"
             )
-            else -> getGeneralInfo("Follow local municipal guidelines for $subclass.")
+            "light bulbs" -> WasteInfo(
+                disposalGuide = "• FRAGILE: Wrap in paper to prevent breakage and injury.\n" +
+                    "• CFL/FLUORESCENT: Contain mercury — take to a hazardous-waste drop-off, never the regular bin.\n" +
+                    "• LED/INCANDESCENT: Check local rules; LEDs can often be recycled as e-waste, incandescents as trash.",
+                environmentalImpact = "Proper disposal prevents mercury vapor release into the atmosphere.",
+                recyclingBenefits = "Glass, metal and (in LEDs) electronic components can be recovered safely.",
+                sources = "EPA Fluorescent Bulb Recycling; ENERGY STAR"
+            )
+            "automobile wastes" -> WasteInfo(
+                disposalGuide = "• HAZARD: May contain oils, fuels, batteries or brake fluid — handle as hazardous waste.\n" +
+                    "• PARTS: Batteries, tires and oil filters have dedicated recycling streams.\n" +
+                    "• FACILITY: Take to an automotive recycler or municipal hazardous-waste site.",
+                environmentalImpact = "Prevents motor oil, antifreeze and heavy metals from contaminating soil and water.",
+                recyclingBenefits = "Recovers steel, aluminum, rubber and reusable parts, cutting virgin manufacturing demand.",
+                sources = "EPA Automotive Waste; Automotive Recyclers Association"
+            )
+
+            // ── Fallback (should no longer trigger for the 30 known labels) ─────────
+            else -> getGeneralInfo("Follow local municipal guidelines for '$subclass'.")
         }
     }
 
+    /** Generic fallback used for unknown / uncertain items. */
     private fun getGeneralInfo(customGuide: String) = WasteInfo(
         disposalGuide = customGuide,
         environmentalImpact = "Correct identification is the first step in the Circular Economy.",

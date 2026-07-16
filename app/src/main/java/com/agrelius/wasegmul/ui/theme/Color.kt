@@ -2,19 +2,25 @@ package com.agrelius.wasegmul.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// --- DARK THEME (Default / Premium) ---
-val DarkBackground = Color(0xFF080A0C)
-val DeepCharcoal = Color(0xFF12151A)
-val SurfaceGray = Color(0xFF1C2128)
-val EmeraldVibrant = Color(0xFF2ECC71)
-val SageGreen = Color(0xFF829E6B)
-val TextPrimary = Color(0xFFE6EDF3)
+// --- MODERN GLASSY PALETTE ---
+val DarkBackground = Color(0xFF020408)
+val DeepCharcoal = Color(0xFF0D1117)
+val SurfaceGray = Color(0xFF161B22)
+val EmeraldVibrant = Color(0xFF00FF94) // More neon/futuristic
+val SageGreen = Color(0xFFA8C69F)
+val TextPrimary = Color(0xFFF0F6FC)
 val TextSecondary = Color(0xFF8B949E)
 
+// --- ACCENTS ---
+val NeonBlue = Color(0xFF58A6FF)
+val CyberPurple = Color(0xFFBC8CFF)
+val WarningAmber = Color(0xFFD29922)
+val ErrorRed = Color(0xFFF85149)
+
 // --- LIGHT THEME ---
-val LightBackground = Color(0xFFFFFFFF)
-val LightSurface = Color(0xFFF2F2F7)
-val LightText = Color(0xFF1C1C1E)
+val LightBackground = Color(0xFFF6F8FA)
+val LightSurface = Color(0xFFFFFFFF)
+val LightText = Color(0xFF1F2328)
 
 // --- COLOUR THEME (Nature) ---
 val OliveLight = Color(0xFFB5B35C)
@@ -24,18 +30,21 @@ val SkyBlueDeep = Color(0xFF0077B6)
 val EarthBrown = Color(0xFF8B4513)
 val MossSecondary = Color(0xFF4A5D23)
 
-// Environmental Olive Accents (Used in stat cards)
-val OliveDeep = Color(0xFF4A5D23)
-val MossEarthy = Color(0xFF354216)
-val ForestGreen = Color(0xFF27AE60)
+// Environmental Olive Accents
+val OliveDeep = Color(0xFF233721)
+val MossEarthy = Color(0xFF1B2B1A)
+val ForestGreen = Color(0xFF14452F)
 val OchreSand = Color(0xFFC0904D)
 
 // Status
 val HighConfidence = EmeraldVibrant
-val MediumConfidence = OchreSand
-val LowConfidence = Color(0xFFE74C3C)
+val MediumConfidence = WarningAmber
+val LowConfidence = ErrorRed
 
-val GlassBorder = Color(0x1AFFFFFF)
+// Glassmorphism
+val GlassBorder = Color(0x33FFFFFF)
+val GlassSurface = Color(0x1AFFFFFF)
+val GlassGlow = Color(0x0D00FF94)
 
 // Semantic consistency
 val MintAccent = SageGreen

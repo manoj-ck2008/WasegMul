@@ -20,7 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.agrelius.wasegmul.data.WasteRecord
+import com.agrelius.wasegmul.WasteRecord
 import com.agrelius.wasegmul.ui.home.RecentItem
 import com.agrelius.wasegmul.ui.home.toRelativeTime
 import com.agrelius.wasegmul.viewmodel.HomeViewModel
@@ -34,6 +34,7 @@ fun HistoryScreen(
 ) {
     val allHistory by viewModel.allHistory.collectAsState()
     var editingRecord by remember { mutableStateOf<WasteRecord?>(null) }
+    var showClearAllConfirm by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -47,7 +48,7 @@ fun HistoryScreen(
                 },
                 actions = {
                     if (allHistory.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.clearHistory() }) {
+                        IconButton(onClick = { showClearAllConfirm = true }) {
                             Icon(Icons.Default.DeleteSweep, contentDescription = "Clear All", tint = MaterialTheme.colorScheme.error)
                         }
                     }
@@ -77,16 +78,40 @@ fun HistoryScreen(
             }
 
             if (editingRecord != null) {
+                val recordToEdit = editingRecord!!
                 FeedbackDialog(
-                    record = editingRecord!!,
+                    record = recordToEdit,
                     onDismiss = { editingRecord = null },
                     onFeedbackSelected = { feedback, correction ->
-                        viewModel.updateFeedback(editingRecord!!.id, feedback)
+                        viewModel.updateFeedback(recordToEdit.id, feedback)
                         if (correction != null) {
-                            viewModel.updateCorrection(editingRecord!!.id, correction)
+                            viewModel.updateCorrection(recordToEdit.id, correction)
                         }
                         editingRecord = null
                     }
+                )
+            }
+
+            if (showClearAllConfirm) {
+                AlertDialog(
+                    onDismissRequest = { showClearAllConfirm = false },
+                    title = { Text("Clear All Records?") },
+                    text = { Text("This will permanently delete all classification history from this device. This action cannot be undone.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            viewModel.clearHistory()
+                            showClearAllConfirm = false
+                        }) {
+                            Text("Delete All", color = MaterialTheme.colorScheme.error)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showClearAllConfirm = false }) {
+                            Text("Cancel")
+                        }
+                    },
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(28.dp)
                 )
             }
         }

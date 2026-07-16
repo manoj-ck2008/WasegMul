@@ -7,66 +7,78 @@
 	objects = {
 
 /* BEGIN PBXBuildFile */
-		B4D976BA2C288D4D00D06941 /* iosApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4D976B92C288D4D00D06941 /* iosApp.swift */; };
-		B4D976BC2C288D4D00D06941 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4D976BB2C288D4D00D06941 /* ContentView.swift */; };
-		B4D976C02C288D4E00D06941 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B4D976BF2C288D4E00D06941 /* Assets.xcassets */; };
+		B4D9760C /* iosApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4D97606 /* iosApp.swift */; };
+		B4D9760D /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4D97607 /* ContentView.swift */; };
+		B4D9760E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B4D97608 /* Assets.xcassets */; };
+		B4D9760F /* shared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B4D9760A /* shared.framework */; };
 /* END PBXBuildFile */
 
 /* BEGIN PBXFileReference */
-		B4D976B62C288D4D00D06941 /* iosApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = iosApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		B4D976B92C288D4D00D06941 /* iosApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iosApp.swift; sourceTree = "<group>"; };
-		B4D976BB2C288D4D00D06941 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		B4D976BF2C288D4E00D06941 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B4D9761A /* iosApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = iosApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B4D97606 /* iosApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iosApp.swift; sourceTree = "<group>"; };
+		B4D97607 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		B4D97608 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B4D9760A /* shared.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = shared.framework; path = "../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)/shared.framework"; sourceTree = "<group>"; };
 /* END PBXFileReference */
 
 /* BEGIN PBXFrameworksBuildPhase */
-		B4D976B32C288D4D00D06941 /* Frameworks */ = {
+		B4D97611 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B4D9760F /* shared.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* END PBXFrameworksBuildPhase */
 
 /* BEGIN PBXGroup */
-		B4D976AD2C288D4D00D06941 = {
+		B4D97602 /* Main Group */ = {
 			isa = PBXGroup;
 			children = (
-				B4D976B82C288D4D00D06941 /* iosApp */,
-				B4D976B72C288D4D00D06941 /* Products */,
+				B4D97603 /* iosApp */,
+				B4D97604 /* Products */,
+				B4D97605 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
-		B4D976B72C288D4D00D06941 /* Products */ = {
+		B4D97604 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				B4D976B62C288D4D00D06941 /* iosApp.app */,
+				B4D9761A /* iosApp.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		B4D976B82C288D4D00D06941 /* iosApp */ = {
+		B4D97603 /* iosApp */ = {
 			isa = PBXGroup;
 			children = (
-				B4D976B92C288D4D00D06941 /* iosApp.swift */,
-				B4D976BB2C288D4D00D06941 /* ContentView.swift */,
-				B4D976BF2C288D4E00D06941 /* Assets.xcassets */,
+				B4D97606 /* iosApp.swift */,
+				B4D97607 /* ContentView.swift */,
+				B4D97608 /* Assets.xcassets */,
 			);
 			path = iosApp;
+			sourceTree = "<group>";
+		};
+		B4D97605 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				B4D9760A /* shared.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* END PBXGroup */
 
 /* BEGIN PBXNativeTarget */
-		B4D976B52C288D4D00D06941 /* iosApp */ = {
+		B4D9760B /* iosApp */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = B4D976C32C288D4E00D06941 /* Build configuration list for PBXNativeTarget "iosApp" */;
+			buildConfigurationList = B4D97615 /* Build configuration list for PBXNativeTarget "iosApp" */;
 			buildPhases = (
-				B4D976B22C288D4D00D06941 /* Sources */,
-				B4D976B32C288D4D00D06941 /* Frameworks */,
-				B4D976B42C288D4D00D06941 /* Resources */,
-				B4D976C62C288E3E00D06941 /* ShellScript */,
+				B4D97613 /* ShellScript */,
+				B4D97610 /* Sources */,
+				B4D97611 /* Frameworks */,
+				B4D97612 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -74,25 +86,25 @@
 			);
 			name = iosApp;
 			productName = iosApp;
-			productReference = B4D976B62C288D4D00D06941 /* iosApp.app */;
+			productReference = B4D9761A /* iosApp.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* END PBXNativeTarget */
 
 /* BEGIN PBXProject */
-		B4D976AE2C288D4D00D06941 /* Project object */ = {
+		B4D97601 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1540;
 				LastUpgradeCheck = 1540;
 				TargetAttributes = {
-					B4D976B52C288D4D00D06941 = {
+					B4D9760B = {
 						CreatedOnToolsVersion = 15.4;
 					};
 				};
 			};
-			buildConfigurationList = B4D976B12C288D4D00D06941 /* Build configuration list for PBXProject "iosApp" */;
+			buildConfigurationList = B4D97614 /* Build configuration list for PBXProject "iosApp" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -100,29 +112,29 @@
 				en,
 				Base,
 			);
-			mainGroup = B4D976AD2C288D4D00D06941;
-			productRefGroup = B4D976B72C288D4D00D06941 /* Products */;
+			mainGroup = B4D97602 /* Main Group */;
+			productRefGroup = B4D97604 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				B4D976B52C288D4D00D06941 /* iosApp */,
+				B4D9760B /* iosApp */,
 			);
 		};
 /* END PBXProject */
 
 /* BEGIN PBXResourcesBuildPhase */
-		B4D976B42C288D4D00D06941 /* Resources */ = {
+		B4D97612 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B4D976C02C288D4E00D06941 /* Assets.xcassets in Resources */,
+				B4D9760E /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* END PBXResourcesBuildPhase */
 
 /* BEGIN PBXShellScriptBuildPhase */
-		B4D976C62C288E3E00D06941 /* ShellScript */ = {
+		B4D97613 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -131,35 +143,37 @@
 			);
 			inputPaths = (
 			);
-			name = ShellScript;
+			name = "Compile Kotlin Shared Logic";
 			outputFileListPaths = (
 			);
 			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "cd \"$SRCROOT/..\"\n./gradlew :shared:embedAndSignAppleFrameworkForXcode\n";
+			shellScript = "set -e\n\n# --- Premium Java Detection ---\n# Ignore the legacy JavaAppletPlugin (Java 8)\nif [ -z \"$JAVA_HOME\" ] || [[ \"$JAVA_HOME\" == *\"JavaAppletPlugin\"* ]]; then\n    export JAVA_HOME=$(/usr/libexec/java_home -v 21 2>/dev/null || /usr/libexec/java_home -v 17 2>/dev/null || /usr/libexec/java_home 2>/dev/null || echo \"\")\nfi\n\nif [ -z \"$JAVA_HOME\" ] || [[ \"$JAVA_HOME\" == *\"JavaAppletPlugin\"* ]]; then\n    # Homebrew fallback\n    if [ -d \"/opt/homebrew/opt/openjdk\" ]; then\n        export JAVA_HOME=\"/opt/homebrew/opt/openjdk\"\n    elif [ -d \"/usr/local/opt/openjdk\" ]; then\n        export JAVA_HOME=\"/usr/local/opt/openjdk\"\n    fi\nfi\n\nif [ -z \"$JAVA_HOME\" ] || [[ \"$JAVA_HOME\" == *\"JavaAppletPlugin\"* ]]; then\n    echo \"ERROR: Full JDK 17+ not found! Your current Java (if any) is likely the legacy JavaAppletPlugin. Please install JDK 17+ (e.g., 'brew install openjdk@17') and try again.\"\n    exit 1\nfi\n\necho \"Using JAVA_HOME: $JAVA_HOME\"\n\n# --- Build Shared Logic ---\ncd \"$SRCROOT/..\"\n\n# Sanitize gradlew (fix line endings and permissions)\ntr -d '\\r' < gradlew > gradlew.tmp && mv gradlew.tmp gradlew\nchmod +x gradlew\n\n# Clear macOS security attributes\nxattr -d com.apple.quarantine gradlew 2>/dev/null || true\n\n# Explicit shell execution to bypass BAD INTERPRETER\nsh ./gradlew :shared:embedAndSignAppleFrameworkForXcode\n";
 		};
 /* END PBXShellScriptBuildPhase */
 
 /* BEGIN PBXSourcesBuildPhase */
-		B4D976B22C288D4D00D06941 /* Sources */ = {
+		B4D97610 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B4D976BC2C288D4D00D06941 /* ContentView.swift in Sources */,
-				B4D976BA2C288D4D00D06941 /* iosApp.swift in Sources */,
+				B4D9760D /* ContentView.swift in Sources */,
+				B4D9760C /* iosApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* END PBXSourcesBuildPhase */
 
 /* BEGIN XCBuildConfiguration */
-		B4D976C12C288D4E00D06941 /* Debug */ = {
+		B4D97616 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -188,11 +202,17 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
+				);
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -207,21 +227,36 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = WasegMul;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.agrelius.wasegmul.iosApp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
-		B4D976C22C288D4E00D06941 /* Release */ = {
+		B4D97617 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -250,11 +285,17 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
+				);
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -263,92 +304,51 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = WasegMul;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.agrelius.wasegmul.iosApp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;
-			};
-			name = Release;
-		};
-		B4D976C42C288D4E00D06941 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
-				ENABLE_PREVIEWS = YES;
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
-				);
-				INFOPLIST_KEY_CFBundleDisplayName = WasegMul;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.agrelius.wasegmul.iosApp;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		B4D976C52C288D4E00D06941 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
-				ENABLE_PREVIEWS = YES;
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
-				);
-				INFOPLIST_KEY_CFBundleDisplayName = WasegMul;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.agrelius.wasegmul.iosApp;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
 /* END XCBuildConfiguration */
 
 /* BEGIN XCConfigurationList */
-		B4D976B12C288D4D00D06941 /* Build configuration list for PBXProject "iosApp" */ = {
+		B4D97614 /* Build configuration list for PBXProject "iosApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				B4D976C12C288D4E00D06941 /* Debug */,
-				B4D976C22C288D4E00D06941 /* Release */,
+				B4D97616 /* Debug */,
+				B4D97617 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		B4D976C32C288D4E00D06941 /* Build configuration list for PBXTarget "iosApp" */ = {
+		B4D97615 /* Build configuration list for PBXTarget "iosApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				B4D976C42C288D4E00D06941 /* Debug */,
-				B4D976C52C288D4E00D06941 /* Release */,
+				B4D97616 /* Debug */,
+				B4D97617 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* END XCConfigurationList */
 	};
-	rootObject = B4D976AE2C288D4D00D06941 /* Project object */;
+	rootObject = B4D97601 /* Project object */;
 }

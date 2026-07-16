@@ -9,7 +9,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.agrelius.wasegmul.WasegMulApp
 import com.agrelius.wasegmul.ui.classify.ClassificationViewModel
 import com.agrelius.wasegmul.ui.classify.ClassifyScreen
 import com.agrelius.wasegmul.ui.history.HistoryScreen
@@ -23,13 +22,13 @@ import com.agrelius.wasegmul.viewmodel.HomeViewModel
 fun AppNavigation() {
     val navController = rememberNavController()
     val context = LocalContext.current
-    val app = context.applicationContext as WasegMulApp
+    val app = context.applicationContext as? com.agrelius.wasegmul.WasegMulApp
+        ?: return
     val repository = app.repository
-    val soundManager = app.soundManager
     val settingsManager = app.settingsManager
 
     val classificationViewModel: ClassificationViewModel = viewModel(
-        factory = ClassificationViewModel.Factory(repository, settingsManager)
+        factory = ClassificationViewModel.Factory(repository)
     )
     val homeViewModel: HomeViewModel = viewModel(
         factory = HomeViewModel.Factory(repository)
@@ -55,15 +54,15 @@ fun AppNavigation() {
                     navController.navigate(Screen.Classify.route)
                 },
                 onNavigateToHistory = {
-                    navController.navigate("history")
+                    navController.navigate(Screen.History.route)
                 },
                 onNavigateToSettings = {
-                    navController.navigate("settings")
+                    navController.navigate(Screen.Settings.route)
                 }
             )
         }
 
-        composable("settings") {
+        composable(Screen.Settings.route) {
             SettingsScreen(
                 homeViewModel = homeViewModel,
                 onBack = { navController.popBackStack() }
@@ -106,7 +105,7 @@ fun AppNavigation() {
             )
         }
 
-        composable("history") {
+        composable(Screen.History.route) {
             HistoryScreen(
                 viewModel = homeViewModel,
                 onBack = { navController.popBackStack() },

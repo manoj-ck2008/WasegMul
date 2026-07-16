@@ -1,6 +1,20 @@
 package com.agrelius.wasegmul
 
+/**
+ * Static mapping from each subclass label (as emitted by the TFLite subclass model) to
+ * its canonical category, an estimated per-unit weight (kg), and whether it is hazardous.
+ *
+ * Weights are conservative single-unit estimates used only for the aggregate "impact"
+ * dashboard; they are not intended to be precise for billing or compliance.
+ */
 object WasteMapping {
+
+    /** Category returned when a subclass label has no mapping entry. */
+    const val UNKNOWN = "Unknown"
+
+    /** Category used when confidence is too low to trust either model. */
+    const val UNCERTAIN = "Uncertain"
+
     data class MaterialMetaData(
         val category: String,
         val weightKg: Double,
@@ -40,11 +54,12 @@ object WasteMapping {
         "styrofoam_food_containers" to MaterialMetaData("Trash", 0.010)
     )
 
-    fun getCategory(subclass: String): String {
-        return MAPPING[subclass]?.category ?: "Unknown"
-    }
+    /** Returns the canonical category for [subclass], or [UNKNOWN] if it is not mapped. */
+    fun getCategory(subclass: String): String = MAPPING[subclass]?.category ?: UNKNOWN
 
-    fun getWeight(subclass: String): Double {
-        return MAPPING[subclass]?.weightKg ?: 0.05
-    }
+    /** Returns the estimated weight (kg) for [subclass], defaulting to 0.05 kg when unmapped. */
+    fun getWeight(subclass: String): Double = MAPPING[subclass]?.weightKg ?: 0.05
+
+    /** True when the subclass is marked hazardous (batteries, bulbs, auto waste, ...). */
+    fun isHazardous(subclass: String): Boolean = MAPPING[subclass]?.isHazardous ?: false
 }

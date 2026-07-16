@@ -17,17 +17,14 @@ import com.agrelius.wasegmul.WasteMapping
 import com.agrelius.wasegmul.WasteRecord
 import com.agrelius.wasegmul.ml.ModelManager
 import com.agrelius.wasegmul.repository.WasteRepository
-import com.agrelius.wasegmul.utils.SettingsManager
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
-import java.io.File
-import java.io.FileOutputStream
 
 class ClassificationViewModel(
-    private val repository: WasteRepository,
-    private val settingsManager: SettingsManager
+    private val repository: WasteRepository
 ) : ViewModel() {
 
     private var modelManager: ModelManager? = null
@@ -47,6 +44,9 @@ class ClassificationViewModel(
     private val _currentRecord = MutableStateFlow<WasteRecord?>(null)
     val currentRecord: StateFlow<WasteRecord?> = _currentRecord
 
+    private val _navigateToResult = Channel<Unit>(Channel.CONFLATED)
+    val navigateToResult = _navigateToResult.receiveAsFlow()
+
     fun initModel(context: Context) {
         if (modelManager == null) {
             modelManager = ModelManager(context.applicationContext)
@@ -61,7 +61,7 @@ class ClassificationViewModel(
         _currentRecord.value = null
     }
 
-    fun classify(context: Context) {
+    fun classify() {
         val bitmap = _capturedBitmap.value ?: return
         viewModelScope.launch {
             _isLoading.value = true
@@ -92,19 +92,15 @@ class ClassificationViewModel(
                             disposalGuide = info.disposalGuide,
                             environmentalImpact = info.environmentalImpact,
                             recyclingBenefits = info.recyclingBenefits,
-                            sources = info.sources
+                            sources = info.sources,
+                            classificationMessage = finalPrediction.classificationMessage
                         )
 
                         _classificationResult.value = result
+                        _navigateToResult.trySend(Unit)
 
                         val estimatedWeight = if (isUncertain) 0.0
                         else WasteMapping.getWeight(result.subclass)
-
-                        var savedPath: String? = null
-                        val isSharingEnabled = settingsManager.isImageSharingEnabled.first()
-                        if (isSharingEnabled) {
-                            savedPath = saveImageLocally(context, bitmap)
-                        }
 
                         val record = WasteRecord(
                             category = result.category,
@@ -112,7 +108,6 @@ class ClassificationViewModel(
                             confidence = result.confidence,
                             estimatedWeight = estimatedWeight,
                             featureVector = null,
-                            imagePath = savedPath,
                             topPredictions = PredictionCodec.encode(result.topPredictions)
                         )
                         val id = repository.insert(record)
@@ -151,16 +146,6 @@ class ClassificationViewModel(
         _error.value = null
     }
 
-    private fun saveImageLocally(context: Context, bitmap: Bitmap): String {
-        val dir = File(context.filesDir, "training_data")
-        if (!dir.exists()) dir.mkdirs()
-        val file = File(dir, "waste_${System.currentTimeMillis()}.jpg")
-        FileOutputStream(file).use { out ->
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
-        }
-        return file.absolutePath
-    }
-
     fun setFeedback(feedback: String) {
         val recordId = _currentRecord.value?.id ?: return
         viewModelScope.launch {
@@ -189,7 +174,8 @@ class ClassificationViewModel(
                 disposalGuide = info.disposalGuide,
                 environmentalImpact = info.environmentalImpact,
                 recyclingBenefits = info.recyclingBenefits,
-                sources = info.sources
+                sources = info.sources,
+                classificationMessage = "Historical record — originally classified as ${record.subclass} (${record.category})."
             )
             _currentRecord.value = record
         }
@@ -202,13 +188,12 @@ class ClassificationViewModel(
     }
 
     class Factory(
-        private val repository: WasteRepository,
-        private val settingsManager: SettingsManager
+        private val repository: WasteRepository
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(ClassificationViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return ClassificationViewModel(repository, settingsManager) as T
+                return ClassificationViewModel(repository) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

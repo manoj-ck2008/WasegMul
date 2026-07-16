@@ -10,14 +10,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.agrelius.wasegmul.WasegMulApp
 import com.agrelius.wasegmul.BuildConfig
-import androidx.compose.ui.platform.LocalContext
-import com.agrelius.wasegmul.ui.theme.AppThemeMode
+import kotlinx.coroutines.launch
 import com.agrelius.wasegmul.viewmodel.HomeViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -27,18 +27,20 @@ fun SettingsScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val app = context.applicationContext as WasegMulApp
+    val app = context.applicationContext as? com.agrelius.wasegmul.WasegMulApp
+        ?: return
     val settingsViewModel: SettingsViewModel = viewModel(
-        factory = SettingsViewModel.Factory(app.settingsManager, app.soundManager)
+        factory = SettingsViewModel.Factory(app.settingsManager)
     )
-    
-    val volume by settingsViewModel.volume.collectAsState()
+
     val themeMode by settingsViewModel.themeMode.collectAsState()
-    val isImageSharingEnabled by settingsViewModel.isImageSharingEnabled.collectAsState()
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("Neural Configuration", style = MaterialTheme.typography.titleMedium) },
@@ -59,60 +61,6 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             Text(
-                "SYSTEM PARAMETERS",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Master Volume (Music & UI)", style = MaterialTheme.typography.bodyMedium)
-                    Slider(
-                        value = volume,
-                        onValueChange = { settingsViewModel.setVolume(it) },
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-            Text(
-                "PRIVACY & RESEARCH",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Anonymous Data Sharing", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            "Securely share misclassified images to improve future AI accuracy.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = isImageSharingEnabled,
-                        onCheckedChange = { settingsViewModel.setImageSharing(it) }
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-            Text(
                 "INTERFACE PREFERENCE",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
@@ -126,7 +74,7 @@ fun SettingsScreen(
                 Column(modifier = Modifier.padding(16.dp)) {
                     listOf("DARK", "LIGHT", "COLOUR").forEach { mode ->
                         Row(
-                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { settingsViewModel.setThemeMode(mode) }
@@ -171,7 +119,7 @@ fun SettingsScreen(
                 onClick = { showDeleteConfirm = true },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.1f), 
+                    containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.1f),
                     contentColor = MaterialTheme.colorScheme.error
                 ),
                 shape = RoundedCornerShape(16.dp)
@@ -201,6 +149,9 @@ fun SettingsScreen(
                     TextButton(onClick = {
                         homeViewModel.clearHistory()
                         showDeleteConfirm = false
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Neural history purged")
+                        }
                     }) {
                         Text("Execute Purge", color = MaterialTheme.colorScheme.error)
                     }
