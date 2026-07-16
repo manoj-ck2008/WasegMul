@@ -171,9 +171,9 @@ fun HistoryCard(
 @Composable
 fun FeedbackBadge(feedback: String?) {
     val (color, icon) = when(feedback) {
-        "correct" -> Color(0xFF2ECC71) to Icons.Default.CheckCircle
-        "incorrect" -> Color(0xFFE74C3C) to Icons.Default.Cancel
-        else -> Color.Gray.copy(alpha = 0.5f) to Icons.Default.QuestionMark
+        "correct" -> MaterialTheme.colorScheme.primary to Icons.Default.CheckCircle
+        "incorrect" -> MaterialTheme.colorScheme.error to Icons.Default.Cancel
+        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) to Icons.Default.QuestionMark
     }
     
     Icon(
@@ -218,7 +218,7 @@ fun FeedbackDialog(
         confirmButton = {
             if (!showCorrection) {
                 TextButton(onClick = { onFeedbackSelected("correct", null) }) {
-                    Text("Correct", color = Color(0xFF2ECC71))
+                    Text("Correct", color = MaterialTheme.colorScheme.primary)
                 }
             }
         },
@@ -226,7 +226,7 @@ fun FeedbackDialog(
             if (!showCorrection) {
                 Row {
                     TextButton(onClick = { showCorrection = true }) {
-                        Text("Incorrect", color = Color(0xFFE74C3C))
+                        Text("Incorrect", color = MaterialTheme.colorScheme.error)
                     }
                     TextButton(onClick = onDismiss) {
                         Text("Cancel")

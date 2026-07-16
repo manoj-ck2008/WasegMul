@@ -32,10 +32,17 @@ val OchreSand = Color(0xFFC0904D)
 
 // Status
 val LowConfidence = Color(0xFFF85149)
+val HighConfidenceGreen = Color(0xFF2ECC71)
+val MediumConfidenceYellow = Color(0xFFF1C40F)
+val ErrorRed = Color(0xFFE74C3C)
 
 // Glassmorphism
-val GlassBorder = Color(0x33FFFFFF)
-val GlassSurface = Color(0x1AFFFFFF)
+val DarkGlassBorder = Color(0x33FFFFFF)
+val DarkGlassSurface = Color(0x1AFFFFFF)
+val LightGlassBorder = Color(0x33000000)
+val LightGlassSurface = Color(0x1A000000)
 
-// Semantic consistency
+// Semantic aliases
+val GlassBorder = DarkGlassBorder
+val GlassSurface = DarkGlassSurface
 val MintAccent = SageGreen

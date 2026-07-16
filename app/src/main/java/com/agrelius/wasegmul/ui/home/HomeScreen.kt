@@ -33,7 +33,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import com.agrelius.wasegmul.BuildConfig
+import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.WasteRecord
 import com.agrelius.wasegmul.ui.components.*
 import com.agrelius.wasegmul.ui.theme.*
@@ -109,7 +111,7 @@ fun HomeScreen(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        listOf(DarkBackground, DeepCharcoal)
+                        listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surface)
                     )
                 )
                 .padding(innerPadding)
@@ -131,7 +133,7 @@ fun HomeScreen(
                         },
                         modifier = Modifier.align(Alignment.TopEnd)
                     ) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = TextSecondary)
+                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
 
@@ -147,13 +149,13 @@ fun HomeScreen(
                         Text(
                             text = "WasegMul",
                             style = MaterialTheme.typography.displaySmall,
-                            color = TextPrimary,
+                            color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Black
                         )
                         Text(
-                            text = "Waste Segregation Multi-model AI",
+                            text = stringResource(R.string.home_subtitle),
                             style = MaterialTheme.typography.labelSmall,
-                            color = EmeraldVibrant,
+                            color = MaterialTheme.colorScheme.primary,
                             letterSpacing = 2.sp,
                             textAlign = TextAlign.Center
                         )
@@ -172,10 +174,10 @@ fun HomeScreen(
                         Column(modifier = Modifier.clickable {
                             showImpactDetail = true
                         }) {
-                            Icon(Icons.Default.Public, contentDescription = null, tint = EmeraldVibrant, modifier = Modifier.size(24.dp))
+                            Icon(Icons.Default.Public, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
                             Spacer(modifier = Modifier.height(12.dp))
-                            Text(text = "${totalImpact.format(3)}kg", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = TextPrimary)
-                            Text(text = "CARBON OFFSET", style = MaterialTheme.typography.labelSmall, color = SageGreen, letterSpacing = 1.sp)
+                            Text(text = "${totalImpact.format(3)}kg", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+                            Text(text = stringResource(R.string.home_carbon_offset), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary, letterSpacing = 1.sp)
                         }
                     }
                     GlassCard(
@@ -184,10 +186,10 @@ fun HomeScreen(
                         Column(modifier = Modifier.clickable {
                             onNavigateToHistory()
                         }) {
-                            Icon(Icons.Default.Dataset, contentDescription = null, tint = EmeraldVibrant, modifier = Modifier.size(24.dp))
+                            Icon(Icons.Default.Dataset, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
                             Spacer(modifier = Modifier.height(12.dp))
-                            Text(text = recentHistory.size.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = TextPrimary)
-                            Text(text = "NEURAL SCANS", style = MaterialTheme.typography.labelSmall, color = SageGreen, letterSpacing = 1.sp)
+                            Text(text = recentHistory.size.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+                            Text(text = stringResource(R.string.home_neural_scans), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary, letterSpacing = 1.sp)
                         }
                     }
                 }
@@ -208,27 +210,27 @@ fun HomeScreen(
                                 modifier = Modifier
                                     .size(48.dp)
                                     .clip(CircleShape)
-                                    .background(EmeraldVibrant.copy(alpha = 0.1f)),
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Default.Visibility, contentDescription = null, tint = EmeraldVibrant)
+                                Icon(Icons.Default.Visibility, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             Column {
                                 Text(
-                                    "Real-time YOLO Detect",
+                                    stringResource(R.string.home_yolo_title),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    "Launch live multi-object tracking",
+                                    stringResource(R.string.home_yolo_subtitle),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = TextSecondary
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Spacer(modifier = Modifier.weight(1f))
-                            Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(16.dp))
+                            Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
                         }
                     }
                 }
@@ -237,9 +239,9 @@ fun HomeScreen(
 
                 HeroCard {
                     Text(
-                        text = "Industrial material analysis powered by EfficientNet architecture. Identify material signatures with precise chemical confidence.",
+                        text = stringResource(R.string.home_description),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 22.sp,
                         textAlign = TextAlign.Center
                     )
@@ -248,12 +250,12 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.height(40.dp))
 
                 GradientActionButton(
-                    text = "Launch Scanner",
+                    text = stringResource(R.string.home_launch_scanner),
                     icon = Icons.Default.CameraAlt,
                     onClick = {
                         permissionLauncher.launch(android.Manifest.permission.CAMERA)
                     },
-                    containerColor = ForestGreen
+                    containerColor = MaterialTheme.colorScheme.tertiary
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -266,15 +268,15 @@ fun HomeScreen(
                         .shadow(12.dp, RoundedCornerShape(16.dp)),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = SurfaceGray.copy(alpha = 0.9f),
-                        contentColor = TextPrimary
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                        contentColor = MaterialTheme.colorScheme.onSurface
                     ),
-                    border = BorderStroke(1.dp, GlassBorder)
+                    border = BorderStroke(1.dp, LocalGlassColors.current.border)
                 ) {
-                    Icon(Icons.Default.Collections, contentDescription = null, tint = SageGreen)
+                    Icon(Icons.Default.Collections, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "Import from Device",
+                        text = stringResource(R.string.home_import_device),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -288,9 +290,9 @@ fun HomeScreen(
                         horizontalAlignment = Alignment.Start
                     ) {
                         Text(
-                            text = "LATEST ACTIVITY",
+                            text = stringResource(R.string.home_latest_activity),
                             style = MaterialTheme.typography.labelSmall,
-                            color = EmeraldVibrant.copy(alpha = 0.7f),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
                             modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
                         )
                         recentHistory.take(3).forEach { record ->
@@ -307,9 +309,9 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.height(64.dp))
 
                 Text(
-                    text = "V ${BuildConfig.VERSION_NAME} \u2022 agrelius industrial AI",
+                    text = stringResource(R.string.app_version_info, BuildConfig.VERSION_NAME),
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextSecondary.copy(alpha = 0.4f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(32.dp))
@@ -329,11 +331,11 @@ fun HomeScreen(
 fun ImpactDetailDialog(onDismiss: () -> Unit, history: List<WasteRecord>) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Impact Analysis", color = EmeraldVibrant) },
+        title = { Text(stringResource(R.string.home_impact_title), color = MaterialTheme.colorScheme.primary) },
         text = {
             Column {
                 Text(
-                    "Weight-indexed material recovery data. Each gram represents direct landfill diversion.",
+                    stringResource(R.string.home_impact_description),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(modifier = Modifier.height(20.dp))
@@ -345,29 +347,29 @@ fun ImpactDetailDialog(onDismiss: () -> Unit, history: List<WasteRecord>) {
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(cat, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = SageGreen)
-                        Text("${weight.format(3)} kg", style = MaterialTheme.typography.bodySmall, color = TextPrimary)
+                        Text(cat, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                        Text("${weight.format(3)} kg", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
 
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 12.dp),
-                    color = GlassBorder
+                    color = LocalGlassColors.current.border
                 )
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("Cumulative Recovery", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Black)
-                    Text("${history.sumOf { it.estimatedWeight }.format(3)} kg", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Black, color = EmeraldVibrant)
+                    Text(stringResource(R.string.home_cumulative_recovery), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Black)
+                    Text("${history.sumOf { it.estimatedWeight }.format(3)} kg", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("ACKNOWLEDGE", color = ForestGreen) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_acknowledge), color = MaterialTheme.colorScheme.tertiary) }
         },
-        containerColor = DeepCharcoal,
+        containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(28.dp)
     )
 }
@@ -392,23 +394,23 @@ fun RecentItem(name: String, time: String, type: String, feedback: String?) {
             .fillMaxWidth()
             .padding(vertical = 6.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(DeepCharcoal.copy(alpha = 0.4f))
-            .border(1.dp, GlassBorder, RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.4f))
+            .border(1.dp, LocalGlassColors.current.border, RoundedCornerShape(16.dp))
             .padding(14.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column {
-            Text(text = name, style = MaterialTheme.typography.titleSmall, color = TextPrimary, fontWeight = FontWeight.SemiBold)
+            Text(text = name, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = time, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                Text(text = time, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (feedback != null) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Icon(
                         imageVector = if (feedback == "correct") Icons.Default.CheckCircle else Icons.Default.Cancel,
                         contentDescription = null,
                         modifier = Modifier.size(12.dp),
-                        tint = if (feedback == "correct") EmeraldVibrant else LowConfidence
+                        tint = if (feedback == "correct") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                     )
                 }
             }
@@ -416,18 +418,20 @@ fun RecentItem(name: String, time: String, type: String, feedback: String?) {
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
-                .background(EmeraldVibrant.copy(alpha = 0.1f))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
                 .padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
-            Text(text = type, style = MaterialTheme.typography.labelSmall, color = EmeraldVibrant, fontWeight = FontWeight.Bold)
+            Text(text = type, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
         }
     }
 }
 
 @Composable
 fun BackgroundGlows() {
-    val topGlow = remember { Brush.radialGradient(colors = listOf(ForestGreen.copy(alpha = 0.08f), Color.Transparent)) }
-    val bottomGlow = remember { Brush.radialGradient(colors = listOf(OchreSand.copy(alpha = 0.05f), Color.Transparent)) }
+    val tertiaryColor = MaterialTheme.colorScheme.tertiary
+    val secondaryColor = MaterialTheme.colorScheme.secondary
+    val topGlow = remember(tertiaryColor) { Brush.radialGradient(colors = listOf(tertiaryColor.copy(alpha = 0.08f), Color.Transparent)) }
+    val bottomGlow = remember(secondaryColor) { Brush.radialGradient(colors = listOf(secondaryColor.copy(alpha = 0.05f), Color.Transparent)) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(

@@ -65,7 +65,7 @@ fun AppLogo(
         label = "glow_pulse"
     )
 
-    var leafPathCache by remember { mutableStateOf<Path?>(null) }
+    val leafPathCache = remember { Path() }
 
     Box(
         modifier = Modifier.size(size),
@@ -132,7 +132,7 @@ fun AppLogo(
             val w = sizePx * 0.65f
             val h = sizePx * 0.65f
 
-            val leafPath = leafPathCache ?: Path().also { leafPathCache = it }
+            val leafPath = leafPathCache
             leafPath.reset()
             leafPath.apply {
                 moveTo(w * 0.5f, 0f)

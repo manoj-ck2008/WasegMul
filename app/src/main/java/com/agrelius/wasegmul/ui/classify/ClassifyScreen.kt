@@ -27,6 +27,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.ui.components.GradientActionButton
 import com.agrelius.wasegmul.ui.components.OrganicBackground
 import com.agrelius.wasegmul.ui.theme.*
@@ -58,14 +60,14 @@ fun ClassifyScreen(
     }
 
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             CenterAlignedTopAppBar(
                 title = { 
                     Text(
-                        "SCAN INTERFACE",
+                        stringResource(R.string.classify_title),
                         style = MaterialTheme.typography.labelSmall,
-                        color = EmeraldVibrant,
+                        color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp
                     ) 
@@ -74,8 +76,8 @@ fun ClassifyScreen(
                     IconButton(onClick = onBack, enabled = !isLoading) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack, 
-                            contentDescription = "Back",
-                            tint = if (isLoading) TextSecondary.copy(alpha = 0.3f) else TextPrimary
+                            contentDescription = stringResource(R.string.common_back),
+                            tint = if (isLoading) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f) else MaterialTheme.colorScheme.onSurface
                         )
                     }
                 },
@@ -100,10 +102,10 @@ fun ClassifyScreen(
                         .weight(1f)
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(32.dp))
-                        .background(DeepCharcoal.copy(alpha = 0.5f))
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f))
                         .border(
                             width = 1.dp,
-                            color = ForestGreen.copy(alpha = 0.2f),
+                            color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f),
                             shape = RoundedCornerShape(32.dp)
                         ),
                     contentAlignment = Alignment.Center
@@ -122,13 +124,13 @@ fun ClassifyScreen(
                                 imageVector = Icons.Default.AutoAwesome,
                                 contentDescription = null,
                                 modifier = Modifier.size(48.dp),
-                                tint = EmeraldVibrant.copy(alpha = 0.3f)
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                "Awaiting Visual Input",
+                                stringResource(R.string.classify_awaiting),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = TextSecondary
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -144,7 +146,7 @@ fun ClassifyScreen(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 modifier = Modifier.padding(24.dp)
                             ) {
-                                CircularProgressIndicator(color = EmeraldVibrant)
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                                 Spacer(modifier = Modifier.height(24.dp))
                                 Text(
                                     text = loadingThought,
@@ -188,13 +190,13 @@ fun ClassifyScreen(
                 Spacer(modifier = Modifier.height(40.dp))
 
                 GradientActionButton(
-                    text = if (isLoading) "Processing..." else "Launch Scanner",
+                    text = if (isLoading) stringResource(R.string.common_processing) else stringResource(R.string.home_launch_scanner),
                     icon = Icons.Default.AutoAwesome,
                     onClick = {
                         viewModel.classify()
                     },
                     modifier = Modifier.alpha(if (isLoading) 0.7f else 1f),
-                    containerColor = ForestGreen
+                    containerColor = MaterialTheme.colorScheme.tertiary
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -204,12 +206,12 @@ fun ClassifyScreen(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isLoading
                 ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null, tint = SageGreen)
+                    Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        "Retake Image",
+                        stringResource(R.string.classify_retake),
                         style = MaterialTheme.typography.labelLarge,
-                        color = SageGreen
+                        color = MaterialTheme.colorScheme.secondary
                     )
                 }
             }
@@ -230,7 +232,8 @@ fun ScanningOverlay() {
         label = "y"
     )
 
-    val scanLineBrush = remember { Brush.horizontalGradient(colors = listOf(Color.Transparent, EmeraldVibrant, Color.Transparent)) }
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val scanLineBrush = remember(primaryColor) { Brush.horizontalGradient(colors = listOf(Color.Transparent, primaryColor, Color.Transparent)) }
 
     Canvas(modifier = Modifier.fillMaxSize()) {
         val y = size.height * scanY
@@ -243,7 +246,7 @@ fun ScanningOverlay() {
 
         drawRect(
             brush = Brush.verticalGradient(
-                0f to EmeraldVibrant.copy(alpha = 0.1f),
+                0f to primaryColor.copy(alpha = 0.1f),
                 scanY to Color.Transparent,
                 startY = y - 100f,
                 endY = y

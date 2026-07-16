@@ -28,8 +28,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.ml.Detection
 import com.agrelius.wasegmul.ml.YoloDetector
 import com.agrelius.wasegmul.ml.ModelInitException
@@ -144,28 +146,28 @@ fun YoloScreen(
     }
 
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
                     Text(
-                        "YOLO LIVE DETECT",
+                        stringResource(R.string.yolo_title),
                         style = MaterialTheme.typography.labelSmall,
-                        color = EmeraldVibrant,
+                        color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack,                         contentDescription = stringResource(R.string.common_back), tint = MaterialTheme.colorScheme.onSurface)
                     }
                 },
                 actions = {
                     Text(
-                        text = "%.1f FPS".format(fps),
+                        text = stringResource(R.string.yolo_fps_format, fps),
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (fps > 15f) EmeraldVibrant else LowConfidence,
+                        color = if (fps > 15f) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                         modifier = Modifier.padding(end = 16.dp)
                     )
                 },
@@ -180,10 +182,10 @@ fun YoloScreen(
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("Camera permission required for live detection", color = TextSecondary)
+                    Text(stringResource(R.string.yolo_camera_permission), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
-                        Text("Grant Permission")
+                        Text(stringResource(R.string.common_grant_permission))
                     }
                 }
             } else if (error != null) {
@@ -192,15 +194,15 @@ fun YoloScreen(
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(64.dp), tint = LowConfidence)
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.error)
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(error.orEmpty(), color = TextSecondary, modifier = Modifier.padding(horizontal = 32.dp))
+                    Text(error.orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 32.dp))
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(onClick = {
                         yoloViewModel.clearError()
                         scope.launch { yoloViewModel.initDetector(context) }
                     }) {
-                        Text("Retry")
+                        Text(stringResource(R.string.common_retry))
                     }
                 }
             } else {
@@ -223,14 +225,14 @@ fun YoloScreen(
                         modifier = Modifier
                             .align(Alignment.BottomStart)
                             .padding(16.dp)
-                            .background(DeepCharcoal.copy(alpha = 0.85f), RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), RoundedCornerShape(12.dp))
                             .padding(12.dp)
                     ) {
                         Column {
                             Text(
                                 "DETECTED: ${detections.size} object${if (detections.size > 1) "s" else ""}",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = EmeraldVibrant,
+                                color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(4.dp))
@@ -238,12 +240,12 @@ fun YoloScreen(
                                 Text(
                                     "${det.label} ${(det.confidence * 100).toInt()}%",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = TextPrimary,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     fontSize = 10.sp
                                 )
                             }
                             if (detections.size > 5) {
-                                Text("+${detections.size - 5} more", style = MaterialTheme.typography.labelSmall, color = TextSecondary, fontSize = 10.sp)
+                                Text("+${detections.size - 5} more", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
                             }
                         }
                     }
@@ -346,6 +348,11 @@ private fun DetectionOverlay(
         }
     }
 
+    val overlayColors = listOf(
+        MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary, MintAccent, MaterialTheme.colorScheme.tertiary,
+        Color(0xFFE74C3C), Color(0xFF3498DB), Color(0xFFF39C12), Color(0xFF9B59B6)
+    )
+
     Canvas(modifier = modifier) {
         detections.forEach { detection ->
             val box = detection.boundingBox
@@ -354,7 +361,7 @@ private fun DetectionOverlay(
             val w = (box.right - box.left) * size.width
             val h = (box.bottom - box.top) * size.height
 
-            val color = colorForClass(detection.classIndex)
+            val color = overlayColors[detection.classIndex % overlayColors.size]
 
             drawRect(
                 color = color,
@@ -374,12 +381,4 @@ private fun DetectionOverlay(
             }
         }
     }
-}
-
-private fun colorForClass(classIndex: Int): Color {
-    val colors = listOf(
-        EmeraldVibrant, SageGreen, MintAccent, ForestGreen,
-        Color(0xFFE74C3C), Color(0xFF3498DB), Color(0xFFF39C12), Color(0xFF9B59B6)
-    )
-    return colors[classIndex % colors.size]
 }

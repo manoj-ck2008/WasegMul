@@ -29,6 +29,8 @@ private val leafPositions = listOf(
 
 private val leafScales = listOf(1.2f, 0.8f, 1.5f, 0.6f, 1.0f, 1.3f, 0.7f, 1.1f, 0.9f, 1.4f, 0.5f, 1.6f)
 
+private val leafColors = listOf(ForestGreen, OliveDeep, MossEarthy, SageGreen)
+
 @Composable
 fun OrganicBackground() {
     val infiniteTransition = rememberInfiniteTransition(label = "organic")
@@ -46,8 +48,6 @@ fun OrganicBackground() {
     val leafPath = remember { Path() }
 
     Canvas(modifier = Modifier.fillMaxSize()) {
-        val leafColors = listOf(ForestGreen, OliveDeep, MossEarthy, SageGreen)
-
         repeat(12) { i ->
             val (fx, fy) = leafPositions[i]
             val x = fx * size.width

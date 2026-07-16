@@ -9,10 +9,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.agrelius.wasegmul.R
 
 @Composable
 fun ConfidenceBadge(
@@ -20,9 +21,9 @@ fun ConfidenceBadge(
     modifier: Modifier = Modifier
 ) {
     val (color, label) = when {
-        confidence >= 0.90f -> Color(0xFF2ECC71) to "High"
-        confidence >= 0.70f -> Color(0xFFF1C40F) to "Medium"
-        else -> Color(0xFFE74C3C) to "Low"
+        confidence >= 0.90f -> MaterialTheme.colorScheme.primary to stringResource(R.string.confidence_high)
+        confidence >= 0.70f -> MaterialTheme.colorScheme.tertiary to stringResource(R.string.confidence_medium)
+        else -> MaterialTheme.colorScheme.error to stringResource(R.string.confidence_low)
     }
 
     Box(
@@ -32,7 +33,7 @@ fun ConfidenceBadge(
             .padding(horizontal = 12.dp, vertical = 4.dp)
     ) {
         Text(
-            text = "$label (${(confidence * 100).toInt()}%)",
+            text = stringResource(R.string.confidence_format, label, (confidence * 100).toInt()),
             color = color,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,

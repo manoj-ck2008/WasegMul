@@ -212,7 +212,7 @@ fun ResultScreen(
                                             Text(
                                                 text = "Storage: ${if (record?.imagePath != null) "Image saved for review" else "Metadata only"}",
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = TextSecondary
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
                                     }

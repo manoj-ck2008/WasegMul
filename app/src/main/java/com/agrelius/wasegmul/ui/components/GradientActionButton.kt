@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,12 +27,22 @@ fun GradientActionButton(
     containerColor: Color = MaterialTheme.colorScheme.primary
 ) {
     val haptic = LocalHapticFeedback.current
-    val gradient = Brush.horizontalGradient(
-        colors = listOf(
-            containerColor,
-            containerColor.copy(alpha = 0.8f)
+    val gradient = remember(containerColor) {
+        Brush.horizontalGradient(
+            colors = listOf(
+                containerColor,
+                containerColor.copy(alpha = 0.8f)
+            )
         )
-    )
+    }
+    val disabledGradient = remember(containerColor) {
+        Brush.horizontalGradient(
+            colors = listOf(
+                containerColor.copy(alpha = 0.38f),
+                containerColor.copy(alpha = 0.2f)
+            )
+        )
+    }
 
     Button(
         onClick = {
@@ -55,12 +66,7 @@ fun GradientActionButton(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
-                    brush = if (enabled) gradient else Brush.horizontalGradient(
-                        colors = listOf(
-                            containerColor.copy(alpha = 0.38f),
-                            containerColor.copy(alpha = 0.2f)
-                        )
-                    )
+                    brush = if (enabled) gradient else disabledGradient
                 ),
             contentAlignment = Alignment.Center
         ) {

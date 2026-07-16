@@ -1,3 +1,101 @@
 <resources>
     <string name="app_name">WasegMul</string>
+
+    <!-- Home Screen -->
+    <string name="home_subtitle">Waste Segregation Multi-model AI</string>
+    <string name="home_carbon_offset">CARBON OFFSET</string>
+    <string name="home_neural_scans">NEURAL SCANS</string>
+    <string name="home_yolo_title">Real-time YOLO Detect</string>
+    <string name="home_yolo_subtitle">Launch live multi-object tracking</string>
+    <string name="home_description">Industrial material analysis powered by EfficientNet architecture. Identify material signatures with precise chemical confidence.</string>
+    <string name="home_launch_scanner">Launch Scanner</string>
+    <string name="home_import_device">Import from Device</string>
+    <string name="home_latest_activity">LATEST ACTIVITY</string>
+    <string name="home_impact_title">Impact Analysis</string>
+    <string name="home_impact_description">Weight-indexed material recovery data. Each gram represents direct landfill diversion.</string>
+    <string name="home_cumulative_recovery">Cumulative Recovery</string>
+    <string name="app_version_info">V %1$s \u2022 agrelius industrial AI</string>
+
+    <!-- Classify Screen -->
+    <string name="classify_title">SCAN INTERFACE</string>
+    <string name="classify_awaiting">Awaiting Visual Input</string>
+    <string name="classify_retake">Retake Image</string>
+
+    <!-- YOLO Screen -->
+    <string name="yolo_title">YOLO LIVE DETECT</string>
+    <string name="yolo_camera_permission">Camera permission required for live detection</string>
+    <string name="yolo_fps_format">%1$.1f FPS</string>
+    <string name="yolo_detected_count">DETECTED: %1$d object%2$s</string>
+    <string name="yolo_more">+%1$d more</string>
+    <string name="yolo_model_error">YOLO model not available. Place yolov8n.tflite in assets/.</string>
+
+    <!-- Result Screen -->
+    <string name="result_title">ANALYSIS REPORT</string>
+    <string name="result_acknowledge_close">Acknowledge &amp; Close</string>
+    <string name="result_environmental_insights">Environmental Insights</string>
+    <string name="result_disposal_protocol">Disposal Protocol</string>
+    <string name="result_ecological_footprint">Ecological Footprint</string>
+    <string name="result_recycling_benefits">Recycling Benefits</string>
+    <string name="result_verification_sources">Verification Sources</string>
+    <string name="result_confidence_breakdown">Model Confidence Breakdown</string>
+    <string name="result_validation">Validation</string>
+    <string name="result_low_confidence_match">LOW CONFIDENCE MATCH</string>
+    <string name="result_neural_variance">Neural Variance: The visual signature is outside standard thresholds. Manual verification required.</string>
+    <string name="result_storage_image">Storage: Image saved for review</string>
+    <string name="result_storage_metadata">Storage: Metadata only</string>
+
+    <!-- History Screen -->
+    <string name="history_title">Neural History</string>
+    <string name="history_clear_title">Clear All Records?</string>
+    <string name="history_clear_message">This will permanently delete all classification history from this device. This action cannot be undone.</string>
+    <string name="history_empty">No classification records found.</string>
+    <string name="history_refine">Refine Prediction</string>
+    <string name="history_select_material">Select Actual Material</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">Neural Configuration</string>
+    <string name="settings_interface_preference">INTERFACE PREFERENCE</string>
+    <string name="settings_dark_mode">Dark Mode (Optimized)</string>
+    <string name="settings_light_mode">Light Mode (Eye Strain / High Carbon)</string>
+    <string name="settings_system_default">System Default</string>
+    <string name="settings_light_warning">Warning: Light Mode causes eye strain, is out of GenZ trends, and increases carbon impact (higher OLED draw).</string>
+    <string name="settings_data_archive">DATA ARCHIVE</string>
+    <string name="settings_purge_history">Purge Neural History</string>
+    <string name="settings_purge_title">Purge Database?</string>
+    <string name="settings_purge_message">All local classification logs and impact metrics will be permanently erased from this device.</string>
+    <string name="settings_execute_purge">Execute Purge</string>
+    <string name="settings_purged_snackbar">Neural history purged</string>
+    <string name="settings_version">V %1$s \u2022 agrelius neural os</string>
+
+    <!-- Feedback Section -->
+    <string name="feedback_accurate_question">Was this prediction accurate?</string>
+    <string name="feedback_not_sure">Not Sure</string>
+    <string name="feedback_actual_material">Actual Material?</string>
+    <string name="feedback_edit">Edit Feedback</string>
+    <string name="feedback_recorded">Validation Recorded</string>
+    <string name="feedback_verified">Verified Accurate</string>
+    <string name="feedback_corrected_to">Corrected to: %1$s</string>
+    <string name="feedback_uncertain">Uncertain Feedback</string>
+
+    <!-- Confidence Badge -->
+    <string name="confidence_high">High</string>
+    <string name="confidence_medium">Medium</string>
+    <string name="confidence_low">Low</string>
+    <string name="confidence_format">%1$s (%2$d%%)</string>
+
+    <!-- Common -->
+    <string name="common_acknowledge">ACKNOWLEDGE</string>
+    <string name="common_correct">Correct</string>
+    <string name="common_incorrect">Incorrect</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_back">Back</string>
+    <string name="common_retry">Retry</string>
+    <string name="common_grant_permission">Grant Permission</string>
+    <string name="common_processing">Processing&#8230;</string>
+    <string name="common_delete_all">Delete All</string>
+    <string name="common_abort">Abort</string>
+    <string name="common_settings">Settings</string>
+    <string name="common_home">Home</string>
+    <string name="common_go_back">Go back</string>
+    <string name="common_edit_feedback">Edit Feedback</string>
 </resources>

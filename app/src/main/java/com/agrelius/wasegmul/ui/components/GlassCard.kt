@@ -5,14 +5,15 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.agrelius.wasegmul.ui.theme.GlassBorder
-import com.agrelius.wasegmul.ui.theme.GlassSurface
+import com.agrelius.wasegmul.ui.theme.LocalGlassColors
 
 @Composable
 fun GlassCard(
@@ -20,13 +21,14 @@ fun GlassCard(
     cornerRadius: Dp = 24.dp,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val glassColors = LocalGlassColors.current
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(cornerRadius))
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        GlassSurface,
+                        glassColors.surface,
                         Color.Transparent
                     )
                 )
@@ -35,9 +37,9 @@ fun GlassCard(
                 width = 1.dp,
                 brush = Brush.linearGradient(
                     colors = listOf(
-                        GlassBorder,
+                        glassColors.border,
                         Color.Transparent,
-                        GlassBorder.copy(alpha = 0.05f)
+                        glassColors.border.copy(alpha = 0.05f)
                     )
                 ),
                 shape = RoundedCornerShape(cornerRadius)
