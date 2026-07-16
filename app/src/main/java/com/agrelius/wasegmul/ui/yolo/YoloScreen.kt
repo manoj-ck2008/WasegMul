@@ -38,6 +38,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -48,6 +50,7 @@ import androidx.lifecycle.ViewModelProvider
 
 class YoloViewModel : ViewModel() {
     private var detector: YoloDetector? = null
+    private val initGuard = kotlinx.coroutines.sync.Mutex()
     private val _detections = MutableStateFlow<List<Detection>>(emptyList())
     val detections: StateFlow<List<Detection>> = _detections
     private val _fps = MutableStateFlow(0f)
@@ -59,13 +62,15 @@ class YoloViewModel : ViewModel() {
     private var lastFpsTime = System.currentTimeMillis()
 
     suspend fun initDetector(context: android.content.Context) {
-        if (detector != null) return
-        try {
-            detector = YoloDetector(context.applicationContext)
-            detector?.ensureInitialized()
-        } catch (e: ModelInitException) {
-            _error.value = "YOLO model not available. Place yolov8n.tflite in assets/."
-            Log.w("YoloVM", "YOLO init failed: ${e.message}")
+        initGuard.withLock {
+            if (detector != null) return
+            try {
+                detector = YoloDetector(context.applicationContext)
+                detector?.ensureInitialized()
+            } catch (e: ModelInitException) {
+                _error.value = "YOLO model not available. Place yolov8n.tflite in assets/."
+                Log.w("YoloVM", "YOLO init failed: ${e.message}")
+            }
         }
     }
 

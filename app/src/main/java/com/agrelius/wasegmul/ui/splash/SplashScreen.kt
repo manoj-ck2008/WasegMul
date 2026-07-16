@@ -32,6 +32,7 @@ import kotlinx.coroutines.delay
 fun SplashScreen(onTimeout: () -> Unit) {
     var stage by remember { mutableIntStateOf(0) }
     val currentThought = remember { EcoThoughts.getRandom() }
+    var navigated by remember { mutableStateOf(false) }
     
     val fullTitle = "WasegMul"
     var displayedTitle by remember { mutableStateOf("") }
@@ -77,7 +78,10 @@ fun SplashScreen(onTimeout: () -> Unit) {
         stage = 2 // Vision & Petals Bloom
         
         delay(5000)
-        onTimeout()
+        if (!navigated) {
+            navigated = true
+            onTimeout()
+        }
     }
 
     Box(
