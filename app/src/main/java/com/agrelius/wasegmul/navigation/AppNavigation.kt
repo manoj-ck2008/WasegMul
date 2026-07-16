@@ -16,6 +16,7 @@ import com.agrelius.wasegmul.ui.home.HomeScreen
 import com.agrelius.wasegmul.ui.result.ResultScreen
 import com.agrelius.wasegmul.ui.settings.SettingsScreen
 import com.agrelius.wasegmul.ui.splash.SplashScreen
+import com.agrelius.wasegmul.ui.yolo.YoloScreen
 import com.agrelius.wasegmul.viewmodel.HomeViewModel
 
 @Composable
@@ -58,6 +59,9 @@ fun AppNavigation() {
                 },
                 onNavigateToSettings = {
                     navController.navigate(Screen.Settings.route)
+                },
+                onNavigateToYolo = {
+                    navController.navigate(Screen.Yolo.route)
                 }
             )
         }
@@ -112,6 +116,12 @@ fun AppNavigation() {
                 onNavigateToResult = { id ->
                     navController.navigate(Screen.Result.route + "?recordId=$id")
                 }
+            )
+        }
+
+        composable(Screen.Yolo.route) {
+            YoloScreen(
+                onBack = { navController.popBackStack() }
             )
         }
     }

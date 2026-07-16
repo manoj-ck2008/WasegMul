@@ -49,7 +49,8 @@ fun HomeScreen(
     viewModel: HomeViewModel,
     onImageSelected: (Bitmap) -> Unit,
     onNavigateToHistory: () -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onNavigateToYolo: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val recentHistory by viewModel.recentHistory.collectAsState()
@@ -198,7 +199,10 @@ fun HomeScreen(
                     Column(
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { onNavigateToYolo() }
+                        ) {
                             Box(
                                 modifier = Modifier
                                     .size(48.dp)
