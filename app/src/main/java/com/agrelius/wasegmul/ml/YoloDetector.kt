@@ -7,6 +7,7 @@ import android.util.Log
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.support.common.FileUtil
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -72,15 +73,16 @@ class YoloDetector(private val context: Context) : Closeable {
     }
 
     suspend fun detect(bitmap: Bitmap): List<Detection> = withContext(Dispatchers.Default) {
-        if (!isInitialized) return@withContext emptyList()
+        if (!isInitialized || bitmap.isRecycled || bitmap.width == 0 || bitmap.height == 0) {
+            return@withContext emptyList()
+        }
 
         detectMutex.withLock {
             val interp = interpreter ?: return@withContext emptyList()
 
+            val resized = Bitmap.createScaledBitmap(bitmap, inputSize, inputSize, true)
             try {
-                val resized = Bitmap.createScaledBitmap(bitmap, inputSize, inputSize, true)
                 val inputBuffer = bitmapToByteBuffer(resized)
-                if (resized !== bitmap) resized.recycle()
 
                 val outputShape = interp.getOutputTensor(0).shape()
                 val outputSize = outputShape.fold(1) { acc, i -> acc * i }
@@ -93,12 +95,12 @@ class YoloDetector(private val context: Context) : Closeable {
                 val rawOutput = FloatArray(outputSize)
                 outputBuffer.asFloatBuffer().get(rawOutput)
 
-                val detections = parseDetections(rawOutput)
-
-                detections
+                parseDetections(rawOutput, outputShape)
             } catch (e: Exception) {
                 Log.e(TAG, "YOLO detection failed", e)
                 emptyList()
+            } finally {
+                if (resized !== bitmap) resized.recycle()
             }
         }
     }
@@ -116,7 +118,7 @@ class YoloDetector(private val context: Context) : Closeable {
         return buffer
     }
 
-    private fun parseDetections(raw: FloatArray): List<Detection> {
+    private fun parseDetections(raw: FloatArray, outputShape: IntArray): List<Detection> {
         val detections = mutableListOf<Detection>()
         val numClasses = cocoLabels.size
         val valuesPerDetection = 4 + numClasses
@@ -211,8 +213,12 @@ class YoloDetector(private val context: Context) : Closeable {
 
     override fun close() {
         isInitialized = false
-        runCatching { interpreter?.close() }
-        interpreter = null
+        kotlinx.coroutines.runBlocking {
+            detectMutex.withLock {
+                runCatching { interpreter?.close() }
+                interpreter = null
+            }
+        }
     }
 
     companion object {

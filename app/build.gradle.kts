@@ -60,12 +60,13 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // Falls back to the debug signing config when keystore.properties is absent,
-            // so CI/local builds without a release keystore still produce an installable APK.
-            // To enforce signing on release builds, pass -PALLOW_DEBUG_SIGNING or add keystore.properties.
-            signingConfig =
-                if (keystoreProperties.isNotEmpty()) signingConfigs.getByName("release")
-                else signingConfigs.getByName("debug")
+            // Release builds MUST be signed with the release key.
+            // CI/CD must provide keystore.properties; local dev uses debug builds.
+            signingConfig = if (keystoreProperties.isNotEmpty()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
     compileOptions {
@@ -87,12 +88,13 @@ android {
     }
 }
 
-// Validate release signing credentials at build time (only when building release).
+// Validate release signing credentials at build time.
 tasks.configureEach {
     if (name.startsWith("merge") && name.contains("Release", ignoreCase = true)) {
         doFirst {
             if (keystoreProperties.isEmpty()) {
-                logger.warn("WARNING: No keystore.properties found — release APK will be signed with debug key.")
+                logger.warn("WARNING: No keystore.properties found — release APK is signed with debug key. " +
+                    "For production releases, create keystore.properties in the project root.")
             }
         }
     }
@@ -114,7 +116,6 @@ dependencies {
 
     // ML & Camera
     implementation(libs.tensorflow.lite)
-    implementation(libs.tensorflowLiteCoreApi)
     implementation(libs.tensorflow.lite.support)
     implementation(libs.playServicesTflite)
     implementation(libs.kotlinxCoroutinesPlayServices)

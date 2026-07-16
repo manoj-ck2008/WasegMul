@@ -13,11 +13,8 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
 
-    listOf(
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
+    listOf(iosArm64(), iosSimulatorArm64()).forEach {
+        it.binaries.framework {
             baseName = "shared"
             isStatic = true
         }

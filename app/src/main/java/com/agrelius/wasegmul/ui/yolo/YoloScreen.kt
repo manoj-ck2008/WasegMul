@@ -49,8 +49,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 
 class YoloViewModel : ViewModel() {
+    @Volatile
     private var detector: YoloDetector? = null
     private val initGuard = kotlinx.coroutines.sync.Mutex()
+    private val detectMutex = kotlinx.coroutines.sync.Mutex()
     private val _detections = MutableStateFlow<List<Detection>>(emptyList())
     val detections: StateFlow<List<Detection>> = _detections
     private val _fps = MutableStateFlow(0f)
@@ -58,7 +60,9 @@ class YoloViewModel : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
+    @Volatile
     private var frameCount = 0
+    @Volatile
     private var lastFpsTime = System.currentTimeMillis()
 
     suspend fun initDetector(context: android.content.Context) {
@@ -75,21 +79,23 @@ class YoloViewModel : ViewModel() {
     }
 
     suspend fun detectFrame(bitmap: Bitmap) {
-        val d = detector ?: return
-        try {
-            val results = d.detect(bitmap)
-            _detections.value = results
+        detectMutex.withLock {
+            val d = detector ?: return
+            try {
+                val results = d.detect(bitmap)
+                _detections.value = results
 
-            frameCount++
-            val now = System.currentTimeMillis()
-            val elapsed = now - lastFpsTime
-            if (elapsed >= 1000) {
-                _fps.value = frameCount * 1000f / elapsed
-                frameCount = 0
-                lastFpsTime = now
+                frameCount++
+                val now = System.currentTimeMillis()
+                val elapsed = now - lastFpsTime
+                if (elapsed >= 1000) {
+                    _fps.value = frameCount * 1000f / elapsed
+                    frameCount = 0
+                    lastFpsTime = now
+                }
+            } catch (e: Exception) {
+                Log.e("YoloVM", "Detection failed", e)
             }
-        } catch (e: Exception) {
-            Log.e("YoloVM", "Detection failed", e)
         }
     }
 
@@ -334,6 +340,11 @@ private fun DetectionOverlay(
             isAntiAlias = true
         }
     }
+    val bgPaint = remember {
+        android.graphics.Paint().apply {
+            isAntiAlias = true
+        }
+    }
 
     Canvas(modifier = modifier) {
         detections.forEach { detection ->
@@ -355,9 +366,7 @@ private fun DetectionOverlay(
             val label = "${detection.label} ${(detection.confidence * 100).toInt()}%"
             val textWidth = labelPaint.measureText(label)
 
-            val bgPaint = android.graphics.Paint().apply {
-                this.color = android.graphics.Color.argb(180, (color.red * 255).toInt(), (color.green * 255).toInt(), (color.blue * 255).toInt())
-            }
+            bgPaint.color = android.graphics.Color.argb(180, (color.red * 255).toInt(), (color.green * 255).toInt(), (color.blue * 255).toInt())
 
             drawContext.canvas.nativeCanvas.apply {
                 drawRect(left, top - 36f, left + textWidth + 8f, top, bgPaint)

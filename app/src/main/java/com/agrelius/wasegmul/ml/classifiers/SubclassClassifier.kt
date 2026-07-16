@@ -29,14 +29,19 @@ class SubclassClassifier(context: Context) {
         interpreter = Interpreter(model, options)
 
         val outputShape = interpreter.getOutputTensor(0).shape()
-        require(outputShape.last() == labels.size) {
-            "Subclass model output shape ${outputShape.contentToString()} does not match " +
-                "${labels.size} labels in subclass_classes.txt"
+        if (outputShape.last() != labels.size) {
+            runCatching { interpreter.close() }
+            require(outputShape.last() == labels.size) {
+                "Subclass model output shape ${outputShape.contentToString()} does not match " +
+                    "${labels.size} labels in subclass_classes.txt"
+            }
         }
         Log.d(TAG, "Output shape: ${outputShape.contentToString()}, labels size: ${labels.size}")
     }
 
     fun classify(bitmap: Bitmap): InternalResult {
+        require(!bitmap.isRecycled) { "Bitmap is recycled" }
+        require(bitmap.width > 0 && bitmap.height > 0) { "Bitmap has zero dimensions" }
         val tensorImage = ImagePreprocessor.preprocess(bitmap)
 
         val outputBuffer = TensorBuffer.createFixedSize(

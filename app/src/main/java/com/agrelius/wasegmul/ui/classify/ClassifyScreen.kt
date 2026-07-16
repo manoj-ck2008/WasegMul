@@ -71,11 +71,11 @@ fun ClassifyScreen(
                     ) 
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = onBack, enabled = !isLoading) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack, 
                             contentDescription = "Back",
-                            tint = TextPrimary
+                            tint = if (isLoading) TextSecondary.copy(alpha = 0.3f) else TextPrimary
                         )
                     }
                 },

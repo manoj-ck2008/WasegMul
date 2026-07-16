@@ -52,16 +52,16 @@ fun AppNavigation() {
                 viewModel = homeViewModel,
                 onImageSelected = { bitmap ->
                     classificationViewModel.setBitmap(bitmap)
-                    navController.navigate(Screen.Classify.route)
+                    navController.navigate(Screen.Classify.route) { launchSingleTop = true }
                 },
                 onNavigateToHistory = {
-                    navController.navigate(Screen.History.route)
+                    navController.navigate(Screen.History.route) { launchSingleTop = true }
                 },
                 onNavigateToSettings = {
                     navController.navigate(Screen.Settings.route)
                 },
                 onNavigateToYolo = {
-                    navController.navigate(Screen.Yolo.route)
+                    navController.navigate(Screen.Yolo.route) { launchSingleTop = true }
                 }
             )
         }
@@ -77,9 +77,10 @@ fun AppNavigation() {
             ClassifyScreen(
                 viewModel = classificationViewModel,
                 onNavigateToResult = {
-                    navController.navigate(Screen.Result.route)
+                    navController.navigate(Screen.Result.route) { launchSingleTop = true }
                 },
                 onBack = {
+                    classificationViewModel.releaseBitmap()
                     navController.popBackStack()
                 }
             )
@@ -102,6 +103,7 @@ fun AppNavigation() {
             ResultScreen(
                 viewModel = classificationViewModel,
                 onNavigateToHome = {
+                    classificationViewModel.releaseBitmap()
                     navController.navigate(Screen.Home.route) {
                         popUpTo(Screen.Home.route) { inclusive = true }
                     }

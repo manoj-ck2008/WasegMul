@@ -17,10 +17,10 @@ import com.agrelius.wasegmul.WasteMapping
 import com.agrelius.wasegmul.WasteRecord
 import com.agrelius.wasegmul.ml.ModelManager
 import com.agrelius.wasegmul.repository.WasteRepository
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 
 class ClassificationViewModel(
@@ -44,8 +44,8 @@ class ClassificationViewModel(
     private val _currentRecord = MutableStateFlow<WasteRecord?>(null)
     val currentRecord: StateFlow<WasteRecord?> = _currentRecord
 
-    private val _navigateToResult = Channel<Unit>(Channel.BUFFERED)
-    val navigateToResult = _navigateToResult.receiveAsFlow()
+    private val _navigateToResult = MutableSharedFlow<Unit>(replay = 1)
+    val navigateToResult = _navigateToResult.asSharedFlow()
 
     fun initModel(context: Context) {
         if (modelManager == null) {
@@ -100,7 +100,7 @@ class ClassificationViewModel(
                         )
 
                         _classificationResult.value = result
-                        _navigateToResult.trySend(Unit)
+                        _navigateToResult.tryEmit(Unit)
 
                         val estimatedWeight = if (isUncertain) 0.0
                         else WasteMapping.getWeight(result.subclass)
@@ -149,38 +149,68 @@ class ClassificationViewModel(
         _error.value = null
     }
 
+    fun releaseBitmap() {
+        _capturedBitmap.value?.takeIf { !it.isRecycled }?.recycle()
+        _capturedBitmap.value = null
+    }
+
     fun setFeedback(feedback: String) {
         val recordId = _currentRecord.value?.id ?: return
         viewModelScope.launch {
-            repository.updateFeedback(recordId, feedback)
-            _currentRecord.value = _currentRecord.value?.copy(feedback = feedback)
+            try {
+                val rows = repository.updateFeedback(recordId, feedback)
+                if (rows > 0) {
+                    _currentRecord.value = _currentRecord.value?.copy(feedback = feedback)
+                } else {
+                    _error.value = "Record not found — feedback not saved."
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to update feedback", e)
+                _error.value = "Failed to save feedback."
+            }
         }
     }
 
     fun setCorrection(correction: String) {
         val recordId = _currentRecord.value?.id ?: return
         viewModelScope.launch {
-            repository.updateCorrection(recordId, correction)
-            _currentRecord.value = _currentRecord.value?.copy(correctedSubclass = correction)
+            try {
+                val rows = repository.updateCorrection(recordId, correction)
+                if (rows > 0) {
+                    _currentRecord.value = _currentRecord.value?.copy(correctedSubclass = correction)
+                } else {
+                    _error.value = "Record not found — correction not saved."
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to update correction", e)
+                _error.value = "Failed to save correction."
+            }
         }
     }
 
     fun loadRecord(recordId: Long) {
         viewModelScope.launch {
-            val record = repository.getRecordById(recordId) ?: return@launch
-            val info = WasteKnowledgeBase.getInfo(record.category, record.subclass)
-            _classificationResult.value = ClassificationResult(
-                category = record.category,
-                subclass = record.subclass,
-                confidence = record.confidence,
-                topPredictions = PredictionCodec.decode(record.topPredictions),
-                disposalGuide = info.disposalGuide,
-                environmentalImpact = info.environmentalImpact,
-                recyclingBenefits = info.recyclingBenefits,
-                sources = info.sources,
-                classificationMessage = "Historical record — originally classified as ${record.subclass} (${record.category})."
-            )
-            _currentRecord.value = record
+            _classificationResult.value = null
+            _currentRecord.value = null
+            try {
+                val record = repository.getRecordById(recordId) ?: return@launch
+                val info = WasteKnowledgeBase.getInfo(record.category, record.subclass)
+                _classificationResult.value = ClassificationResult(
+                    category = record.category,
+                    subclass = record.subclass,
+                    confidence = record.confidence,
+                    topPredictions = PredictionCodec.decode(record.topPredictions),
+                    disposalGuide = info.disposalGuide,
+                    environmentalImpact = info.environmentalImpact,
+                    recyclingBenefits = info.recyclingBenefits,
+                    sources = info.sources,
+                    classificationMessage = "Historical record — originally classified as ${record.subclass} (${record.category})."
+                )
+                _currentRecord.value = record
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load record $recordId", e)
+                _error.value = "Failed to load historical record."
+            }
         }
     }
 

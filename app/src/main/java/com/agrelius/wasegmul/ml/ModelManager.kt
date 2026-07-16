@@ -8,6 +8,7 @@ import com.agrelius.wasegmul.ml.classifiers.CategoryClassifier
 import com.agrelius.wasegmul.ml.classifiers.SubclassClassifier
 import com.google.android.gms.tflite.java.TfLite
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -143,12 +144,24 @@ class ModelManager(private val context: Context) {
 
     fun close() {
         isInitialized = false
-        runCatching { cleanup() }
+        kotlinx.coroutines.runBlocking {
+            classifyMutex.withLock {
+                try {
+                    cleanup()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error during ModelManager cleanup", e)
+                }
+            }
+        }
     }
 
     private fun cleanup() {
-        runCatching { categoryClassifier?.close() }
-        runCatching { subclassClassifier?.close() }
+        runCatching { categoryClassifier?.close() }.exceptionOrNull()?.let {
+            Log.w(TAG, "Error closing category classifier", it)
+        }
+        runCatching { subclassClassifier?.close() }.exceptionOrNull()?.let {
+            Log.w(TAG, "Error closing subclass classifier", it)
+        }
         categoryClassifier = null
         subclassClassifier = null
         isInitialized = false

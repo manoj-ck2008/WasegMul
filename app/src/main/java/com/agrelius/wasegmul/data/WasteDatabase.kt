@@ -51,7 +51,6 @@ abstract class WasteDatabase : RoomDatabase() {
                     "wasegmul_industrial_v1.db"
                 )
                     .addMigrations(MIGRATION_6_7, MIGRATION_7_8)
-                    .fallbackToDestructiveMigration()
                     .build()
                     .also { INSTANCE = it }
             }
