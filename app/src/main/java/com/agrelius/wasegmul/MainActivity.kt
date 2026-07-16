@@ -9,6 +9,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import com.agrelius.wasegmul.navigation.AppNavigation
 import com.agrelius.wasegmul.ui.theme.AppThemeMode
 import com.agrelius.wasegmul.ui.theme.WasegMulTheme
@@ -20,10 +21,13 @@ class MainActivity : ComponentActivity() {
         val app = applicationContext as WasegMulApp
         setContent {
             val themeMode by app.settingsManager.themeMode.collectAsState(initial = ThemeMode.DARK)
+            val systemDark = LocalConfiguration.current.uiMode and
+                    android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
+                    android.content.res.Configuration.UI_MODE_NIGHT_YES
             val appThemeMode = when(themeMode) {
                 ThemeMode.LIGHT -> AppThemeMode.LIGHT
                 ThemeMode.DARK -> AppThemeMode.DARK
-                ThemeMode.SYSTEM -> AppThemeMode.DARK
+                ThemeMode.SYSTEM -> if (systemDark) AppThemeMode.DARK else AppThemeMode.LIGHT
             }
 
             WasegMulTheme(themeMode = appThemeMode) {

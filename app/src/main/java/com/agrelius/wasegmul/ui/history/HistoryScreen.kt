@@ -77,8 +77,7 @@ fun HistoryScreen(
                 }
             }
 
-            if (editingRecord != null) {
-                val recordToEdit = editingRecord!!
+            editingRecord?.let { recordToEdit ->
                 FeedbackDialog(
                     record = recordToEdit,
                     onDismiss = { editingRecord = null },

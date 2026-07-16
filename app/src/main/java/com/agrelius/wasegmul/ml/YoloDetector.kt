@@ -118,28 +118,44 @@ class YoloDetector(private val context: Context) : Closeable {
 
     private fun parseDetections(raw: FloatArray): List<Detection> {
         val detections = mutableListOf<Detection>()
-
         val numClasses = cocoLabels.size
         val valuesPerDetection = 4 + numClasses
 
-        val reshaped = Array(1) { Array(raw.size / valuesPerDetection) { FloatArray(valuesPerDetection) } }
-        var idx = 0
-        for (i in reshaped[0].indices) {
-            for (j in 0 until valuesPerDetection) {
-                reshaped[0][i][j] = raw[idx++]
+        val totalElements = raw.size
+        val numDetections: Int
+        val transposed: FloatArray
+
+        if (totalElements == valuesPerDetection && raw.size == numClasses + 4) {
+            numDetections = 1
+            transposed = raw
+        } else if (totalElements % valuesPerDetection == 0) {
+            numDetections = totalElements / valuesPerDetection
+            transposed = raw
+        } else if (totalElements == (4 + numClasses) * NUM_YOLO_ANCHORS) {
+            numDetections = NUM_YOLO_ANCHORS
+            transposed = FloatArray(totalElements)
+            val srcRows = 4 + numClasses
+            for (d in 0 until NUM_YOLO_ANCHORS) {
+                for (c in 0 until srcRows) {
+                    transposed[d * srcRows + c] = raw[c * NUM_YOLO_ANCHORS + d]
+                }
             }
+        } else {
+            Log.w(TAG, "Unexpected YOLO output shape: $totalElements elements")
+            return emptyList()
         }
 
-        for (detection in reshaped[0]) {
-            val cx = detection[0]
-            val cy = detection[1]
-            val w = detection[2]
-            val h = detection[3]
+        for (d in 0 until numDetections) {
+            val offset = d * valuesPerDetection
+            val cx = transposed[offset]
+            val cy = transposed[offset + 1]
+            val w = transposed[offset + 2]
+            val h = transposed[offset + 3]
 
             var maxScore = 0f
             var maxClassIdx = 0
             for (c in 0 until numClasses) {
-                val score = detection[4 + c]
+                val score = transposed[offset + 4 + c]
                 if (score > maxScore) {
                     maxScore = score
                     maxClassIdx = c
@@ -150,8 +166,10 @@ class YoloDetector(private val context: Context) : Closeable {
 
             val left = max(0f, cx - w / 2f) / inputSize
             val top = max(0f, cy - h / 2f) / inputSize
-            val right = min(1f, cx + w / 2f) / inputSize
-            val bottom = min(1f, cy + h / 2f) / inputSize
+            val right = min(inputSize.toFloat(), cx + w / 2f) / inputSize
+            val bottom = min(inputSize.toFloat(), cy + h / 2f) / inputSize
+
+            if (right <= left || bottom <= top) continue
 
             detections.add(
                 Detection(
@@ -192,15 +210,9 @@ class YoloDetector(private val context: Context) : Closeable {
     }
 
     override fun close() {
-        kotlinx.coroutines.runBlocking {
-            detectMutex.withLock {
-                initMutex.withLock {
-                    runCatching { interpreter?.close() }
-                    interpreter = null
-                    isInitialized = false
-                }
-            }
-        }
+        isInitialized = false
+        runCatching { interpreter?.close() }
+        interpreter = null
     }
 
     companion object {
@@ -209,5 +221,6 @@ class YoloDetector(private val context: Context) : Closeable {
         private const val INPUT_SIZE = 640
         private const val CONFIDENCE_THRESHOLD = 0.45f
         private const val IOU_THRESHOLD = 0.5f
+        private const val NUM_YOLO_ANCHORS = 8400
     }
 }

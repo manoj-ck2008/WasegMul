@@ -35,7 +35,9 @@ enum class FailureReason {
  */
 class ModelManager(private val context: Context) {
 
+    @Volatile
     private var categoryClassifier: CategoryClassifier? = null
+    @Volatile
     private var subclassClassifier: SubclassClassifier? = null
 
     @Volatile
@@ -140,13 +142,8 @@ class ModelManager(private val context: Context) {
     }
 
     fun close() {
-        kotlinx.coroutines.runBlocking {
-            classifyMutex.withLock {
-                initMutex.withLock {
-                    cleanup()
-                }
-            }
-        }
+        isInitialized = false
+        runCatching { cleanup() }
     }
 
     private fun cleanup() {

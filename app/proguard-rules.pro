@@ -11,7 +11,6 @@
 -keepattributes RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations,AnnotationDefault
 
 # ── Room ────────────────────────────────────────────────────────────────────
-# Room's generated Dao_Impl classes use reflection; keep entities and Dao interfaces.
 -keep class com.agrelius.wasegmul.data.WasteRecord { *; }
 -keep class com.agrelius.wasegmul.data.WasteDao { *; }
 -keep class com.agrelius.wasegmul.data.WasteDatabase { *; }
@@ -23,7 +22,6 @@
 -dontwarn org.tensorflow.lite.**
 
 # ── Google Play Services TFLite ──────────────────────────────────────────────
-# Official consumer ProGuard snippet for play-services-tflite.
 -keep class com.google.android.gms.internal.mlkit_common.** { *; }
 -keep class com.google.android.gms.internal.mlkit_vision_common.** { *; }
 -keep class com.google.android.gms.tflite.** { *; }
@@ -31,7 +29,7 @@
 -dontwarn com.google.android.gms.internal.mlkit_vision_common.**
 
 # Our classifier classes (loaded by name from assets).
--keep class com.agrelius.wasegmul.ml.** { *; }
+-keep class com.agrelius.wasegmul.ml.classifiers.** { *; }
 
 # ── Shared KMP module (reflection-free, but keep model classes for safety) ───
 -keep class com.agrelius.wasegmul.WasteRecord { *; }
@@ -41,12 +39,12 @@
 -keep class com.agrelius.wasegmul.WasteInfo { *; }
 -keep class com.agrelius.wasegmul.WasteMapping { *; }
 -keep class com.agrelius.wasegmul.WasteMapping$MaterialMetaData { *; }
--keep class com.agrelius.wasegmul.MLArbitrator { *; }
--keep class com.agrelius.wasegmul.WasteKnowledgeBase { *; }
--keep class com.agrelius.wasegmul.PredictionCodec { *; }
+
+# ── CameraX (reflection-based image analysis) ────────────────────────────────
+-keep class androidx.camera.core.** { *; }
+-dontwarn androidx.camera.core.**
 
 # ── Compose / Kotlin metadata ────────────────────────────────────────────────
-# Compose compiler emits metadata referenced at runtime; keep only what's needed.
 -keep class androidx.compose.runtime.** { *; }
 -keep class androidx.compose.ui.** { *; }
 -dontwarn androidx.compose.**

@@ -65,14 +65,15 @@ fun HomeScreen(
         visible = true
     }
 
+    val scope = rememberCoroutineScope()
+
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
-            val contextRef = context
-            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+            scope.launch {
                 val bitmap = withContext(Dispatchers.IO) {
-                    decodeSampledBitmap(contextRef, it, 1024, 1024)
+                    decodeSampledBitmap(context, it, 1024, 1024)
                 }
                 if (bitmap != null) {
                     onImageSelected(bitmap)

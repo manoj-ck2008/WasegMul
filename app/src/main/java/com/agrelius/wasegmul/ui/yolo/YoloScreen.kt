@@ -25,7 +25,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,8 +38,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -111,7 +110,6 @@ fun YoloScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val yoloViewModel: YoloViewModel = viewModel(factory = YoloViewModel.Factory())
 
@@ -196,9 +194,11 @@ fun YoloScreen(
                 }
             } else {
                 CameraPreviewWithDetection(
-                    detections = detections,
                     onFrameCaptured = { bitmap ->
-                        scope.launch { yoloViewModel.detectFrame(bitmap) }
+                        scope.launch {
+                            yoloViewModel.detectFrame(bitmap)
+                            bitmap.recycle()
+                        }
                     }
                 )
 
@@ -244,12 +244,20 @@ fun YoloScreen(
 
 @Composable
 private fun CameraPreviewWithDetection(
-    detections: List<Detection>,
     onFrameCaptured: (Bitmap) -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
+    val isProcessing = remember { AtomicBoolean(false) }
+    var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            analysisExecutor.shutdownNow()
+            cameraProvider?.unbindAll()
+        }
+    }
 
     AndroidView(
         factory = { ctx ->
@@ -262,7 +270,8 @@ private fun CameraPreviewWithDetection(
 
                 val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
                 cameraProviderFuture.addListener({
-                    val cameraProvider = cameraProviderFuture.get()
+                    val cp = cameraProviderFuture.get()
+                    cameraProvider = cp
 
                     val preview = Preview.Builder().build().also {
                         it.surfaceProvider = surfaceProvider
@@ -274,16 +283,24 @@ private fun CameraPreviewWithDetection(
                         .build()
 
                     imageAnalysis.setAnalyzer(analysisExecutor) { imageProxy ->
-                        val bitmap = imageProxy.toBitmap(ImageProxy.TO_BITMAP_DEFAULT_CONFIG)
-                        if (bitmap != null) {
-                            onFrameCaptured(bitmap)
+                        if (!isProcessing.compareAndSet(false, true)) {
+                            imageProxy.close()
+                            return@setAnalyzer
                         }
-                        imageProxy.close()
+                        try {
+                            val bitmap = imageProxy.toBitmap()
+                            onFrameCaptured(bitmap)
+                        } catch (e: Exception) {
+                            Log.e("YoloScreen", "Frame analysis failed", e)
+                        } finally {
+                            isProcessing.set(false)
+                            imageProxy.close()
+                        }
                     }
 
                     try {
-                        cameraProvider.unbindAll()
-                        cameraProvider.bindToLifecycle(
+                        cp.unbindAll()
+                        cp.bindToLifecycle(
                             lifecycleOwner,
                             CameraSelector.DEFAULT_BACK_CAMERA,
                             preview,
@@ -304,6 +321,15 @@ private fun DetectionOverlay(
     detections: List<Detection>,
     modifier: Modifier = Modifier
 ) {
+    val labelPaint = remember {
+        android.graphics.Paint().apply {
+            color = android.graphics.Color.argb(200, 0, 0, 0)
+            textSize = 28f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            isAntiAlias = true
+        }
+    }
+
     Canvas(modifier = modifier) {
         detections.forEach { detection ->
             val box = detection.boundingBox
@@ -321,19 +347,16 @@ private fun DetectionOverlay(
                 style = Stroke(width = 3f)
             )
 
+            val label = "${detection.label} ${(detection.confidence * 100).toInt()}%"
+            val textWidth = labelPaint.measureText(label)
+
+            val bgPaint = android.graphics.Paint().apply {
+                this.color = android.graphics.Color.argb(180, (color.red * 255).toInt(), (color.green * 255).toInt(), (color.blue * 255).toInt())
+            }
+
             drawContext.canvas.nativeCanvas.apply {
-                val paint = android.graphics.Paint().apply {
-                    this.color = android.graphics.Color.argb(200, 0, 0, 0)
-                    textSize = 28f
-                    typeface = android.graphics.Typeface.DEFAULT_BOLD
-                }
-                val bgPaint = android.graphics.Paint().apply {
-                    this.color = android.graphics.Color.argb(180, color.red.toInt(), color.green.toInt(), color.blue.toInt())
-                }
-                val label = "${detection.label} ${(detection.confidence * 100).toInt()}%"
-                val textWidth = paint.measureText(label)
                 drawRect(left, top - 36f, left + textWidth + 8f, top, bgPaint)
-                drawText(label, left + 4f, top - 8f, paint)
+                drawText(label, left + 4f, top - 8f, labelPaint)
             }
         }
     }
