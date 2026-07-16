@@ -138,7 +138,7 @@ private fun CorrectionView(onSelected: (String) -> Unit, onBack: () -> Unit) {
     
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null) }
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Go back") }
             Text(
                 text = "Actual Material?",
                 style = MaterialTheme.typography.titleSmall,

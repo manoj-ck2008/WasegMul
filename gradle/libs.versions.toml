@@ -12,15 +12,9 @@ kotlin = "2.1.0"
 ksp = "2.1.0-1.0.29"
 composeBom = "2024.11.00"
 tensorflowLite = "2.17.0"
-tensorflowLiteSupport = "0.5.0"
-tensorflowLiteGpu = "2.17.0"
 playServicesTflite = "16.5.0"
-camerax = "1.4.0"
-guava = "33.6.0-android"
-material = "1.12.0"
 room = "2.6.1"
 datastore = "1.1.1"
-media3 = "1.5.1"
 kotlinxCoroutinesPlayServices = "1.11.0"
 
 [libraries]
@@ -42,22 +36,15 @@ androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-te
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 
-# ML & Camera
+# ML
 tensorflow-lite = { group = "org.tensorflow", name = "tensorflow-lite", version.ref = "tensorflowLite" }
 tensorflowLiteCoreApi = { group = "org.tensorflow", name = "tensorflow-lite-api", version.ref = "tensorflowLite" }
 tensorflow-lite-support = { group = "com.google.android.gms", name = "play-services-tflite-support", version.ref = "playServicesTflite" }
-tensorflow-lite-gpu = { group = "com.google.android.gms", name = "play-services-tflite-gpu", version.ref = "playServicesTflite" }
 playServicesTflite = { group = "com.google.android.gms", name = "play-services-tflite-java", version.ref = "playServicesTflite" }
-androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
-androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
-androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
-guava = { group = "com.google.guava", name = "guava", version.ref = "guava" }
-material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
-androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
 kotlinxCoroutinesPlayServices = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "kotlinxCoroutinesPlayServices" }
 
 [plugins]

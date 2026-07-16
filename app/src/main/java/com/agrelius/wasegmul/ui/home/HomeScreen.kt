@@ -366,11 +366,6 @@ fun ImpactDetailDialog(onDismiss: () -> Unit, history: List<WasteRecord>) {
     )
 }
 
-@Composable
-fun YoloEntryButton(onClick: () -> Unit) {
-    // Deprecated in favor of GlassCard version in main loop
-}
-
 fun Long.toRelativeTime(): String {
     val now = System.currentTimeMillis()
     val diff = now - this
@@ -423,10 +418,6 @@ fun RecentItem(name: String, time: String, type: String, feedback: String?) {
     }
 }
 
-@Composable
-fun QuickStatCard(title: String, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector, containerColor: Color, modifier: Modifier = Modifier, onClick: () -> Unit = {}) {
-    // Deprecated in favor of GlassCard
-}
 
 @Composable
 fun BackgroundGlows() {

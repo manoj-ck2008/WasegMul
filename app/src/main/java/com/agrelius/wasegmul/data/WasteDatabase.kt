@@ -14,12 +14,13 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  *  - v1..v6: early development (destructive fallback only).
  *  - v7: added `topPredictions` column. A real migration is provided so existing user
  *        history is preserved rather than wiped.
+ *  - v8: added `timestamp` index for fast history queries.
  *
  * NOTE: `fallbackToDestructiveMigration()` is kept ONLY as a last-resort safety net so a
  * future schema change never crashes the app on launch; every intentional schema change
  * MUST ship with an explicit [Migration] entry below.
  */
-@Database(entities = [WasteRecord::class], version = 7, exportSchema = false)
+@Database(entities = [WasteRecord::class], version = 8, exportSchema = false)
 abstract class WasteDatabase : RoomDatabase() {
 
     abstract fun wasteDao(): WasteDao
@@ -28,10 +29,17 @@ abstract class WasteDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: WasteDatabase? = null
 
-        /** v6 → v7: persist the top-K subclass predictions alongside each record. */
+        /** v6 -> v7: persist the top-K subclass predictions alongside each record. */
         private val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE waste_history ADD COLUMN topPredictions TEXT")
+            }
+        }
+
+        /** v7 -> v8: add index on timestamp for fast ORDER BY timestamp queries. */
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_waste_history_timestamp ON waste_history (timestamp)")
             }
         }
 
@@ -42,7 +50,7 @@ abstract class WasteDatabase : RoomDatabase() {
                     WasteDatabase::class.java,
                     "wasegmul_industrial_v1.db"
                 )
-                    .addMigrations(MIGRATION_6_7)
+                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8)
                     // Last-resort safety net only; do NOT rely on this for intentional changes.
                     .fallbackToDestructiveMigration()
                     .build()

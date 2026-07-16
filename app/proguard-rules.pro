@@ -46,8 +46,9 @@
 -keep class com.agrelius.wasegmul.PredictionCodec { *; }
 
 # ── Compose / Kotlin metadata ────────────────────────────────────────────────
-# Compose compiler emits metadata referenced at runtime; don't strip it.
--keep class androidx.compose.** { *; }
+# Compose compiler emits metadata referenced at runtime; keep only what's needed.
+-keep class androidx.compose.runtime.** { *; }
+-keep class androidx.compose.ui.** { *; }
 -dontwarn androidx.compose.**
 
 # ── DataStore / coroutines / Guava (TFLite dependency) ───────────────────────
@@ -55,10 +56,6 @@
 -dontwarn kotlinx.coroutines.**
 -dontwarn com.google.common.**
 -dontwarn com.google.android.gms.**
-
-# ── CameraX ──────────────────────────────────────────────────────────────────
--keep class androidx.camera.** { *; }
--dontwarn androidx.camera.**
 
 # ── Application class (referenced from AndroidManifest) ──────────────────────
 -keep class com.agrelius.wasegmul.WasegMulApp { *; }

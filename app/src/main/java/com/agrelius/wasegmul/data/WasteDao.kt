@@ -9,17 +9,17 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface WasteDao {
 
-    @Query("SELECT * FROM waste_history ORDER BY timestamp DESC")
-    fun getAllHistory(): Flow<List<WasteRecord>>
+    @Query("SELECT * FROM waste_history ORDER BY timestamp DESC LIMIT :limit")
+    fun getAllHistory(limit: Int = 500): Flow<List<WasteRecord>>
 
-    @Query("SELECT * FROM waste_history ORDER BY timestamp DESC LIMIT 5")
-    fun getRecentHistory(): Flow<List<WasteRecord>>
+    @Query("SELECT * FROM waste_history ORDER BY timestamp DESC LIMIT :limit")
+    fun getRecentHistory(limit: Int = 5): Flow<List<WasteRecord>>
 
     /** O(1) lookup of a single record by its primary key. */
     @Query("SELECT * FROM waste_history WHERE id = :id LIMIT 1")
     suspend fun getRecordById(id: Long): WasteRecord?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertRecord(record: WasteRecord): Long
 
     /** @return number of rows updated (0 when [recordId] does not exist). */

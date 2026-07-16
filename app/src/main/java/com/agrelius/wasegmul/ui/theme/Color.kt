@@ -6,16 +6,10 @@ import androidx.compose.ui.graphics.Color
 val DarkBackground = Color(0xFF020408)
 val DeepCharcoal = Color(0xFF0D1117)
 val SurfaceGray = Color(0xFF161B22)
-val EmeraldVibrant = Color(0xFF00FF94) // More neon/futuristic
+val EmeraldVibrant = Color(0xFF00FF94)
 val SageGreen = Color(0xFFA8C69F)
 val TextPrimary = Color(0xFFF0F6FC)
 val TextSecondary = Color(0xFF8B949E)
-
-// --- ACCENTS ---
-val NeonBlue = Color(0xFF58A6FF)
-val CyberPurple = Color(0xFFBC8CFF)
-val WarningAmber = Color(0xFFD29922)
-val ErrorRed = Color(0xFFF85149)
 
 // --- LIGHT THEME ---
 val LightBackground = Color(0xFFF6F8FA)
@@ -37,17 +31,11 @@ val ForestGreen = Color(0xFF14452F)
 val OchreSand = Color(0xFFC0904D)
 
 // Status
-val HighConfidence = EmeraldVibrant
-val MediumConfidence = WarningAmber
-val LowConfidence = ErrorRed
+val LowConfidence = Color(0xFFF85149)
 
 // Glassmorphism
 val GlassBorder = Color(0x33FFFFFF)
 val GlassSurface = Color(0x1AFFFFFF)
-val GlassGlow = Color(0x0D00FF94)
 
 // Semantic consistency
 val MintAccent = SageGreen
-val SustainabilityGreen = EmeraldVibrant
-val DarkSurface = DeepCharcoal
-val DarkSurfaceVariant = SurfaceGray
