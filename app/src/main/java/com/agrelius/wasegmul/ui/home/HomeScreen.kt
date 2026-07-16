@@ -57,14 +57,23 @@ fun HomeScreen(
     val context = LocalContext.current
     val recentHistory by viewModel.recentHistory.collectAsState()
     var showImpactDetail by remember { mutableStateOf(false) }
-    var visible by remember { mutableStateOf(false) }
+    var section1Visible by remember { mutableStateOf(false) }
+    var section2Visible by remember { mutableStateOf(false) }
+    var section3Visible by remember { mutableStateOf(false) }
+    var section4Visible by remember { mutableStateOf(false) }
 
-    val totalImpact by remember(recentHistory) {
+    val totalImpact by remember {
         derivedStateOf { recentHistory.sumOf { it.estimatedWeight } }
     }
 
     LaunchedEffect(Unit) {
-        visible = true
+        section1Visible = true
+        kotlinx.coroutines.delay(150)
+        section2Visible = true
+        kotlinx.coroutines.delay(150)
+        section3Visible = true
+        kotlinx.coroutines.delay(150)
+        section4Visible = true
     }
 
     val scope = rememberCoroutineScope()
@@ -88,7 +97,8 @@ fun HomeScreen(
         contract = ActivityResultContracts.TakePicturePreview()
     ) { bitmap: Bitmap? ->
         bitmap?.let {
-            onImageSelected(it.copy(Bitmap.Config.ARGB_8888, true))
+            val copied = it.copy(Bitmap.Config.ARGB_8888, true)
+            onImageSelected(copied ?: it)
         }
     }
 
@@ -140,12 +150,12 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 AnimatedVisibility(
-                    visible = visible,
-                    enter = fadeIn(tween(1200)) + slideInVertically(tween(1200)) { -40 }
+                    visible = section1Visible,
+                    enter = fadeIn(tween(800)) + slideInVertically(tween(800, easing = FastOutSlowInEasing)) { 30 }
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        AppLogo(size = 140.dp)
-                        Spacer(modifier = Modifier.height(32.dp))
+                        AppLogo(size = 150.dp)
+                        Spacer(modifier = Modifier.height(28.dp))
                         Text(
                             text = "WasegMul",
                             style = MaterialTheme.typography.displaySmall,
@@ -162,12 +172,16 @@ fun HomeScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(48.dp))
+                Spacer(modifier = Modifier.height(40.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                AnimatedVisibility(
+                    visible = section2Visible,
+                    enter = fadeIn(tween(700)) + slideInVertically(tween(700, easing = FastOutSlowInEasing)) { 30 }
                 ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
                     GlassCard(
                         modifier = Modifier.weight(1f)
                     ) {
@@ -192,13 +206,19 @@ fun HomeScreen(
                             Text(text = stringResource(R.string.home_neural_scans), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary, letterSpacing = 1.sp)
                         }
                     }
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-                GlassCard(
-                    modifier = Modifier.fillMaxWidth()
+                AnimatedVisibility(
+                    visible = section3Visible,
+                    enter = fadeIn(tween(700)) + slideInVertically(tween(700, easing = FastOutSlowInEasing)) { 30 }
                 ) {
+                    Column {
+                    GlassCard(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                     Column(
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -246,67 +266,76 @@ fun HomeScreen(
                         textAlign = TextAlign.Center
                     )
                 }
-
-                Spacer(modifier = Modifier.height(40.dp))
-
-                GradientActionButton(
-                    text = stringResource(R.string.home_launch_scanner),
-                    icon = Icons.Default.CameraAlt,
-                    onClick = {
-                        permissionLauncher.launch(android.Manifest.permission.CAMERA)
-                    },
-                    containerColor = MaterialTheme.colorScheme.tertiary
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Button(
-                    onClick = { galleryLauncher.launch("image/*") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(64.dp)
-                        .shadow(12.dp, RoundedCornerShape(16.dp)),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    border = BorderStroke(1.dp, LocalGlassColors.current.border)
-                ) {
-                    Icon(Icons.Default.Collections, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = stringResource(R.string.home_import_device),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(48.dp))
-
-                if (recentHistory.isNotEmpty()) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.Start
-                    ) {
-                        Text(
-                            text = stringResource(R.string.home_latest_activity),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                            modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
-                        )
-                        recentHistory.take(3).forEach { record ->
-                            RecentItem(
-                                name = record.subclass,
-                                time = record.timestamp.toRelativeTime(),
-                                type = record.category,
-                                feedback = record.feedback
-                            )
-                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(64.dp))
+                Spacer(modifier = Modifier.height(32.dp))
+
+                AnimatedVisibility(
+                    visible = section4Visible,
+                    enter = fadeIn(tween(700)) + slideInVertically(tween(700, easing = FastOutSlowInEasing)) { 30 }
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                    GradientActionButton(
+                        text = stringResource(R.string.home_launch_scanner),
+                        icon = Icons.Default.CameraAlt,
+                        onClick = {
+                            permissionLauncher.launch(android.Manifest.permission.CAMERA)
+                        },
+                        containerColor = MaterialTheme.colorScheme.tertiary
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = { galleryLauncher.launch("image/*") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(64.dp)
+                            .shadow(12.dp, RoundedCornerShape(16.dp)),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        border = BorderStroke(1.dp, LocalGlassColors.current.border)
+                    ) {
+                        Icon(Icons.Default.Collections, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = stringResource(R.string.home_import_device),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(40.dp))
+
+                    if (recentHistory.isNotEmpty()) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.Start
+                        ) {
+                            Text(
+                                text = stringResource(R.string.home_latest_activity),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                                modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
+                            )
+                            recentHistory.take(3).forEach { record ->
+                                RecentItem(
+                                    name = record.subclass,
+                                    time = record.timestamp.toRelativeTime(),
+                                    type = record.category,
+                                    feedback = record.feedback
+                                )
+                            }
+                        }
+                    }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(48.dp))
 
                 Text(
                     text = stringResource(R.string.app_version_info, BuildConfig.VERSION_NAME),
@@ -428,24 +457,23 @@ fun RecentItem(name: String, time: String, type: String, feedback: String?) {
 
 @Composable
 fun BackgroundGlows() {
-    val tertiaryColor = MaterialTheme.colorScheme.tertiary
-    val secondaryColor = MaterialTheme.colorScheme.secondary
-    val topGlow = remember(tertiaryColor) { Brush.radialGradient(colors = listOf(tertiaryColor.copy(alpha = 0.08f), Color.Transparent)) }
-    val bottomGlow = remember(secondaryColor) { Brush.radialGradient(colors = listOf(secondaryColor.copy(alpha = 0.05f), Color.Transparent)) }
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val topGlow = remember(primaryColor) { Brush.radialGradient(colors = listOf(primaryColor.copy(alpha = 0.10f), Color.Transparent)) }
+    val bottomGlow = remember(primaryColor) { Brush.radialGradient(colors = listOf(primaryColor.copy(alpha = 0.06f), Color.Transparent)) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
                 .size(400.dp)
                 .align(Alignment.TopEnd)
-                .offset(x = 150.dp, y = (-100).dp)
+                .offset(x = 120.dp, y = (-80).dp)
                 .background(topGlow)
         )
         Box(
             modifier = Modifier
                 .size(500.dp)
                 .align(Alignment.BottomStart)
-                .offset(x = (-200).dp, y = 150.dp)
+                .offset(x = (-180).dp, y = 120.dp)
                 .background(bottomGlow)
         )
     }

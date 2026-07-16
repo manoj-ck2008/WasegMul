@@ -17,7 +17,6 @@
 
 # ── TensorFlow Lite (app-specific only — library ships its own rules) ────────
 -keep class com.agrelius.wasegmul.ml.classifiers.** { *; }
--dontwarn org.tensorflow.lite.**
 
 # ── Google Play Services TFLite ──────────────────────────────────────────────
 -dontwarn com.google.android.gms.internal.mlkit_common.**
@@ -36,9 +35,8 @@
 -keep class androidx.camera.core.ImageProxy { *; }
 
 # ── Kotlin coroutines / Guava (TFLite dependency) ────────────────────────────
--dontwarn kotlinx.coroutines.**
 -dontwarn com.google.common.**
--dontwarn com.google.android.gms.**
+-dontwarn com.google.android.gms.internal.mlkit_vision_common.**
 
 # ── Application class (referenced from AndroidManifest) ──────────────────────
 -keep class com.agrelius.wasegmul.WasegMulApp { *; }

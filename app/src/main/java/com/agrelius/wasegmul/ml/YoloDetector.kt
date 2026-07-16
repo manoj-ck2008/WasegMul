@@ -7,7 +7,6 @@ import android.util.Log
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.support.common.FileUtil
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -24,8 +23,9 @@ data class Detection(
     val classIndex: Int
 )
 
-class YoloDetector(private val context: Context) : Closeable {
+class YoloDetector(context: Context) : Closeable {
 
+    private val appContext = context.applicationContext
     private var interpreter: Interpreter? = null
 
     @Volatile
@@ -57,7 +57,7 @@ class YoloDetector(private val context: Context) : Closeable {
         initMutex.withLock {
             if (isInitialized) return
             try {
-                val model = FileUtil.loadMappedFile(context, MODEL_FILENAME)
+                val model = FileUtil.loadMappedFile(appContext, MODEL_FILENAME)
                 val options = Interpreter.Options().apply {
                     setNumThreads(2)
                 }
@@ -213,12 +213,8 @@ class YoloDetector(private val context: Context) : Closeable {
 
     override fun close() {
         isInitialized = false
-        kotlinx.coroutines.runBlocking {
-            detectMutex.withLock {
-                runCatching { interpreter?.close() }
-                interpreter = null
-            }
-        }
+        runCatching { interpreter?.close() }
+        interpreter = null
     }
 
     companion object {

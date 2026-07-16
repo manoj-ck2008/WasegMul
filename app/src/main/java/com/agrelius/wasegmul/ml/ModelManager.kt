@@ -143,9 +143,9 @@ class ModelManager(private val context: Context) {
     }
 
     fun close() {
-        isInitialized = false
         kotlinx.coroutines.runBlocking {
             classifyMutex.withLock {
+                isInitialized = false
                 try {
                     cleanup()
                 } catch (e: Exception) {

@@ -300,14 +300,17 @@ private fun CameraPreviewWithDetection(
                             imageProxy.close()
                             return@setAnalyzer
                         }
-                        try {
-                            val bitmap = imageProxy.toBitmap()
-                            onFrameCaptured(bitmap)
+                        val bitmap = try {
+                            imageProxy.toBitmap().copy(Bitmap.Config.ARGB_8888, false)
                         } catch (e: Exception) {
-                            Log.e("YoloScreen", "Frame analysis failed", e)
+                            Log.e("YoloScreen", "Frame capture failed", e)
+                            null
                         } finally {
                             isProcessing.set(false)
                             imageProxy.close()
+                        }
+                        if (bitmap != null) {
+                            onFrameCaptured(bitmap)
                         }
                     }
 

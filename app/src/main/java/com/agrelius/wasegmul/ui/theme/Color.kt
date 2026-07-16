@@ -36,9 +36,14 @@ val HighConfidenceGreen = Color(0xFF2ECC71)
 val MediumConfidenceYellow = Color(0xFFF1C40F)
 val ErrorRed = Color(0xFFE74C3C)
 
+// --- DARK MODE GREEN-TINTED SURFACES ---
+val DarkSurfaceGreen = Color(0xFF0A1210)
+val DarkSurfaceVariantGreen = Color(0xFF0D1614)
+
 // Glassmorphism
-val DarkGlassBorder = Color(0x33FFFFFF)
-val DarkGlassSurface = Color(0x1AFFFFFF)
+val DarkGlassBorder = Color(0x3300FF94)
+val DarkGlassSurface = Color(0x1400FF94)
+val DarkGlassHighlight = Color(0x0AFFFFFF)
 val LightGlassBorder = Color(0x33000000)
 val LightGlassSurface = Color(0x1A000000)
 
