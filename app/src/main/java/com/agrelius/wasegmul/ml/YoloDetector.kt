@@ -180,6 +180,10 @@ class YoloDetector(context: Context) : Closeable {
 
             if (maxScore < CONFIDENCE_THRESHOLD) continue
 
+            val normW = w / inputSize
+            val normH = h / inputSize
+            if (normW * normH < MIN_BOX_AREA) continue
+
             val left = max(0f, cx - w / 2f) / inputSize
             val top = max(0f, cy - h / 2f) / inputSize
             val right = min(inputSize.toFloat(), cx + w / 2f) / inputSize
@@ -198,6 +202,7 @@ class YoloDetector(context: Context) : Closeable {
         }
 
         return nonMaxSuppression(detections.sortedByDescending { it.confidence })
+            .take(MAX_DISPLAYED_DETECTIONS)
     }
 
     private fun nonMaxSuppression(detections: List<Detection>): List<Detection> {
@@ -247,8 +252,10 @@ class YoloDetector(context: Context) : Closeable {
         private const val TAG = "YoloDetector"
         private const val MODEL_FILENAME = "yolov8n.tflite"
         private const val INPUT_SIZE = 640
-        private const val CONFIDENCE_THRESHOLD = 0.45f
-        private const val IOU_THRESHOLD = 0.5f
+        private const val CONFIDENCE_THRESHOLD = 0.65f
+        private const val IOU_THRESHOLD = 0.45f
+        private const val MIN_BOX_AREA = 0.003f
+        private const val MAX_DISPLAYED_DETECTIONS = 15
         private const val NUM_YOLO_ANCHORS = 8400
     }
 }

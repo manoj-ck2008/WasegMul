@@ -236,7 +236,7 @@ fun YoloScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(4.dp))
-                            detections.take(5).forEach { det ->
+                            detections.take(3).forEach { det ->
                                 Text(
                                     "${det.label} ${(det.confidence * 100).toInt()}%",
                                     style = MaterialTheme.typography.labelSmall,
@@ -244,8 +244,8 @@ fun YoloScreen(
                                     fontSize = 10.sp
                                 )
                             }
-                            if (detections.size > 5) {
-                                Text("+${detections.size - 5} more", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
+                            if (detections.size > 3) {
+                                Text("+${detections.size - 3} more", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
                             }
                         }
                     }
