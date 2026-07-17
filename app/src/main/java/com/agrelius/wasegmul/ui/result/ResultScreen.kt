@@ -247,11 +247,22 @@ fun ResultScreen(
                         }
                     }
                 } else {
+                    val error by viewModel.error.collectAsState()
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        if (error != null) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(error.orEmpty(), color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(horizontal = 32.dp))
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Button(onClick = onBack) { Text("Go Back") }
+                            }
+                        } else {
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        }
                     }
                 }
             }

@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 fun GradientActionButton(
     text: String,
     icon: ImageVector? = null,
+    iconContentDescription: String? = null,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
@@ -77,7 +78,7 @@ fun GradientActionButton(
                 if (icon != null) {
                     Icon(
                         imageVector = icon,
-                        contentDescription = null,
+                        contentDescription = iconContentDescription,
                         tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(24.dp)
                     )

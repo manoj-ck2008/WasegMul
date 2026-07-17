@@ -106,6 +106,9 @@ fun OrganicBackground() {
 
     Canvas(modifier = Modifier.fillMaxSize()) {
         val blobRadius = size.minDimension * 0.38f
+        val blob1Offset = Offset(blob1X * size.width, blob1Y * size.height)
+        val blob2Offset = Offset(blob2X * size.width, blob2Y * size.height)
+        val blob3Offset = Offset(blob3X * size.width, blob3Y * size.height)
 
         drawCircle(
             brush = Brush.radialGradient(
@@ -113,11 +116,11 @@ fun OrganicBackground() {
                     EmeraldVibrant.copy(alpha = 0.07f),
                     Color.Transparent
                 ),
-                center = Offset(blob1X * size.width, blob1Y * size.height),
+                center = blob1Offset,
                 radius = blobRadius
             ),
             radius = blobRadius,
-            center = Offset(blob1X * size.width, blob1Y * size.height)
+            center = blob1Offset
         )
 
         drawCircle(
@@ -126,11 +129,11 @@ fun OrganicBackground() {
                     SageGreen.copy(alpha = 0.05f),
                     Color.Transparent
                 ),
-                center = Offset(blob2X * size.width, blob2Y * size.height),
+                center = blob2Offset,
                 radius = blobRadius * 0.75f
             ),
             radius = blobRadius * 0.75f,
-            center = Offset(blob2X * size.width, blob2Y * size.height)
+            center = blob2Offset
         )
 
         drawCircle(
@@ -139,15 +142,14 @@ fun OrganicBackground() {
                     EmeraldVibrant.copy(alpha = 0.04f),
                     Color.Transparent
                 ),
-                center = Offset(blob3X * size.width, blob3Y * size.height),
+                center = blob3Offset,
                 radius = blobRadius * 0.6f
             ),
             radius = blobRadius * 0.6f,
-            center = Offset(blob3X * size.width, blob3Y * size.height)
+            center = blob3Offset
         )
 
-        repeat(12) { i ->
-            val (fx, fy) = leafPositions[i]
+        leafPositions.forEachIndexed { i, (fx, fy) ->
             val x = fx * size.width
             val y = fy * size.height
             val scale = leafScales[i]

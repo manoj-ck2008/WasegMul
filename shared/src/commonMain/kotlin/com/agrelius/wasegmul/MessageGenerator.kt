@@ -225,8 +225,7 @@ object MessageGenerator {
         topCategories: List<Pair<String, Float>>,
         mode: ClassificationMode
     ): String = when (mode) {
-        ClassificationMode.BOTH_AGREE_HIGH -> rng.nextFrom(agreeHighConfidence)(category, subcategory)
-        ClassificationMode.BOTH_AGREE -> rng.nextFrom(agreeHighConfidence)(category, subcategory)
+        ClassificationMode.BOTH_AGREE_HIGH, ClassificationMode.BOTH_AGREE -> rng.nextFrom(agreeHighConfidence)(category, subcategory)
         ClassificationMode.CATEGORY_OVERRIDE_MATCH -> {
             val best = findBestSubclassMatch(category, topSubcategories)
             if (best != null) {
@@ -262,7 +261,7 @@ object MessageGenerator {
             .maxByOrNull { it.second }
     }
 
-    private fun <T> Random.nextFrom(list: List<T>): T = list[nextInt(list.size)]
+    private fun <T> Random.nextFrom(list: List<T>): T = list.random()
 }
 
 /**

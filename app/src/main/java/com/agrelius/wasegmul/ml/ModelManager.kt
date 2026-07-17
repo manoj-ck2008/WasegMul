@@ -8,7 +8,8 @@ import com.agrelius.wasegmul.ml.classifiers.CategoryClassifier
 import com.agrelius.wasegmul.ml.classifiers.SubclassClassifier
 import com.google.android.gms.tflite.java.TfLite
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -80,7 +81,6 @@ class ModelManager(private val context: Context) {
         }
 
         classifyMutex.withLock {
-            // Capture local references to prevent TOCTOU race with close()/cleanup().
             val catClassifier = categoryClassifier
             val subClassifier = subclassClassifier
 
@@ -89,30 +89,29 @@ class ModelManager(private val context: Context) {
             var catError: String? = null
             var subError: String? = null
 
-            // Run category classifier (non-fatal on failure).
-            try {
-                if (catClassifier != null) {
-                    catResult = catClassifier.classify(bitmap)
-                } else {
-                    catError = "Category classifier not available (closed)"
+            coroutineScope {
+                val catJob = async {
+                    try {
+                        if (catClassifier != null) catClassifier.classify(bitmap) to null
+                        else null to "Category classifier not available (closed)"
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Category classifier threw", e)
+                        null to (e.message ?: "Category classifier error")
+                    }
                 }
-                if (catResult == null && catError == null) catError = "Category classifier returned null"
-            } catch (e: Exception) {
-                Log.e(TAG, "Category classifier threw", e)
-                catError = e.message ?: "Category classifier error"
-            }
-
-            // Run subclass classifier (non-fatal on failure).
-            try {
-                if (subClassifier != null) {
-                    subResult = subClassifier.classify(bitmap)
-                } else {
-                    subError = "Subclass classifier not available (closed)"
+                val subJob = async {
+                    try {
+                        if (subClassifier != null) subClassifier.classify(bitmap) to null
+                        else null to "Subclass classifier not available (closed)"
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Subclass classifier threw", e)
+                        null to (e.message ?: "Subclass classifier error")
+                    }
                 }
-                if (subResult == null && subError == null) subError = "Subclass classifier returned null"
-            } catch (e: Exception) {
-                Log.e(TAG, "Subclass classifier threw", e)
-                subError = e.message ?: "Subclass classifier error"
+                val (catRes, catErr) = catJob.await()
+                val (subRes, subErr) = subJob.await()
+                catResult = catRes; catError = catErr
+                subResult = subRes; subError = subErr
             }
 
             // Both failed → total failure.
@@ -143,16 +142,11 @@ class ModelManager(private val context: Context) {
     }
 
     fun close() {
-        kotlinx.coroutines.runBlocking {
-            classifyMutex.withLock {
-                isInitialized = false
-                try {
-                    cleanup()
-                } catch (e: Exception) {
-                    Log.w(TAG, "Error during ModelManager cleanup", e)
-                }
-            }
-        }
+        isInitialized = false
+        runCatching { categoryClassifier?.close() }
+        runCatching { subclassClassifier?.close() }
+        categoryClassifier = null
+        subclassClassifier = null
     }
 
     private fun cleanup() {

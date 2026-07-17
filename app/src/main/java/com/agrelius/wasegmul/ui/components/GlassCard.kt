@@ -41,15 +41,16 @@ fun GlassCard(
             )
         )
     }
+    val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
     Box(
         modifier = modifier
-            .shadow(8.dp, RoundedCornerShape(cornerRadius), ambientColor = glassColors.border.copy(alpha = 0.15f))
-            .clip(RoundedCornerShape(cornerRadius))
+            .shadow(8.dp, shape, ambientColor = glassColors.border.copy(alpha = 0.15f))
+            .clip(shape)
             .background(bgBrush)
             .border(
                 width = 1.dp,
                 brush = borderBrush,
-                shape = RoundedCornerShape(cornerRadius)
+                shape = shape
             )
             .padding(20.dp)
     ) {

@@ -53,6 +53,9 @@ object MLArbitrator {
 
     private fun arbitrateFull(prediction: PredictionResult): PredictionResult {
         val rawCategory = prediction.category
+        if (rawCategory.isBlank()) {
+            return arbitrateNeither(prediction)
+        }
         val catConf = prediction.categoryConfidence
         val subConf = prediction.subcategoryConfidence
         val mappedCategory = WasteMapping.getCategory(prediction.subcategory)
@@ -95,8 +98,7 @@ object MLArbitrator {
 
         // Both models agree on the category → high confidence.
         if (rawCategory == mappedCategory) {
-            val mode = if (catConf > 0.85f && subConf > SUBCLASS_CONFIDENCE_THRESHOLD)
-                ClassificationMode.BOTH_AGREE_HIGH else ClassificationMode.BOTH_AGREE
+            val mode = ClassificationMode.BOTH_AGREE
             val msg = MessageGenerator.generate(
                 category = rawCategory,
                 subcategory = prediction.subcategory,
@@ -291,7 +293,7 @@ object MLArbitrator {
      * [topPredictions]. The remaining probability mass (beyond the top-K) is conservatively
      * lumped into a single "rest" bucket.
      */
-    fun computeEntropy(topPredictions: List<Pair<String, Float>>): Float {
+    private fun computeEntropy(topPredictions: List<Pair<String, Float>>): Float {
         if (topPredictions.isEmpty()) return 0f
         val accounted = topPredictions.sumOf { it.second.toDouble() }.toFloat()
         val rest = (1f - accounted).coerceAtLeast(0f)

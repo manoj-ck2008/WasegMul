@@ -12,8 +12,12 @@
 
 # ── Room (app-specific only — library ships its own rules) ───────────────────
 -keep class com.agrelius.wasegmul.data.WasteRecord { *; }
--keep class com.agrelius.wasegmul.data.WasteDao { *; }
+-keep class com.agrelius.wasegmul.data.WasteDao { <methods>; }
 -keep class com.agrelius.wasegmul.data.WasteDatabase { *; }
+
+# ── ViewModel Factories (needed for R8 to keep Factory.create()) ──────────────
+-keep class * extends androidx.lifecycle.ViewModel
+-keep class * extends androidx.lifecycle.ViewModelProvider$Factory { *; }
 
 # ── TensorFlow Lite (app-specific only — library ships its own rules) ────────
 -keep class com.agrelius.wasegmul.ml.classifiers.** { *; }
@@ -36,7 +40,6 @@
 
 # ── Kotlin coroutines / Guava (TFLite dependency) ────────────────────────────
 -dontwarn com.google.common.**
--dontwarn com.google.android.gms.internal.mlkit_vision_common.**
 
 # ── Application class (referenced from AndroidManifest) ──────────────────────
 -keep class com.agrelius.wasegmul.WasegMulApp { *; }

@@ -40,17 +40,18 @@ fun HeroCard(
             )
         )
     }
+    val shape = remember { RoundedCornerShape(28.dp) }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .shadow(6.dp, RoundedCornerShape(28.dp), ambientColor = glassColors.border.copy(alpha = 0.1f))
-            .clip(RoundedCornerShape(28.dp))
+            .shadow(6.dp, shape, ambientColor = glassColors.border.copy(alpha = 0.1f))
+            .clip(shape)
             .background(glassGradient)
             .border(
                 width = 1.dp,
                 brush = borderBrush,
-                shape = RoundedCornerShape(28.dp)
+                shape = shape
             )
             .padding(24.dp)
     ) {

@@ -9,6 +9,7 @@ import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.support.common.FileUtil
 import org.tensorflow.lite.support.label.TensorLabel
 import org.tensorflow.lite.support.tensorbuffer.TensorBuffer
+import kotlin.jvm.Volatile
 
 /**
  * Wraps the EfficientNet subclass model and returns the top-[TOP_K] subclass predictions ranked
@@ -18,38 +19,39 @@ import org.tensorflow.lite.support.tensorbuffer.TensorBuffer
  */
 class SubclassClassifier(context: Context) {
 
-    private val interpreter: Interpreter
+    @Volatile private var interpreter: Interpreter? = null
+    @Volatile private var closed = false
     private val labels: List<String>
+    private val outputBuffer: TensorBuffer
 
     init {
         val model = FileUtil.loadMappedFile(context, "subclass_model_finetuned.tflite")
         labels = FileUtil.loadLabels(context, "subclass_classes.txt")
 
         val options = Interpreter.Options().apply { setNumThreads(NUM_THREADS) }
-        interpreter = Interpreter(model, options)
+        val interp = Interpreter(model, options)
 
-        val outputShape = interpreter.getOutputTensor(0).shape()
+        val outputShape = interp.getOutputTensor(0).shape()
         if (outputShape.last() != labels.size) {
-            runCatching { interpreter.close() }
+            runCatching { interp.close() }
             require(outputShape.last() == labels.size) {
                 "Subclass model output shape ${outputShape.contentToString()} does not match " +
                     "${labels.size} labels in subclass_classes.txt"
             }
         }
+        outputBuffer = TensorBuffer.createFixedSize(outputShape, interp.getOutputTensor(0).dataType())
+        interpreter = interp
         Log.d(TAG, "Output shape: ${outputShape.contentToString()}, labels size: ${labels.size}")
     }
 
     fun classify(bitmap: Bitmap): InternalResult {
         require(!bitmap.isRecycled) { "Bitmap is recycled" }
         require(bitmap.width > 0 && bitmap.height > 0) { "Bitmap has zero dimensions" }
+        val interp = interpreter ?: throw IllegalStateException("Classifier has been closed")
+        require(!closed) { "Classifier has been closed" }
+
         val tensorImage = ImagePreprocessor.preprocess(bitmap)
-
-        val outputBuffer = TensorBuffer.createFixedSize(
-            interpreter.getOutputTensor(0).shape(),
-            interpreter.getOutputTensor(0).dataType()
-        )
-
-        interpreter.run(tensorImage.buffer, outputBuffer.buffer.rewind())
+        interp.run(tensorImage.buffer, outputBuffer.buffer.rewind())
 
         val labeledProbability = TensorLabel(labels, outputBuffer).mapWithFloatValue
 
@@ -67,7 +69,9 @@ class SubclassClassifier(context: Context) {
     }
 
     fun close() {
-        interpreter.close()
+        closed = true
+        runCatching { interpreter?.close() }
+        interpreter = null
     }
 
     companion object {

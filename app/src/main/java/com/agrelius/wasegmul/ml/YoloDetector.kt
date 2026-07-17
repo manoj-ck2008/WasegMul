@@ -30,11 +30,16 @@ class YoloDetector(context: Context) : Closeable {
 
     @Volatile
     private var isInitialized = false
+    @Volatile
+    private var closed = false
 
     private val initMutex = Mutex()
     private val detectMutex = Mutex()
 
     private val inputSize = INPUT_SIZE
+
+    private var inputBuffer: ByteBuffer? = null
+    private var outputBuffer: ByteBuffer? = null
 
     private val cocoLabels = listOf(
         "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train",
@@ -61,7 +66,16 @@ class YoloDetector(context: Context) : Closeable {
                 val options = Interpreter.Options().apply {
                     setNumThreads(2)
                 }
-                interpreter = Interpreter(model, options)
+                val interp = Interpreter(model, options)
+                inputBuffer = ByteBuffer.allocateDirect(1 * INPUT_SIZE * INPUT_SIZE * 3 * 4).apply {
+                    order(ByteOrder.nativeOrder())
+                }
+                val outputShape = interp.getOutputTensor(0).shape()
+                val outputSize = outputShape.fold(1) { acc, i -> acc * i }
+                outputBuffer = ByteBuffer.allocateDirect(outputSize * 4).apply {
+                    order(ByteOrder.nativeOrder())
+                }
+                interpreter = interp
                 isInitialized = true
                 Log.d(TAG, "YOLO detector initialized — ${MODEL_FILENAME}")
             } catch (e: Exception) {
@@ -78,22 +92,25 @@ class YoloDetector(context: Context) : Closeable {
         }
 
         detectMutex.withLock {
+            if (closed) return@withContext emptyList()
             val interp = interpreter ?: return@withContext emptyList()
+            val inBuf = inputBuffer ?: return@withContext emptyList()
+            val outBuf = outputBuffer ?: return@withContext emptyList()
 
             val resized = Bitmap.createScaledBitmap(bitmap, inputSize, inputSize, true)
             try {
-                val inputBuffer = bitmapToByteBuffer(resized)
+                inBuf.rewind()
+                bitmapToByteBuffer(resized, inBuf)
 
+                outBuf.rewind()
+
+                interp.run(inBuf, outBuf)
+
+                outBuf.rewind()
                 val outputShape = interp.getOutputTensor(0).shape()
                 val outputSize = outputShape.fold(1) { acc, i -> acc * i }
-                val outputBuffer = ByteBuffer.allocateDirect(outputSize * 4)
-                outputBuffer.order(ByteOrder.nativeOrder())
-
-                interp.run(inputBuffer, outputBuffer)
-
-                outputBuffer.rewind()
                 val rawOutput = FloatArray(outputSize)
-                outputBuffer.asFloatBuffer().get(rawOutput)
+                outBuf.asFloatBuffer().get(rawOutput)
 
                 parseDetections(rawOutput, outputShape)
             } catch (e: Exception) {
@@ -105,9 +122,7 @@ class YoloDetector(context: Context) : Closeable {
         }
     }
 
-    private fun bitmapToByteBuffer(bitmap: Bitmap): ByteBuffer {
-        val buffer = ByteBuffer.allocateDirect(1 * inputSize * inputSize * 3 * 4)
-        buffer.order(ByteOrder.nativeOrder())
+    private fun bitmapToByteBuffer(bitmap: Bitmap, buffer: ByteBuffer) {
         val pixels = IntArray(inputSize * inputSize)
         bitmap.getPixels(pixels, 0, inputSize, 0, 0, inputSize, inputSize)
         for (pixel in pixels) {
@@ -115,7 +130,6 @@ class YoloDetector(context: Context) : Closeable {
             buffer.putFloat(((pixel shr 8) and 0xFF) / 255.0f)
             buffer.putFloat((pixel and 0xFF) / 255.0f)
         }
-        return buffer
     }
 
     private fun parseDetections(raw: FloatArray, outputShape: IntArray): List<Detection> {
@@ -187,15 +201,18 @@ class YoloDetector(context: Context) : Closeable {
     }
 
     private fun nonMaxSuppression(detections: List<Detection>): List<Detection> {
+        return detections.groupBy { it.classIndex }
+            .flatMap { (_, classDets) -> nmsPerClass(classDets) }
+            .sortedByDescending { it.confidence }
+    }
+
+    private fun nmsPerClass(detections: List<Detection>): List<Detection> {
         val result = mutableListOf<Detection>()
         val remaining = detections.toMutableList()
-
         while (remaining.isNotEmpty()) {
             val best = remaining.removeAt(0)
             result.add(best)
-            remaining.removeAll { other ->
-                iou(best.boundingBox, other.boundingBox) > IOU_THRESHOLD
-            }
+            remaining.removeAll { other -> iou(best.boundingBox, other.boundingBox) > IOU_THRESHOLD }
         }
         return result
     }
@@ -212,9 +229,18 @@ class YoloDetector(context: Context) : Closeable {
     }
 
     override fun close() {
-        isInitialized = false
+        closed = true
+        runCatching {
+            kotlinx.coroutines.runBlocking {
+                initMutex.withLock { }
+                detectMutex.withLock { }
+            }
+        }
         runCatching { interpreter?.close() }
         interpreter = null
+        inputBuffer = null
+        outputBuffer = null
+        isInitialized = false
     }
 
     companion object {

@@ -58,7 +58,7 @@ fun AppNavigation() {
                     navController.navigate(Screen.History.route) { launchSingleTop = true }
                 },
                 onNavigateToSettings = {
-                    navController.navigate(Screen.Settings.route)
+                    navController.navigate(Screen.Settings.route) { launchSingleTop = true }
                 },
                 onNavigateToYolo = {
                     navController.navigate(Screen.Yolo.route) { launchSingleTop = true }
@@ -108,7 +108,7 @@ fun AppNavigation() {
                         popUpTo(Screen.Home.route) { inclusive = true }
                     }
                 },
-                onBack = { navController.popBackStack() }
+                onBack = { classificationViewModel.releaseBitmap(); navController.popBackStack() }
             )
         }
 

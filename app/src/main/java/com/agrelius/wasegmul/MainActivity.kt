@@ -3,6 +3,7 @@ package com.agrelius.wasegmul
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -18,6 +19,7 @@ import com.agrelius.wasegmul.utils.ThemeMode
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         val app = applicationContext as WasegMulApp
         setContent {
             val themeMode by app.settingsManager.themeMode.collectAsState(initial = ThemeMode.DARK)

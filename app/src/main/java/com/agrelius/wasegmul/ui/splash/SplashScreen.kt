@@ -66,20 +66,20 @@ fun SplashScreen(onTimeout: () -> Unit) {
     )
 
     LaunchedEffect(Unit) {
-        delay(1500)
+        delay(600)
         stage = 1 // Logo emerges from darkness
         
-        delay(1200)
+        delay(400)
         // Cinematic Fluid Title Writing
         fullTitle.forEachIndexed { index, _ ->
             displayedTitle = fullTitle.take(index + 1)
-            delay(250)
+            delay(100)
         }
         
-        delay(800)
+        delay(300)
         stage = 2 // Vision & Petals Bloom
         
-        delay(5000)
+        delay(500)
         if (!navigated) {
             navigated = true
             onTimeout()

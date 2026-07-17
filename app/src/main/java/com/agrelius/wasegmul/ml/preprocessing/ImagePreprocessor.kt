@@ -21,18 +21,16 @@ object ImagePreprocessor {
 
     fun preprocess(bitmap: Bitmap): TensorImage {
         val cropped = centerCropToSquare(bitmap)
-        val tensorImage = TensorImage(DataType.FLOAT32)
-        tensorImage.load(cropped)
-        // Build a fresh ImageProcessor per call to avoid thread-safety issues with ResizeOp.
-        val processor = org.tensorflow.lite.support.image.ImageProcessor.Builder()
-            .add(ResizeOp(INPUT_SIZE, INPUT_SIZE, ResizeOp.ResizeMethod.BILINEAR))
-            .build()
-        val result = processor.process(tensorImage)
-        // Recycle the intermediate cropped bitmap if it was created (not the original).
-        if (cropped !== bitmap) {
-            cropped.recycle()
+        return try {
+            val tensorImage = TensorImage(DataType.FLOAT32)
+            tensorImage.load(cropped)
+            val processor = org.tensorflow.lite.support.image.ImageProcessor.Builder()
+                .add(ResizeOp(INPUT_SIZE, INPUT_SIZE, ResizeOp.ResizeMethod.BILINEAR))
+                .build()
+            processor.process(tensorImage)
+        } finally {
+            if (cropped !== bitmap) cropped.recycle()
         }
-        return result
     }
 
     /**

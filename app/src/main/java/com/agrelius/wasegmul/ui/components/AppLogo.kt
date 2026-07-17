@@ -59,7 +59,7 @@ fun AppLogo(
         initialValue = 0.15f,
         targetValue = 0.45f,
         animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = SinEasing()),
+            animation = tween(3000, easing = SinEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "glow_pulse"
@@ -123,6 +123,37 @@ fun AppLogo(
                     start = Offset(center.x + (d * cos(r1)).toFloat(), center.y + (d * sin(r1)).toFloat()),
                     end = Offset(center.x + (d * cos(r2)).toFloat(), center.y + (d * sin(r2)).toFloat()),
                     strokeWidth = 0.8.dp.toPx()
+                )
+            }
+
+            // ORBITING NEURAL NODES — drawn in same Canvas for performance
+            for (i in 0..4) {
+                val nodeAngle = i * 72f - (if (animate) rotation * 0.6f else 0f)
+                val dist = sizePx / 2.3f
+                val nRad = Math.toRadians(nodeAngle.toDouble())
+                val nx = center.x + (dist * cos(nRad)).toFloat()
+                val ny = center.y + (dist * sin(nRad)).toFloat()
+
+                // Outer ring
+                drawCircle(
+                    color = EmeraldVibrant,
+                    radius = 9.dp.toPx() * nodePulse,
+                    style = Stroke(1.dp.toPx()),
+                    alpha = (1f - nodePulse) * 0.35f
+                )
+                // Inner core
+                drawCircle(
+                    color = Color.White,
+                    radius = 2.5.dp.toPx(),
+                    center = Offset(nx, ny),
+                    alpha = nodePulse
+                )
+                // Glow
+                drawCircle(
+                    color = MintAccent,
+                    radius = 5.dp.toPx(),
+                    center = Offset(nx, ny),
+                    alpha = nodePulse * 0.2f
                 )
             }
         }
@@ -196,44 +227,12 @@ fun AppLogo(
             }
         }
 
-        // ORBITING NEURAL NODES — 5 nodes for richer network feel
-        for (i in 0..4) {
-            val angle = i * 72f - (rotation * 0.6f)
-            val dist = (sizePx / 2.3f)
-            val rad = Math.toRadians(angle.toDouble())
-            val x = (dist * cos(rad)).toFloat()
-            val y = (dist * sin(rad)).toFloat()
 
-            Canvas(modifier = Modifier.offset(
-                x = with(density) { x.toDp() },
-                y = with(density) { y.toDp() }
-            )) {
-                // Outer ring
-                drawCircle(
-                    color = EmeraldVibrant,
-                    radius = 9.dp.toPx() * nodePulse,
-                    style = Stroke(1.dp.toPx()),
-                    alpha = (1f - nodePulse) * 0.35f
-                )
-                // Inner core
-                drawCircle(
-                    color = Color.White,
-                    radius = 2.5.dp.toPx(),
-                    alpha = nodePulse
-                )
-                // Glow
-                drawCircle(
-                    color = MintAccent,
-                    radius = 5.dp.toPx(),
-                    alpha = nodePulse * 0.2f
-                )
-            }
-        }
     }
 }
 
 /** Smooth sine easing for organic pulsing. */
-private class SinEasing : Easing {
+private object SinEasing : Easing {
     override fun transform(fraction: Float): Float =
         ((sin(fraction * PI) / PI) + 0.5).toFloat().coerceIn(0f, 1f)
 }

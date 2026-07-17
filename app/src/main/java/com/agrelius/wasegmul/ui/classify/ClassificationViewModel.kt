@@ -17,10 +17,10 @@ import com.agrelius.wasegmul.WasteMapping
 import com.agrelius.wasegmul.WasteRecord
 import com.agrelius.wasegmul.ml.ModelManager
 import com.agrelius.wasegmul.repository.WasteRepository
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 
 class ClassificationViewModel(
@@ -44,8 +44,8 @@ class ClassificationViewModel(
     private val _currentRecord = MutableStateFlow<WasteRecord?>(null)
     val currentRecord: StateFlow<WasteRecord?> = _currentRecord
 
-    private val _navigateToResult = MutableSharedFlow<Unit>(replay = 1)
-    val navigateToResult = _navigateToResult.asSharedFlow()
+    private val _navigateToResult = Channel<Unit>(Channel.CONFLATED)
+    val navigateToResult = _navigateToResult.receiveAsFlow()
 
     fun initModel(context: Context) {
         if (modelManager == null) {
@@ -100,7 +100,7 @@ class ClassificationViewModel(
                         )
 
                         _classificationResult.value = result
-                        _navigateToResult.tryEmit(Unit)
+                        _navigateToResult.trySend(Unit)
 
                         val estimatedWeight = if (isUncertain) 0.0
                         else WasteMapping.getWeight(result.subclass)
@@ -138,7 +138,7 @@ class ClassificationViewModel(
                 _error.value = "Unable to load the AI models. Restart the app or check available storage."
             } catch (e: Exception) {
                 Log.e(TAG, "Unexpected error during classification", e)
-                _error.value = "An unexpected error occurred: ${e.message ?: "Unknown error"}. Please try again."
+                _error.value = "An unexpected error occurred. Please try again."
             } finally {
                 _isLoading.value = false
             }
@@ -193,7 +193,11 @@ class ClassificationViewModel(
             _classificationResult.value = null
             _currentRecord.value = null
             try {
-                val record = repository.getRecordById(recordId) ?: return@launch
+                val record = repository.getRecordById(recordId)
+                if (record == null) {
+                    _error.value = "Record not found. It may have been deleted."
+                    return@launch
+                }
                 val info = WasteKnowledgeBase.getInfo(record.category, record.subclass)
                 _classificationResult.value = ClassificationResult(
                     category = record.category,

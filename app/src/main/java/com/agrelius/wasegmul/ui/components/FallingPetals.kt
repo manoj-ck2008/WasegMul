@@ -78,7 +78,8 @@ fun FallingPetals() {
 
             val xDrift = sin(adjustedTime * 6.28f * 2f + petal.xWavePhase) * petal.xWaveAmplitude
             val windGust = cos(adjustedTime * 6.28f * 0.7f + petal.xWavePhase * 0.5f) * 0.008f
-            val currentX = ((petal.startX + xDrift + windGust * adjustedTime) % 1f) * size.width
+            val rawX = petal.startX + xDrift + windGust * adjustedTime
+            val currentX = (((rawX % 1f) + 1f) % 1f) * size.width
 
             val currentRotation = petal.initialRotation + adjustedTime * petal.rotationSpeed * 360f
 

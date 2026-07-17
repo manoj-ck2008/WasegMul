@@ -57,14 +57,13 @@ fun HomeScreen(
     val context = LocalContext.current
     val recentHistory by viewModel.recentHistory.collectAsState()
     var showImpactDetail by remember { mutableStateOf(false) }
+    var showPermissionRationale by remember { mutableStateOf(false) }
     var section1Visible by remember { mutableStateOf(false) }
     var section2Visible by remember { mutableStateOf(false) }
     var section3Visible by remember { mutableStateOf(false) }
     var section4Visible by remember { mutableStateOf(false) }
 
-    val totalImpact by remember {
-        derivedStateOf { recentHistory.sumOf { it.estimatedWeight } }
-    }
+    val totalImpact = remember(recentHistory) { recentHistory.sumOf { it.estimatedWeight } }
 
     LaunchedEffect(Unit) {
         section1Visible = true
@@ -108,7 +107,7 @@ fun HomeScreen(
         if (isGranted) {
             cameraLauncher.launch()
         } else {
-            galleryLauncher.launch("image/*")
+            showPermissionRationale = true
         }
     }
 
@@ -128,6 +127,24 @@ fun HomeScreen(
         ) {
             OrganicBackground()
             BackgroundGlows()
+
+            if (showPermissionRationale) {
+                AlertDialog(
+                    onDismissRequest = { showPermissionRationale = false },
+                    title = { Text("Camera Permission Required") },
+                    text = { Text("Camera access is needed to scan and classify waste items. Please grant the permission to use the scanner.") },
+                    confirmButton = {
+                        TextButton(onClick = { showPermissionRationale = false; permissionLauncher.launch(android.Manifest.permission.CAMERA) }) {
+                            Text("Try Again")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showPermissionRationale = false; galleryLauncher.launch("image/*") }) {
+                            Text("Use Gallery Instead")
+                        }
+                    }
+                )
+            }
 
             Column(
                 modifier = Modifier

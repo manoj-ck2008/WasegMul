@@ -1,5 +1,4 @@
 import java.util.Properties
-import java.io.FileInputStream
 
 plugins {
     alias(libs.plugins.android.application)
@@ -17,7 +16,7 @@ val appVersionCode = project.property("VERSION_CODE").toString().toInt()
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties()
 if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
 }
 
 android {
@@ -62,11 +61,7 @@ android {
             )
             // Release builds MUST be signed with the release key.
             // CI/CD must provide keystore.properties; local dev uses debug builds.
-            signingConfig = if (keystoreProperties.isNotEmpty()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
@@ -82,8 +77,7 @@ android {
     }
     packaging {
         jniLibs {
-            // Required by TFLite native libraries for 16 KB page-size support.
-            useLegacyPackaging = true
+            useLegacyPackaging = false
         }
     }
 }
@@ -93,8 +87,10 @@ tasks.configureEach {
     if (name.startsWith("merge") && name.contains("Release", ignoreCase = true)) {
         doFirst {
             if (keystoreProperties.isEmpty()) {
-                logger.warn("WARNING: No keystore.properties found — release APK is signed with debug key. " +
-                    "For production releases, create keystore.properties in the project root.")
+                throw GradleException(
+                    "RELEASE BUILD BLOCKED: No keystore.properties found. " +
+                    "Create keystore.properties in the project root with release signing credentials."
+                )
             }
         }
     }
