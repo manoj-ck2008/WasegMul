@@ -1,166 +1,126 @@
-# Architecture
+# WasegMul Architecture
 
-## Overview
+## System Architecture
 
-WasegMul follows the MVVM (Model-View-ViewModel) architecture pattern with a clean separation between UI, domain, and data layers. The app uses Jetpack Compose for UI, TensorFlow Lite for on-device ML inference, and Room for local persistence.
+WasegMul uses a layered architecture with clear separation of concerns:
 
-## Layers
-
-### Presentation Layer
-
-- **Screens**: Jetpack Compose composables that define the UI
-- **ViewModels**: Manage UI state and business logic
-- **Navigation**: Compose Navigation with typed routes
-
-### Domain Layer
-
-- **ML Pipeline**: ModelManager, MLArbitrator, MessageGenerator
-- **Classifiers**: CategoryClassifier, SubclassClassifier, YoloDetector
-- **Knowledge Base**: WasteKnowledgeBase with disposal guidance
-
-### Data Layer
-
-- **Room Database**: WasteRecord entity, WasteDao, WasteDatabase
-- **Repository**: WasteRepository as single source of truth
-- **Preferences**: SettingsManager using DataStore
+```
+┌─────────────────────────────────────────────────┐
+│                   UI Layer                       │
+│  Compose Screens + ViewModels + Components      │
+├─────────────────────────────────────────────────┤
+│                Navigation Layer                  │
+│  Screen Routes + NavHost + Arguments            │
+├─────────────────────────────────────────────────┤
+│                  ML Layer                        │
+│  ModelManager + Classifiers + YOLO + Preprocess │
+├─────────────────────────────────────────────────┤
+│               Domain Layer (shared)             │
+│  MLArbitrator + KnowledgeBase + WasteMapping   │
+├─────────────────────────────────────────────────┤
+│                 Data Layer                       │
+│  Room DB + DAO + Repository + DataStore         │
+└─────────────────────────────────────────────────┘
+```
 
 ## ML Pipeline
 
-```
-Image Input (Camera/Gallery)
-        │
-        ▼
-┌─────────────────────┐
-│  ImagePreprocessor   │  Center-crop, resize to 224x224, FLOAT32
-└─────────────────────┘
-        │
-        ├──────────────────┐
-        ▼                  ▼
-┌──────────────┐  ┌──────────────┐
-│   Category   │  │   Subclass   │  EfficientNet-based TFLite models
-│  Classifier  │  │  Classifier  │
-└──────────────┘  └──────────────┘
-        │                  │
-        └──────────────────┘
-                │
-                ▼
-┌─────────────────────┐
-│    MLArbitrator      │  Resolves conflicts using Shannon entropy
-└─────────────────────┘
-        │
-        ├── Full Classification (models agree)
-        ├── Override Mode (category overrides subclass)
-        └── Degraded Mode (one model failed)
-                │
-                ▼
-┌─────────────────────┐
-│  WasteKnowledgeBase  │  Disposal guidance, environmental insights
-└─────────────────────┘
-        │
-        ▼
-┌─────────────────────┐
-│   ResultScreen       │  Display prediction, insights, feedback UI
-└─────────────────────┘
-```
+The classification pipeline processes images through these stages:
+
+### 1. Image Acquisition
+- User captures via camera or selects from gallery
+- Image is decoded to `Bitmap` and passed to `ClassificationViewModel`
+
+### 2. Preprocessing (`ImagePreprocessor`)
+- Center-crop to square aspect ratio
+- Resize to 224×224 pixels
+- Convert to FLOAT32 tensor with normalization
+
+### 3. Parallel Inference (`ModelManager`)
+- Both models run in parallel on separate threads
+- Category model: 4-class EfficientNet → E-Waste/Organic/Recyclable/Trash
+- Subclass model: 30-class EfficientNet → specific waste type
+- Top-K predictions extracted from each model
+
+### 4. Arbitration (`MLArbitrator`)
+- Cross-checks subclass predictions against category predictions
+- Computes Shannon entropy for uncertainty estimation
+- Determines classification mode (8 possible states)
+- Assigns confidence level (High/Medium/Low/Uncertain)
+
+### 5. Knowledge Lookup (`WasteKnowledgeBase`)
+- Maps subclass label to disposal guide
+- Provides environmental impact information
+- Includes recycling benefits and authoritative sources
+
+### 6. Result Presentation
+- Displays category, subclass, confidence, and disposal guide
+- User can provide feedback (Correct/Incorrect/Not Sure)
+- Record persisted to Room database
 
 ## YOLO Detection Pipeline
 
+Separate from the classification pipeline:
+
+1. CameraX preview provides live frames
+2. Frames are converted to `Bitmap` via `ImageProxy`
+3. `YoloDetector` runs YOLOv8n inference
+4. Non-maximum suppression (NMS) filters detections
+5. Results are rendered as bounding boxes on the camera preview
+
+## Module Architecture
+
+### `app` Module (Android)
+
+Contains all Android-specific code:
+- **ML inference**: TFLite model loading and execution
+- **UI**: Compose screens, components, and theme
+- **Data**: Room database and DataStore
+- **Camera**: CameraX integration
+
+### `shared` Module (Kotlin Multiplatform)
+
+Contains platform-independent domain logic:
+- **MLArbitrator**: Prediction cross-checking logic
+- **WasteKnowledgeBase**: Disposal information for 30 waste types
+- **WasteMapping**: Subclass-to-category mapping with material metadata
+- **PredictionCodec**: String codec for persisting predictions
+- **MessageGenerator**: Dynamic user-facing messages per classification mode
+- **CommonModels**: Shared data classes (WasteRecord, PredictionResult, etc.)
+
+### `iosApp` Module (SwiftUI)
+
+Minimal iOS shell that bridges to the shared Kotlin module:
+- Demonstrates knowledge base lookup via `IOSBridge`
+- Does not yet include camera or ML inference
+
+## Data Flow
+
 ```
-CameraX Preview
-        │
-        ▼
-┌─────────────────────┐
-│    YoloDetector      │  YOLOv8n inference
-│  640x640 input       │
-│  8400 anchor boxes   │
-└─────────────────────┘
-        │
-        ▼
-┌─────────────────────┐
-│   Non-Maximum        │  IoU-based suppression
-│   Suppression        │  Confidence threshold: 0.65
-│                      │  IoU threshold: 0.45
-└─────────────────────┘
-        │
-        ▼
-┌─────────────────────┐
-│  Bounding Boxes      │  Displayed on camera preview
-│  + Labels            │
-└─────────────────────┘
+User Action → ViewModel → Repository → Room DB
+                    ↓
+              ModelManager → Classifiers → TFLite
+                    ↓
+              MLArbitrator → KnowledgeBase
+                    ↓
+              UI Update → Screen Display
 ```
-
-## Key Classes
-
-### ModelManager (`app/.../ml/ModelManager.kt`)
-
-Orchestrates both classifiers. Handles initialization via Google Play Services TFLite. Supports degraded classification when one model fails.
-
-### MLArbitrator (`shared/.../MLArbitrator.kt`)
-
-Resolves conflicts between category and subclass predictions using Shannon entropy analysis. The category model is the source of truth when models disagree.
-
-### WasteKnowledgeBase (`shared/.../WasteKnowledgeBase.kt`)
-
-Authoritative disposal and environmental data for all 30 waste subclasses. Sources include EPA, UN, and industry standards.
-
-### YoloDetector (`app/.../ml/YoloDetector.kt`)
-
-Standalone YOLOv8n object detection. Manages input/output ByteBuffer, performs NMS (Non-Maximum Suppression), and computes IoU for bounding box filtering.
-
-## Database Schema
-
-### WasteRecord Entity
-
-| Column | Type | Description |
-|--------|------|-------------|
-| id | Long (PK, auto) | Unique identifier |
-| category | String | Predicted category |
-| subclass | String | Predicted subclass |
-| confidence | Float | Prediction confidence |
-| estimatedWeight | Float | Estimated weight in kg |
-| featureVector | String? | Encoded prediction features |
-| imagePath | String? | Path to source image |
-| feedback | String? | User feedback (correct/incorrect/not_sure) |
-| correctedSubclass | String? | User's corrected classification |
-| topPredictions | String? | Top-K predictions encoded |
-| timestamp | Long | Classification timestamp |
-
-### Database Migrations
-
-- v6 → v7: Added `topPredictions` column
-- v7 → v8: Added index on `timestamp` column
-
-## Navigation
-
-The app uses Compose Navigation with a sealed class defining 7 routes:
-
-1. **Splash** - App introduction animation
-2. **Home** - Main dashboard with stats and quick actions
-3. **Classify** - Image classification flow
-4. **Result** - Classification results with insights
-5. **History** - Past classifications list
-6. **Settings** - Theme and data management
-7. **YOLO** - Real-time object detection
 
 ## Theme System
 
-Three theme modes:
+Three theme modes with a custom glassmorphism system:
 
-- **Dark**: Emerald green palette with glassmorphism
-- **Light**: Clean green-toned Material Design
-- **Colour**: Nature-inspired with olive, grass, and sky tones
+1. **Dark**: Emerald neon palette with glass-effect cards
+2. **Light**: Clean white/green palette
+3. **Colour**: Olive/nature palette (defined but not yet exposed in settings)
 
-Theme preference is persisted using DataStore Preferences.
+Glass effects are provided via `LocalGlassColors` CompositionLocal, allowing any composable to access the current glass surface and border colors.
 
-## ProGuard/R8 Rules
+## Navigation
 
-Release builds apply code shrinking and obfuscation. Key keep rules:
+Single-activity architecture with Jetpack Navigation Compose:
 
-- Room entities and DAOs
-- TFLite classifier classes
-- Shared KMP model classes
-- ViewModel factories
-- CameraX ImageProxy
-- Application and Activity classes
-
-See `app/proguard-rules.pro` for complete rules.
+- `Screen` sealed class defines routes
+- `AppNavigation` composable sets up the NavHost
+- ViewModels are scoped to the NavHost level (shared across destinations)
+- Record IDs are passed as navigation arguments for historical results
