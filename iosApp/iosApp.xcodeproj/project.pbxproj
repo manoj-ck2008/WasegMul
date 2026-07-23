@@ -7,7 +7,7 @@
 	objects = {
 
 /* BEGIN PBXBuildFile */
-		B4D9760C /* iosApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4D97606 /* iosApp.swift */; };
+m  		B4D9760C /* iosApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4D97606 /* iosApp.swift */; };
 		B4D9760D /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4D97607 /* ContentView.swift */; };
 		B4D9760E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B4D97608 /* Assets.xcassets */; };
 		B4D9760F /* shared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B4D9760A /* shared.framework */; };
