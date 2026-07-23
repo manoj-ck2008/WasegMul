@@ -108,7 +108,10 @@ fun AppNavigation() {
                         popUpTo(Screen.Home.route) { inclusive = true }
                     }
                 },
-                onBack = { classificationViewModel.releaseBitmap(); navController.popBackStack() }
+                onBack = {
+                    classificationViewModel.releaseBitmap()
+                    navController.popBackStack()
+                }
             )
         }
 

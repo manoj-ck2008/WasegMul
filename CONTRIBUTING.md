@@ -1,121 +1,111 @@
 # Contributing to WasegMul
 
-Thank you for your interest in contributing to WasegMul! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to WasegMul! This guide will help you get started.
 
-## Code of Conduct
+## Getting Started
 
-By participating in this project, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
-
-## How to Contribute
-
-### Reporting Bugs
-
-Before creating bug reports, please check existing issues to avoid duplicates. When creating a bug report, include:
-
-- A clear and descriptive title
-- Steps to reproduce the issue
-- Expected behavior vs actual behavior
-- Device/OS version information
-- Screenshots if applicable
-
-### Suggesting Features
-
-Feature requests are welcome. Please open an issue with:
-
-- A clear description of the proposed feature
-- The motivation/use case
-- Any technical considerations
-
-### Pull Requests
-
-1. Fork the repository
-2. Create a feature branch from `main`
-3. Make your changes following the code style below
-4. Test your changes thoroughly
-5. Submit a pull request with a clear description
+1. **Fork** the repository
+2. **Clone** your fork:
+   ```bash
+   git clone https://github.com/<your-username>/WasegMul.git
+   ```
+3. **Open** the project in Android Studio (Koala or later)
+4. **Sync** Gradle and let the build complete
 
 ## Development Setup
 
-### Prerequisites
+- **JDK**: 17 (bundled with Android Studio)
+- **Android SDK**: compileSdk 35, minSdk 29
+- **Gradle**: 8.11 (wrapper included)
+- **Kotlin**: 2.1.0
 
-- Android Studio Ladybug (2024.2.1) or later
-- JDK 21
-- Android SDK 35
+No external API keys or services are required. All ML inference runs on-device.
 
-### Getting Started
-
-```bash
-# Clone your fork
-git clone https://github.com/<your-username>/WasegMul.git
-cd WasegMul
-
-# Open in Android Studio and sync Gradle
-# Build the project
-./gradlew assembleDebug
-```
-
-### Project Structure
+## Project Structure
 
 ```
 WasegMul/
-├── app/                    # Main Android application module
-├── shared/                 # Kotlin Multiplatform shared module
-├── iosApp/                 # iOS application entry point
-├── gradle/                 # Gradle wrapper and version catalog
-└── scripts/                # Build utility scripts
+├── app/            Android application (UI, ML inference, data layer)
+├── shared/         Kotlin Multiplatform module (domain logic, knowledge base)
+├── iosApp/         iOS shell (SwiftUI)
+├── scripts/        Utility scripts (model export)
+└── docs/           Internal documentation
 ```
 
-## Code Style
+## Making Changes
+
+### Branching
+
+- Create a feature branch from `main`:
+  ```bash
+  git checkout -b feature/your-feature-name
+  ```
+
+### Code Style
 
 - Follow [Kotlin coding conventions](https://kotlinlang.org/docs/coding-conventions.html)
-- Use descriptive variable and function names
-- Keep functions focused and concise
-- Add KDoc comments for public APIs
-- Use `camelCase` for functions and properties
-- Use `PascalCase` for classes and objects
+- Use meaningful variable and function names
+- Keep composables focused and small
+- Prefer `stringResource()` over hardcoded strings for user-facing text
 
 ### Commit Messages
 
-Follow [Conventional Commits](https://www.conventionalcommits.org/):
+Use [Conventional Commits](https://www.conventionalcommits.org/) format:
 
-- `feat:` for new features
-- `fix:` for bug fixes
-- `docs:` for documentation changes
-- `style:` for formatting changes
-- `refactor:` for code refactoring
-- `test:` for test additions/changes
-- `chore:` for maintenance tasks
-
-Example:
 ```
-feat: add batch classification support
-fix: handle null bitmap in classifier
-docs: update installation instructions
+<type>: <description>
 ```
 
-## Testing
+Types:
+- `feat` - New feature
+- `fix` - Bug fix
+- `docs` - Documentation only
+- `style` - Code style (formatting, no logic change)
+- `refactor` - Code restructuring (no feature change)
+- `test` - Adding or updating tests
+- `chore` - Build, CI, or tooling changes
 
-- Run unit tests: `./gradlew testDebugUnitTest`
-- Run instrumented tests: `./gradlew connectedDebugAndroidTest`
-- Run lint: `./gradlew lint`
+Examples:
+```
+feat: add batch classification mode
+fix: prevent crash when camera permission is denied
+docs: update README with model performance table
+```
 
-## Architecture
+### Testing
 
-The app follows MVVM architecture with:
+- Verify the app builds: `./gradlew assembleDebug`
+- Test on a physical device or emulator (API 29+)
+- Test the classification pipeline end-to-end
+- Test YOLO live detection on supported devices
 
-- **UI Layer**: Jetpack Compose screens and ViewModels
-- **Domain Layer**: ML inference (TFLite classifiers, YOLO detector)
-- **Data Layer**: Room database, DataStore preferences
+## Pull Request Process
 
-## Model Changes
+1. Ensure your branch is up-to-date with `main`
+2. Verify the project builds without errors
+3. Write a clear PR description explaining **what** and **why**
+4. Link any related issues
+5. Request a review from a maintainer
 
-If modifying TFLite models:
+## Reporting Issues
 
-1. Update the model file in `app/src/main/assets/`
-2. Update corresponding class labels if needed
-3. Update ProGuard rules if new classes are added
-4. Test inference performance on mid-range devices
+- Use the **Bug Report** template for defects
+- Use the **Feature Request** template for suggestions
+- Include device model, Android version, and app version when reporting bugs
+
+## ML Model Contributions
+
+If you want to improve the classification models:
+
+1. The training pipeline uses EfficientNet-based architectures
+2. Models are exported to TFLite format and placed in `app/src/main/assets/`
+3. Class labels are in `category_classes.txt` (4 classes) and `subclass_classes.txt` (30 subclasses)
+4. The YOLO model export script is in `scripts/export_yolo_tflite.py`
+
+## Code of Conduct
+
+This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you agree to its terms.
 
 ## Questions?
 
-Open a [GitHub Discussion](https://github.com/manoj-ck2008/WasegMul/discussions) for general questions.
+Open a [Discussion](https://github.com/manoj-ck2008/WasegMul/discussions) or reach out to the maintainers.

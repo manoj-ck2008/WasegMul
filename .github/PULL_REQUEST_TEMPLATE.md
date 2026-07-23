@@ -1,6 +1,6 @@
 ## Description
 
-Brief description of the changes in this PR.
+<!-- Briefly describe what this PR does and why. -->
 
 ## Type of Change
 
@@ -9,24 +9,26 @@ Brief description of the changes in this PR.
 - [ ] Breaking change (fix or feature that would cause existing functionality to change)
 - [ ] Documentation update
 - [ ] Refactoring (no functional changes)
+- [ ] Build/CI change
 
-## Changes
+## How Has This Been Tested?
 
-- 
+<!-- Describe the tests you ran and the device/emulator used. -->
 
-## Testing
-
-- [ ] Tested on physical device
-- [ ] Tested on emulator
-- [ ] Unit tests pass (`./gradlew testDebugUnitTest`)
-- [ ] Lint passes (`./gradlew lint`)
-
-## Screenshots (if applicable)
+- [ ] Built successfully with `./gradlew assembleDebug`
+- [ ] Tested on device: <!-- device model and Android version -->
+- [ ] Classification pipeline tested end-to-end
+- [ ] YOLO detection tested (if applicable)
 
 ## Checklist
 
-- [ ] My code follows the project's coding style
-- [ ] I have added comments where necessary
-- [ ] I have updated documentation accordingly
-- [ ] My changes do not introduce new warnings
-- [ ] I have tested the changes on at least one device
+- [ ] My code follows the project's code style
+- [ ] I have performed a self-review of my code
+- [ ] I have commented my code where necessary
+- [ ] My changes do not generate new warnings
+- [ ] I have tested my changes on a physical device or emulator
+- [ ] Any dependent changes have been merged and published
+
+## Related Issues
+
+<!-- Link any related issues: Fixes #123, Relates to #456 -->

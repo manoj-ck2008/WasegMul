@@ -1,26 +1,21 @@
 # Security Policy
 
-## Supported Versions
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.1.x   | :white_check_mark: |
-| < 1.1   | :x:                |
-
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability within WasegMul, please send an email to the project maintainer. All security vulnerabilities will be promptly addressed.
+If you discover a security vulnerability in WasegMul, please report it responsibly.
 
-**Please do NOT report security vulnerabilities through public GitHub issues.**
+**Do NOT open a public GitHub issue for security vulnerabilities.**
 
-### What to include
+Instead, please email the maintainers directly or use [GitHub's private vulnerability reporting](https://github.com/manoj-ck2008/WasegMul/security/advisories/new).
+
+## What to Include
 
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact
 - Suggested fix (if any)
 
-### Response timeline
+## Response Timeline
 
 - **Acknowledgment**: Within 48 hours
 - **Initial assessment**: Within 1 week
@@ -28,17 +23,28 @@ If you discover a security vulnerability within WasegMul, please send an email t
 
 ## Security Considerations
 
-WasegMul is an offline-first application:
+### On-Device Processing
 
-- **No network calls**: Classification runs entirely on-device using TensorFlow Lite
-- **No data collection**: No analytics, telemetry, or user tracking
-- **No cloud sync**: All data stays on the device
-- **No API keys**: The app uses no external services requiring credentials
-- **Camera**: Camera access is only used for live image classification and YOLO detection
+WasegMul processes all images **entirely on-device**. No image data is sent to external servers. This is a core privacy guarantee.
 
-## Best Practices for Deployment
+### Data Storage
 
-- Do not bundle signing keys in source control
-- Use `keystore.properties` for release signing (excluded from VCS)
-- Enable R8/ProGuard minification for release builds (already configured)
-- Review `network_security_config.xml` before production deployment
+- Classification history is stored locally in a Room database
+- No cloud sync or remote storage is implemented
+- Data backup is disabled via `android:allowBackup="false"` and XML backup rules
+
+### Model Security
+
+- TFLite models are bundled in the APK assets
+- No model downloads at runtime
+- No network calls are made during classification
+
+### Build Security
+
+- Release builds require a signing keystore (`keystore.properties`)
+- Release signing credentials are never committed to version control
+- Network security config blocks cleartext traffic
+
+## Scope
+
+This security policy applies to the latest release of WasegMul on the `main` branch.

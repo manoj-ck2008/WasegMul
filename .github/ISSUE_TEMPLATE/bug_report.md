@@ -1,36 +1,30 @@
 ---
 name: Bug Report
 about: Report a bug to help us improve WasegMul
-title: '[BUG] '
+title: ''
 labels: bug
 assignees: ''
 ---
 
-## Describe the Bug
-
+**Describe the bug**
 A clear and concise description of what the bug is.
 
-## Steps to Reproduce
-
-1. Go to '...'
-2. Tap on '...'
+**To Reproduce**
+Steps to reproduce the behavior:
+1. Open the app
+2. Tap '...'
 3. See error
 
-## Expected Behavior
-
+**Expected behavior**
 A clear and concise description of what you expected to happen.
 
-## Screenshots
+**Screenshots**
+If applicable, add screenshots to help explain your problem.
 
-If applicable, add screenshots to help explain the problem.
-
-## Device Information
-
-- Device: [e.g., Pixel 8, Samsung Galaxy S24]
-- OS Version: [e.g., Android 14, One UI 6.1]
+**Device Information:**
+- Device: [e.g., Pixel 7, Samsung Galaxy S23]
+- Android Version: [e.g., Android 14, API 34]
 - App Version: [e.g., 1.1.0]
-- Build Type: [debug/release]
 
-## Additional Context
-
+**Additional context**
 Add any other context about the problem here.

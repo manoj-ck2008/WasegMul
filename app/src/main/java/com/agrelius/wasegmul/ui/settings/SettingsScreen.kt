@@ -42,7 +42,7 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = MaterialTheme.colorScheme.surface,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
@@ -165,7 +165,7 @@ fun SettingsScreen(
                         Text(stringResource(R.string.common_abort))
                     }
                 },
-                containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = MaterialTheme.colorScheme.background,
                 shape = RoundedCornerShape(28.dp)
             )
         }
