@@ -33,7 +33,7 @@ Accuracy depends on image quality, lighting, and the specific waste item. The mo
 
 ### What materials can it identify specifically?
 
-30 subclasses including: Aluminum Cans, Batteries, Cardboard, Clothing, Coffee Grounds, Computer Monitors, Copper Wire, Disposable Cutlery, Glass Bottles, Keyboard, Laptop, LED Light Bulbs, Microwave, Mobile Phone, Organic Leaves, Paper, Paper Cups, Plastic Bags, Plastic Bottles, Plastic Cups, Plastic Forks, Plastic Straws, Plastic Trash Bags, Plastic Wrappers, Printers, Refrigerator, Shoes, Styrofoam Cups, Styrofoam Food Containers, and Air-Conditioner.
+30 subclasses: Air-Conditioner, Battery, Cardboard, Electronic Component, Electronic Device, Glass, Keyboard, Laptop, Metal, Microwave, Miscellaneous Trash, Mobile, Mouse, Organic, PCB, Paper, Plastic, Player, Printer, Refrigerator, Television, Textile Trash, Washing Machine, automobile wastes, clothing, disposable_plastic_cutlery, light bulbs, shoes, styrofoam_cups, styrofoam_food_containers.
 
 ### How does YOLO detection work?
 
