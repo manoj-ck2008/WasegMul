@@ -63,7 +63,7 @@ struct ContentView: View {
                 }
                 .padding(.horizontal, 40)
 
-                Text("V 2.2.0 • XCODE READY")
+                Text("V 1.1.0 • XCODE READY")
                     .font(.caption2)
                     .foregroundColor(.white.opacity(0.4))
                     .padding(.bottom, 20)
