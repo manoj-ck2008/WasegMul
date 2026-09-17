@@ -1,0 +1,32 @@
+# WasegMul Waste Detection - YOLO Dataset Config
+#
+# 15-class detection (coarse categories)
+# YOLO detects WHERE objects are -> EfficientNet classifies WHAT they are (30 subclasses)
+#
+# Architecture:
+#   Camera -> YOLO11n (15 classes) -> Crop -> EfficientNet (30 classes) -> Knowledge Base
+
+path: ./datasets/waste-yolo
+train: train/images
+val: val/images
+test: test/images
+
+nc: 15
+
+names:
+  0: battery
+  1: bottle
+  2: can
+  3: cardboard
+  4: cigarette
+  5: cup
+  6: electronic
+  7: food_waste
+  8: glass_container
+  9: metal
+  10: paper
+  11: plastic_bag
+  12: plastic_container
+  13: plastic_wrapper
+  14: textile
+

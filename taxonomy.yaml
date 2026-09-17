@@ -1,0 +1,331 @@
+# WasegMul Waste Taxonomy: Single Source of Truth
+#
+# This file defines the complete mapping chain:
+#   TACO (52 mapped + 3 excluded raw classes) → YOLO (15 visual detector classes) → EfficientNet (30 semantic subclasses)
+#
+# Both the training pipeline AND the Android app read from this taxonomy.
+# When you add a new dataset, update ONLY this file.
+#
+# Design principles:
+#   - YOLO classes are grouped by VISUAL APPEARANCE (shape, texture, silhouette)
+#   - EfficientNet classes are grouped by SEMANTIC MEANING (material, function, disposal)
+#   - Ambiguous categories are EXCLUDED rather than forced into wrong classes
+
+# ─── YOLO Detection Classes (15 visual categories) ───────────────────────────
+# YOLO detects WHERE objects are based on visual appearance.
+# These are the classes the YOLO11n model is trained to detect.
+
+yolo_classes:
+  0: battery
+  1: bottle
+  2: can
+  3: cardboard
+  4: cigarette
+  5: cup
+  6: electronic
+  7: food_waste
+  8: glass_container
+  9: metal
+  10: paper
+  11: plastic_bag
+  12: plastic_container
+  13: plastic_wrapper
+  14: textile
+
+# ─── EfficientNet Classification Classes (30 final subclasses) ────────────────
+# After YOLO crops a detection, EfficientNet classifies into these 30
+# WasegMul subclasses. This is the SEMANTIC classification stage.
+
+efficientnet_classes:
+  0: Air-Conditioner
+  1: Battery
+  2: Cardboard
+  3: Electronic Component
+  4: Electronic Device
+  5: Glass
+  6: Keyboard
+  7: Laptop
+  8: Metal
+  9: Microwave
+  10: Miscellaneous Trash
+  11: Mobile
+  12: Mouse
+  13: Organic
+  14: PCB
+  15: Paper
+  16: Plastic
+  17: Player
+  18: Printer
+  19: Refrigerator
+  20: Television
+  21: Textile Trash
+  22: Washing Machine
+  23: automobile wastes
+  24: clothing
+  25: disposable_plastic_cutlery
+  26: light bulbs
+  27: shoes
+  28: styrofoam_cups
+  29: styrofoam_food_containers
+
+# ─── TACO Category Mapping ────────────────────────────────────────────────────
+# Every TACO category → YOLO detector class.
+# TACO categories marked excluded=true are NOT used for training.
+#
+# Source: https://github.com/pedropro/TACO (52 mapped categories + 3 excluded; upstream lists ~60 incl. super-categories)
+
+taco_mapping:
+
+  # ── Aluminium (super-category) ──────────────────────────────────────────────
+  Aluminium blister pack:
+    detector: metal
+    reason: "Small shiny metal foil packaging. Does not resemble cylindrical drink cans. Visually: amorphous metal fragment."
+
+  # ── Battery ─────────────────────────────────────────────────────────────────
+  Battery:
+    detector: battery
+    reason: "Distinctive rectangular dark shape. Universally recognizable."
+
+  # ── Cardboard (super-category) ──────────────────────────────────────────────
+  Cardboard:
+    detector: cardboard
+    reason: "Brown corrugated sheet material."
+  Corrugated carton:
+    detector: cardboard
+    reason: "Standard shipping box, visually identical to cardboard."
+  Drink carton:
+    detector: cardboard
+    reason: "Tetra Pak style rigid rectangular packaging."
+  Meal carton:
+    detector: cardboard
+    reason: "Takeaway packaging, same visual category."
+
+  # ── Carded blister pack ─────────────────────────────────────────────────────
+  Carded blister pack:
+    detector: plastic_container
+    reason: "Clear plastic bubble on cardboard backing. Dominant visual element is the rigid plastic bubble."
+
+  # ── Cigarette ───────────────────────────────────────────────────────────────
+  Cigarette:
+    detector: cigarette
+    reason: "Small white cylinder with orange filter tip. Extremely distinctive shape."
+
+  # ── Clear plastic bottle ────────────────────────────────────────────────────
+  Clear plastic bottle:
+    detector: bottle
+    reason: "Transparent PET bottle. Cylindrical body, narrow neck. YOLO detects the shape; EfficientNet determines the material."
+
+  # ── Crisp packet ────────────────────────────────────────────────────────────
+  Crisp packet:
+    detector: plastic_wrapper
+    reason: "Metallized plastic film bag. Crinkled, printed, rectangular. Visually a wrapper."
+
+  # ── Drink can ───────────────────────────────────────────────────────────────
+  Drink can:
+    detector: can
+    reason: "Aluminum/steel cylindrical beverage container. Distinctive cylinder with pull-tab top."
+
+  # ── Disposable food container ───────────────────────────────────────────────
+  Disposable food container:
+    detector: plastic_container
+    reason: "Black plastic trays, PET containers. Rigid 3D shape that holds food volume."
+
+  # ── Disposable plastic cup ──────────────────────────────────────────────────
+  Disposable plastic cup:
+    detector: cup
+    reason: "Open-top drinking vessel. Same visual shape as all cups: wide mouth, tapered body."
+
+  # ── Electronic component ────────────────────────────────────────────────────
+  Electronic component:
+    detector: electronic
+    reason: "Circuit boards, chips, connectors. Green PCB, metallic contacts, geometric shapes."
+
+  # ── Foam food container ─────────────────────────────────────────────────────
+  Foam food container:
+    detector: plastic_container
+    reason: "Styrofoam takeaway box. Rigid 3D shape, white, holds food volume."
+
+  # ── Food waste ──────────────────────────────────────────────────────────────
+  Food waste:
+    detector: food_waste
+    reason: "Organic matter: peels, cores, leftovers. Amorphous organic texture."
+
+  # ── Glass (super-category) ──────────────────────────────────────────────────
+  Glass bottle:
+    detector: bottle
+    reason: "Cylindrical with neck, same shape as plastic bottles. EfficientNet distinguishes glass from plastic."
+  Glass jar:
+    detector: glass_container
+    reason: "Squat cylinder, wide mouth, no neck. Visually distinct from bottles."
+
+  # ── Metal bottle cap ────────────────────────────────────────────────────────
+  Metal bottle cap:
+    detector: metal
+    reason: "Tiny metal disc (~2cm). Too small for can. Visually: amorphous metal fragment."
+
+  # ── Paper (super-category) ──────────────────────────────────────────────────
+  Normal paper:
+    detector: paper
+    reason: "Standard white office paper. Flat, thin, white."
+  Other paper:
+    detector: paper
+    reason: "Generic paper items."
+  Magazine:
+    detector: paper
+    reason: "Glossy paper, visually paper-like."
+  Newspaper:
+    detector: paper
+    reason: "Newsprint, visually paper-like."
+  Tissues:
+    detector: paper
+    reason: "Crumpled white paper, visually paper-like."
+  Painter tape:
+    excluded: true
+    exclude_reason: "Adhesive tape roll. Cylindrical and adhesive. Does not visually resemble paper sheets. Too ambiguous to train reliably."
+
+  # ── Other plastic (super-category) ──────────────────────────────────────────
+  Other plastic:
+    detector: plastic_container
+    reason: "Miscellaneous rigid plastic fragments."
+  Other plastic container:
+    detector: plastic_container
+    reason: "Generic rigid plastic vessels."
+  Plastic glooves:
+    detector: plastic_container
+    reason: "Rigid transparent plastic hand covering (original TACO typo). Not a bag or wrapper."
+  Plastic gloves:
+    detector: plastic_container
+    reason: "Rigid transparent plastic hand covering. Not a bag or wrapper."
+  Plastic utensils:
+    detector: plastic_container
+    reason: "Forks, spoons, knives. Rigid plastic shape."
+  Squeezable tube:
+    detector: plastic_container
+    reason: "Toothpaste/glue tube. Rigid-walled cylinder."
+  Spread tub:
+    detector: plastic_container
+    reason: "Margarine/yoghurt tub. Rigid 3D container."
+  Styrofoam piece:
+    detector: plastic_container
+    reason: "Foam fragment, rigid shape."
+
+  # ── Other plastic bottle ────────────────────────────────────────────────────
+  Other plastic bottle:
+    detector: bottle
+    reason: "HDPE/PET/PP bottles. Same cylindrical + neck shape as clear/glass bottles."
+
+  # ── Other plastic cup ───────────────────────────────────────────────────────
+  Other plastic cup:
+    detector: cup
+    reason: "Generic plastic cups. Open-top drinking vessel silhouette."
+
+  # ── Other plastic wrapper ───────────────────────────────────────────────────
+  Other plastic wrapper:
+    detector: plastic_wrapper
+    reason: "Candy wrappers, retort pouches, yoghurt lids. Crinkled thin film."
+
+  # ── Paper cup ───────────────────────────────────────────────────────────────
+  Paper cup:
+    detector: cup
+    reason: "Paper-based drinking cup. Same visual silhouette as all cups."
+
+  # ── Plastic bottle cap ──────────────────────────────────────────────────────
+  Plastic bottle cap:
+    detector: plastic_container
+    reason: "Small plastic disc. Part of the bottle family. YOLO later groups it with bottle detections in NMS. More coherent than mapping to metal."
+
+  # ── Plastic film ────────────────────────────────────────────────────────────
+  Plastic film:
+    detector: plastic_wrapper
+    reason: "Transparent/translucent plastic film sheets. Crinkled, thin, flexible."
+
+  # ── Straw ───────────────────────────────────────────────────────────────────
+  Straw:
+    detector: plastic_wrapper
+    reason: "Thin plastic stick. Thin linear object, visually closest to wrapper material."
+  Plastic straw:
+    detector: plastic_wrapper
+    reason: "Thin plastic stick. Same visual shape."
+  Paper straw:
+    detector: plastic_wrapper
+    reason: "Paper-based straw. Same visual shape: thin linear."
+
+  # ── Pop tab ─────────────────────────────────────────────────────────────────
+  Pop tab:
+    detector: metal
+    reason: "Tiny aluminum ring-pull. Visually: small metal disc."
+
+  # ── Rope & strings ──────────────────────────────────────────────────────────
+  Rope & strings:
+    detector: textile
+    reason: "Rope, fishing nets, string. Fibrous material, visually textile-like."
+
+  # ── Scrap metal ─────────────────────────────────────────────────────────────
+  Scrap metal:
+    detector: metal
+    reason: "Non-can metal fragments. Amorphous metallic shapes."
+
+  # ── Shoe ────────────────────────────────────────────────────────────────────
+  Shoe:
+    detector: textile
+    reason: "Footwear. Fabric + rubber composite. Visually textile-like."
+
+  # ── Single-use carrier bag ──────────────────────────────────────────────────
+  Single-use carrier bag:
+    detector: plastic_bag
+    reason: "Plastic shopping bag with handles. Soft, amorphous, translucent."
+
+  # ── Six pack rings ──────────────────────────────────────────────────────────
+  Six pack rings:
+    detector: plastic_wrapper
+    reason: "Thin plastic rings. Flexible, thin film."
+
+  # ── Textile ─────────────────────────────────────────────────────────────────
+  Textile:
+    detector: textile
+    reason: "Fabric items. Visually textile-like."
+
+  # ── Clothing ────────────────────────────────────────────────────────────────
+  Clothing:
+    detector: textile
+    reason: "Garments. Visually identical to textile."
+
+  # ── Tin foil ────────────────────────────────────────────────────────────────
+  Tin foil:
+    detector: metal
+    reason: "Aluminum foil sheet. Metallic, thin, reflective."
+
+  # ── Pen ─────────────────────────────────────────────────────────────────────
+  Pen:
+    excluded: true
+    exclude_reason: "Writing instrument. Small cylindrical plastic object. Too visually distinct from all other classes (not a container, bag, wrapper, or bottle). Forcing into an unrelated category introduces label noise."
+
+  # ── Unlabeled litter ────────────────────────────────────────────────────────
+  Unlabeled litter:
+    excluded: true
+    exclude_reason: "Ambiguous objects that cannot be reliably classified. Training on ambiguous labels degrades model performance."
+
+# ─── Excluded categories (compiled) ───────────────────────────────────────────
+# These are excluded automatically from training. Add entries above with
+# excluded: true to exclude additional categories.
+
+# ─── Detection → Subclass mapping ─────────────────────────────────────────────
+# Which EfficientNet subclasses can appear in each YOLO detection.
+# Used for post-crop filtering and confidence boosting.
+
+detection_to_subclass:
+  battery: [1]                    # Battery
+  bottle: [5, 16]                 # Glass, Plastic
+  can: [8]                        # Metal
+  cardboard: [2]                  # Cardboard
+  cigarette: [10]                 # Miscellaneous Trash
+  cup: [16, 25, 28, 29]          # Plastic, disposable_plastic_cutlery, styrofoam_cups, styrofoam_food_containers
+  electronic: [0, 3, 4, 6, 7, 9, 11, 12, 14, 17, 18, 19, 20, 22]  # All E-Waste
+  food_waste: [13]                # Organic
+  glass_container: [5, 26]        # Glass, light bulbs
+  metal: [8, 23]                  # Metal, automobile wastes
+  paper: [2, 15]                  # Cardboard, Paper
+  plastic_bag: [16]               # Plastic
+  plastic_container: [16, 25, 28, 29]  # Plastic, disposable_plastic_cutlery, styrofoam
+  plastic_wrapper: [16]           # Plastic
+  textile: [21, 24, 27]           # Textile Trash, clothing, shoes

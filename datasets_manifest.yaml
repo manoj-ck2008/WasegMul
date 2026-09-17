@@ -1,0 +1,190 @@
+# WasegMul: Training Datasets Manifest
+# Audit trail for all training data sources.
+# Update this file whenever adding/removing datasets.
+
+# ─── Pipeline Architecture ────────────────────────────────────────────────────
+#
+# Camera → YOLO11n (multi-object detector, ~15 detection classes)
+#       → Crop detections
+#       → EfficientNet (classifier, 30 subclasses)
+#       → Knowledge Base → Disposal Guide
+#
+# YOLO11n detects WHERE objects are and rough categories.
+# EfficientNet decides WHAT each cropped object is in finer detail.
+# This two-stage approach is significantly stronger than YOLO alone.
+# ──────────────────────────────────────────────────────────────────────────────
+
+datasets:
+  # ─── Primary: TACO (Trash Annotations in Context) ────────────────────────
+  - id: taco
+    name: "TACO: Trash Annotations in Context"
+    source: "https://github.com/pedropro/TACO"
+    kaggle: "kneroma/tacotrashdataset"
+    version: "v0.5 (2024)"
+    license: "CC BY 4.0"
+    license_url: "https://creativecommons.org/licenses/by/4.0/"
+    commercial_use: true
+    attribution_required: true
+    attribution_text: "TACO dataset by Pedro F. Proença and Pedro Simões"
+    images: 1500
+    classes: 52
+    format: "COCO"
+    included_in_production: true
+    notes: "Primary waste detection dataset. Images from Flickr under diverse environments."
+
+  # ─── Secondary: TACO Mirror (Kaggle) ─────────────────────────────────────
+  - id: taco-kaggle-mirror
+    name: "TACO Kaggle Mirror"
+    source: "https://www.kaggle.com/datasets/manojkari/taco-dataset1"
+    kaggle: "manojkari/taco-dataset1"
+    version: "1"
+    license: "CC BY 4.0 (upstream TACO license; mirror inherits, NOT Apache 2.0)"
+    license_url: "https://creativecommons.org/licenses/by/4.0/"
+    commercial_use: true
+    attribution_required: true
+    attribution_text: "TACO dataset (original by Pedro F. Proença and Pedro Simões)"
+    images: 1743
+    classes: 52
+    format: "COCO"
+    included_in_production: false  # Verify before enabling
+    notes: "Repackaged TACO with detector code. Use original TACO for production."
+
+  # ─── Reference: WasteNet (TrashNet) ──────────────────────────────────────
+  - id: wastenet
+    name: "WasteNet / TrashNet"
+    source: "https://github.com/garythung/trashnet"
+    version: "1.0"
+    license: "MIT"
+    license_url: "https://github.com/garythung/trashnet/blob/master/LICENSE"
+    commercial_use: true
+    attribution_required: true
+    attribution_text: "TrashNet by Gary Thung and Mindy Yang"
+    images: 2527
+    classes: 6
+    format: "classification"
+    included_in_production: false  # Needs conversion to detection format
+    notes: "Classification dataset (not detection). Use for classifier training, not YOLO."
+
+  # ─── Reference: Roboflow Waste Datasets ──────────────────────────────────
+  - id: roboflow-waste
+    name: "Roboflow Waste Detection"
+    source: "https://universe.roboflow.com/"
+    version: "various"
+    license: "CC BY 4.0"
+    license_url: "https://creativecommons.org/licenses/by/4.0/"
+    commercial_use: true
+    attribution_required: true
+    attribution_text: "Roboflow Universe community datasets"
+    images: 0  # Update after adding specific datasets
+    classes: 0
+    format: "YOLO"
+    included_in_production: false  # Add specific datasets manually
+    notes: "Various community waste datasets. Add specific ones via Roboflow API."
+
+  # ─── Custom: User-collected data ─────────────────────────────────────────
+  - id: custom
+    name: "Custom Collected Data"
+    source: "local"
+    version: "N/A"
+    license: "Proprietary"
+    license_url: ""
+    commercial_use: true
+    attribution_required: false
+    attribution_text: ""
+    images: 0
+    classes: 30
+    format: "YOLO"
+    included_in_production: true
+    notes: "User-collected images. Place in datasets/custom/images/ and datasets/custom/labels/"
+
+# ─── Production Dataset Policy ─────────────────────────────────────────────────
+#
+# 1. Only datasets with commercial_use=true are included
+# 2. Attribution is required for CC BY 4.0 datasets
+# 3. Original sources preferred over Kaggle mirrors
+# 4. All data must be legally redistributable
+# 5. This manifest must be updated before any production release
+#
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ─── YOLO Detection Classes (Intermediate) ─────────────────────────────────────
+# Canonical source: taxonomy.yaml yolo_classes (15 visual classes).
+# DO NOT diverge here: this manifest mirrors taxonomy.yaml.
+#   0 battery, 1 bottle, 2 can, 3 cardboard, 4 cigarette, 5 cup,
+#   6 electronic, 7 food_waste, 8 glass_container, 9 metal, 10 paper,
+#   11 plastic_bag, 12 plastic_container, 13 plastic_wrapper, 14 textile
+# ──────────────────────────────────────────────────────────────────────────────
+
+yolo_detection_classes:
+  0: battery
+  1: bottle
+  2: can
+  3: cardboard
+  4: cigarette
+  5: cup
+  6: electronic
+  7: food_waste
+  8: glass_container
+  9: metal
+  10: paper
+  11: plastic_bag
+  12: plastic_container
+  13: plastic_wrapper
+  14: textile
+
+# ─── EfficientNet Classification Classes (Final) ───────────────────────────────
+# After YOLO crops a detection, EfficientNet classifies into these 30 subclasses.
+# ──────────────────────────────────────────────────────────────────────────────
+
+efficientnet_classes:
+  0: Air-Conditioner
+  1: Battery
+  2: Cardboard
+  3: Electronic Component
+  4: Electronic Device
+  5: Glass
+  6: Keyboard
+  7: Laptop
+  8: Metal
+  9: Microwave
+  10: Miscellaneous Trash
+  11: Mobile
+  12: Mouse
+  13: Organic
+  14: PCB
+  15: Paper
+  16: Plastic
+  17: Player
+  18: Printer
+  19: Refrigerator
+  20: Television
+  21: Textile Trash
+  22: Washing Machine
+  23: automobile wastes
+  24: clothing
+  25: disposable_plastic_cutlery
+  26: light bulbs
+  27: shoes
+  28: styrofoam_cups
+  29: styrofoam_food_containers
+
+# ─── Mapping: YOLO detection class → EfficientNet subclass IDs ────────────────
+# Mirrors taxonomy.yaml detection_to_subclass. DO NOT edit independently.
+# ──────────────────────────────────────────────────────────────────────────────
+
+detection_to_subclass:
+  battery: [1]
+  bottle: [5, 16]
+  can: [8]
+  cardboard: [2]
+  cigarette: [10]
+  cup: [16, 25, 28, 29]
+  electronic: [0, 3, 4, 6, 7, 9, 11, 12, 14, 17, 18, 19, 20, 22]
+  food_waste: [13]
+  glass_container: [5, 26]
+  metal: [8, 23]
+  paper: [2, 15]
+  plastic_bag: [16]
+  plastic_container: [16, 25, 28, 29]
+  plastic_wrapper: [16]
+  textile: [21, 24, 27]
