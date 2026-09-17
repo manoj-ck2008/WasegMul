@@ -1,0 +1,15 @@
+battery
+bottle
+can
+cardboard
+cigarette
+cup
+electronic
+food_waste
+glass_container
+metal
+paper
+plastic_bag
+plastic_container
+plastic_wrapper
+textile

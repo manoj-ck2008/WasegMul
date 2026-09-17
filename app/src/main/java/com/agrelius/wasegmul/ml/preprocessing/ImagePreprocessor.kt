@@ -2,6 +2,7 @@ package com.agrelius.wasegmul.ml.preprocessing
 
 import android.graphics.Bitmap
 import org.tensorflow.lite.DataType
+import org.tensorflow.lite.support.image.ImageProcessor
 import org.tensorflow.lite.support.image.TensorImage
 import org.tensorflow.lite.support.image.ops.ResizeOp
 
@@ -14,22 +15,38 @@ import org.tensorflow.lite.support.image.ops.ResizeOp
  * The center-crop preserves aspect ratio: a tall portrait image is cropped to its central
  * square region before resizing, preventing the distortion that a raw stretch would cause.
  *
- * This object is thread-safe: each call to [preprocess] builds its own [ResizeOp] internally.
+ * This object is thread-safe and reuses an immutable, pre-built [ImageProcessor].
  */
 object ImagePreprocessor {
     private const val INPUT_SIZE = 224
 
+    private val imageProcessor: ImageProcessor = ImageProcessor.Builder()
+        .add(ResizeOp(INPUT_SIZE, INPUT_SIZE, ResizeOp.ResizeMethod.BILINEAR))
+        .build()
+
     fun preprocess(bitmap: Bitmap): TensorImage {
-        val cropped = centerCropToSquare(bitmap)
+        require(!bitmap.isRecycled) { "Bitmap is recycled" }
+        require(bitmap.width > 0 && bitmap.height > 0) { "Bitmap has zero dimensions" }
+
+        // HARDWARE bitmaps cannot be read directly by software renderers/native ops
+        val softwareBitmap = if (bitmap.config == Bitmap.Config.HARDWARE) {
+            bitmap.copy(Bitmap.Config.ARGB_8888, false)
+        } else {
+            bitmap
+        }
+
+        val cropped = centerCropToSquare(softwareBitmap)
         return try {
             val tensorImage = TensorImage(DataType.FLOAT32)
             tensorImage.load(cropped)
-            val processor = org.tensorflow.lite.support.image.ImageProcessor.Builder()
-                .add(ResizeOp(INPUT_SIZE, INPUT_SIZE, ResizeOp.ResizeMethod.BILINEAR))
-                .build()
-            processor.process(tensorImage)
+            imageProcessor.process(tensorImage)
         } finally {
-            if (cropped !== bitmap) cropped.recycle()
+            if (cropped !== bitmap && cropped !== softwareBitmap) {
+                cropped.recycle()
+            }
+            if (softwareBitmap !== bitmap) {
+                softwareBitmap.recycle()
+            }
         }
     }
 
