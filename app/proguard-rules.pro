@@ -10,7 +10,7 @@
 -keepattributes Signature,InnerClasses,EnclosingMethod
 -keepattributes RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations,AnnotationDefault
 
-# ── Room (app-specific only — library ships its own rules) ───────────────────
+# ── Room (app-specific only - library ships its own rules) ───────────────────
 -keep class com.agrelius.wasegmul.data.WasteRecord { *; }
 -keep class com.agrelius.wasegmul.data.WasteDao { <methods>; }
 -keep class com.agrelius.wasegmul.data.WasteDatabase { *; }
@@ -19,8 +19,11 @@
 -keep class * extends androidx.lifecycle.ViewModel
 -keep class * extends androidx.lifecycle.ViewModelProvider$Factory { *; }
 
-# ── TensorFlow Lite (app-specific only — library ships its own rules) ────────
+# ── TensorFlow Lite (app-specific only - library ships its own rules) ────────
 -keep class com.agrelius.wasegmul.ml.classifiers.** { *; }
+-keep class com.agrelius.wasegmul.ml.YoloDetector { *; }
+-keep class com.agrelius.wasegmul.ml.Detection { *; }
+-keep class com.agrelius.wasegmul.ml.ModelManager { *; }
 
 # ── Google Play Services TFLite ──────────────────────────────────────────────
 -dontwarn com.google.android.gms.internal.mlkit_common.**
@@ -34,8 +37,16 @@
 -keep class com.agrelius.wasegmul.WasteInfo { *; }
 -keep class com.agrelius.wasegmul.WasteMapping { *; }
 -keep class com.agrelius.wasegmul.WasteMapping$MaterialMetaData { *; }
+-keep class com.agrelius.wasegmul.WasteKnowledgeBase { *; }
+-keep class com.agrelius.wasegmul.MLArbitrator { *; }
+-keep class com.agrelius.wasegmul.MessageGenerator { *; }
+-keep class com.agrelius.wasegmul.PredictionCodec { *; }
+-keep class com.agrelius.wasegmul.EcoImpactCalculator { *; }
+-keep class com.agrelius.wasegmul.EcoImpactMetrics { *; }
+-keep class com.agrelius.wasegmul.IOSBridge { *; }
+-keep class com.agrelius.wasegmul.ClassificationMode { *; }
 
-# ── CameraX (app-specific only — library ships its own rules) ────────────────
+# ── CameraX (app-specific only - library ships its own rules) ────────────────
 -keep class androidx.camera.core.ImageProxy { *; }
 
 # ── Kotlin coroutines / Guava (TFLite dependency) ────────────────────────────

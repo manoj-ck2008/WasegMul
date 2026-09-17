@@ -8,11 +8,11 @@ plugins {
 }
 
 // Version from gradle.properties (single source of truth).
-val appVersionName = project.property("VERSION_NAME").toString()
-val appVersionCode = project.property("VERSION_CODE").toString().toInt()
+val appVersionName = (project.findProperty("VERSION_NAME") as String?) ?: "1.1.0"
+val appVersionCode = (project.findProperty("VERSION_CODE") as String?)?.toIntOrNull() ?: 2
 
 // Reads optional release signing credentials from the project root (keystore.properties).
-// This file is NOT committed to VCS — see README for the expected keys.
+// This file is NOT committed to VCS: see README for the expected keys.
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties()
 if (keystorePropertiesFile.exists()) {
@@ -82,6 +82,11 @@ android {
     }
 }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
+
 // Validate release signing credentials at build time.
 tasks.configureEach {
     if (name.startsWith("merge") && name.contains("Release", ignoreCase = true)) {
@@ -91,6 +96,15 @@ tasks.configureEach {
                     "RELEASE BUILD BLOCKED: No keystore.properties found. " +
                     "Create keystore.properties in the project root with release signing credentials."
                 )
+            }
+            val storeFileProp = keystoreProperties["storeFile"]?.toString()
+            if (storeFileProp.isNullOrBlank() || !rootProject.file(storeFileProp).exists()) {
+                throw GradleException("RELEASE BUILD BLOCKED: storeFile missing or not found: $storeFileProp")
+            }
+            for (k in listOf("storePassword", "keyAlias", "keyPassword")) {
+                if (keystoreProperties[k]?.toString().isNullOrBlank()) {
+                    throw GradleException("RELEASE BUILD BLOCKED: $k missing in keystore.properties")
+                }
             }
         }
     }

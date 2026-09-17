@@ -15,9 +15,13 @@
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>1.1.0</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>2</string>
+	<key>NSCameraUsageDescription</key>
+	<string>WasegMul uses the camera to classify waste on-device. Images never leave your phone.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>WasegMul lets you pick waste photos from your library for on-device classification.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
