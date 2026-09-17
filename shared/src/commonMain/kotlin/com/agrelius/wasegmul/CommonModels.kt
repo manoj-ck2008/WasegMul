@@ -20,8 +20,14 @@ data class WasteRecord(
     val correctedSubclass: String? = null,
     /** Serialised "label|confidence;label|confidence" list of top subclass predictions. */
     val topPredictions: String? = null,
+    // 0 = unset (legacy). Callers should set System.currentTimeMillis() on insert.
     val timestamp: Long = 0L
-)
+) {
+    init {
+        require(confidence.isFinite() && confidence in 0f..1f) { "confidence must be in 0..1" }
+        require(estimatedWeight.isFinite() && estimatedWeight >= 0.0) { "weight must be finite >= 0" }
+    }
+}
 
 /** Raw merged output of the category + subclass classifiers before arbitration. */
 data class PredictionResult(
@@ -34,7 +40,17 @@ data class PredictionResult(
     val topCategories: List<Pair<String, Float>> = emptyList(),
     /** Dynamic user-facing message explaining the classification outcome. */
     val classificationMessage: String = ""
-)
+) {
+    // Canonical domain aliases matching CONTEXT.md
+    val subclass: String get() = subcategory
+    val subclassConfidence: Float get() = subcategoryConfidence
+    val topSubclasses: List<Pair<String, Float>> get() = topSubcategories
+
+    init {
+        require(categoryConfidence.isFinite()) { "categoryConfidence must be finite" }
+        require(subcategoryConfidence.isFinite()) { "subcategoryConfidence must be finite" }
+    }
+}
 
 /** UI-facing classification payload (post-arbitration + knowledge-base lookup). */
 data class ClassificationResult(
@@ -48,14 +64,22 @@ data class ClassificationResult(
     val sources: String,
     /** Dynamic message explaining the classification outcome to the user. */
     val classificationMessage: String = ""
-)
+) {
+    init {
+        require(confidence.isFinite()) { "confidence must be finite" }
+    }
+}
 
 /** Raw classifier output bridging the Android TFLite layer to shared types. */
 data class InternalResult(
     val label: String,
     val confidence: Float,
     val topPredictions: List<Pair<String, Float>> = emptyList()
-)
+) {
+    init {
+        require(confidence.isFinite()) { "confidence must be finite" }
+    }
+}
 
 /** Knowledge-base payload returned for a (category, subclass) pair. */
 data class WasteInfo(
@@ -64,3 +88,4 @@ data class WasteInfo(
     val recyclingBenefits: String,
     val sources: String
 )
+
