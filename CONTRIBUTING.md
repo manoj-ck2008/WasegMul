@@ -14,7 +14,7 @@ Thank you for your interest in contributing to WasegMul! This guide will help yo
 
 ## Development Setup
 
-- **JDK**: 17 (bundled with Android Studio)
+- **JDK**: 17 or 21 (JDK 17+ supported, JDK 21 recommended and used in CI)
 - **Android SDK**: compileSdk 35, minSdk 29
 - **Gradle**: 8.11 (wrapper included)
 - **Kotlin**: 2.1.0

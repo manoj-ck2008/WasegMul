@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  An on-device waste classification Android app powered by TensorFlow Lite and multi-model AI arbitration. Point your camera at any waste item to instantly identify its category, subclass, and the correct disposal method — entirely offline, with no data leaving your device.
+  An on-device waste classification Android app powered by TensorFlow Lite and multi-model AI arbitration. Point your camera at any waste item to instantly identify its category, subclass, and the correct disposal method, entirely offline, with no data leaving your device.
 </p>
 
 ---
@@ -64,7 +64,7 @@ Camera / Gallery Image
 └──────────────────┘
 ```
 
-Additionally, a **YOLOv8n** model provides real-time object detection (80 COCO classes) in a separate live camera view.
+Additionally, a **YOLO11n / YOLOv8n** detector provides real-time waste item detection (15 fine-tuned waste classes or 80 COCO classes) with tap-to-focus and interactive crop-and-classify.
 
 ---
 
@@ -72,28 +72,28 @@ Additionally, a **YOLOv8n** model provides real-time object detection (80 COCO c
 
 ### Implemented
 
-- **On-device waste classification** — Dual EfficientNet models classify items into 4 categories and 30 subclasses
-- **TensorFlow Lite inference** — All ML processing runs locally on the device
-- **YOLOv8n live detection** — Real-time object detection with bounding boxes and labels
-- **Multi-model arbitration** — Smart cross-checking between category and subclass predictions with entropy-based uncertainty estimation
-- **Waste knowledge base** — Detailed disposal guides, environmental impact data, and recycling benefits for 30 waste types
-- **Camera and gallery input** — Capture photos or select from device gallery
-- **Classification history** — Room database with timestamped records and feedback tracking
-- **Material Design 3 UI** — Glassmorphism cards, animated organic backgrounds, falling petals
-- **3 theme modes** — Dark (emerald neon), Light, Colour (olive nature)
-- **Offline operation** — No internet connection required for any core feature
-- **Privacy-first** — Zero data transmission; all processing on-device
-- **Feedback loop** — Users can mark classifications as correct/incorrect to improve future UX
-- **Dynamic messages** — 8 classification modes with contextual user-facing messages
+- **On-device waste classification**: Dual EfficientNet models classify items into 4 categories and 30 subclasses
+- **TensorFlow Lite inference**: All ML processing runs locally on the device with zero-allocation buffers
+- **YOLO real-time detection**: Live camera object detection with bounding boxes, labels, and ROI crop-and-classify
+- **Multi-model arbitration**: Smart cross-checking between category and subclass predictions with entropy-based uncertainty estimation
+- **Waste knowledge base**: Comprehensive disposal guides, environmental impact data, and recycling benefits for 30+ waste types
+- **Camera and gallery input**: Capture photos with CameraX or select high-resolution images from the device gallery
+- **Classification history**: Room database with timestamped records, individual deletion, search, filtering, and feedback tracking
+- **Export capabilities**: Export history to CSV in background coroutines and share detailed analysis reports
+- **Material Design 3 UI**: Frosted glassmorphism cards with Android 12+ blur, animated organic backgrounds, and falling petals
+- **Dynamic themes & Material You**: Dark (emerald neon), Light, Colour (olive nature), and Android 12+ dynamic color matching
+- **Eco Impact dashboard**: Track cumulative landfill diversion, carbon emissions avoided, water conserved, and energy saved
+- **Offline operation**: No internet connection required for any core feature
+- **Privacy-first**: Zero data transmission; all processing on-device
+- **Feedback loop**: Users can validate or correct classifications to maintain data integrity
+- **Dynamic messages**: 8 classification modes with contextual, user-facing eco guidance
 
 ### Under Development
 
-> These features are actively being developed and are not yet stable.
+> These features are actively being developed for future releases.
 
-- **Multi-object detection** — Detect and classify multiple waste items simultaneously
-- **TACO dataset fine-tuning** — Training on the Trash Annotations in Context dataset for improved accuracy
-- **Batch classification** — Process multiple images in a single session
-- **Export/share reports** — Generate and share classification summaries
+- **Batch classification**: Process multiple images in a single session
+- **Expanded taxonomy**: Ongoing additions to regional e-waste and textile waste classes
 
 ---
 
@@ -105,7 +105,7 @@ Additionally, a **YOLOv8n** model provides real-time object detection (80 COCO c
 | **UI Framework** | Jetpack Compose (BOM 2024.11.00) |
 | **Design System** | Material Design 3 |
 | **ML Runtime** | TensorFlow Lite 2.17.0 |
-| **ML Models** | EfficientNet (classification), YOLOv8n (detection) |
+| **ML Models** | EfficientNet (classification), YOLO11n / YOLOv8n (detection) |
 | **Camera** | CameraX 1.4.1 |
 | **Database** | Room 2.6.1 |
 | **Preferences** | DataStore 1.1.1 |
@@ -130,7 +130,7 @@ Additionally, a **YOLOv8n** model provides real-time object detection (80 COCO c
 ### Prerequisites
 
 - **Android Studio** Koala 2024.1.1 or later
-- **JDK 17** (bundled with Android Studio)
+- **JDK 17 or 21** (JDK 17+ supported, JDK 21 recommended and used in CI)
 - **Android SDK** with API 35 platform tools
 
 ### Steps
@@ -169,7 +169,7 @@ Then build:
 ./gradlew assembleRelease
 ```
 
-> **Note**: Release builds will fail without `keystore.properties`. This is intentional — the build system enforces signing requirements for production releases.
+> **Note**: Release builds will fail without `keystore.properties`. This is intentional: the build system enforces signing requirements for production releases.
 
 ---
 
@@ -193,14 +193,17 @@ Then build:
 | Output | 30-class probability distribution |
 | Classes | Air-Conditioner, Battery, Cardboard, Electronic Component, Electronic Device, Glass, Keyboard, Laptop, Metal, Microwave, Miscellaneous Trash, Mobile, Mouse, Organic, PCB, Paper, Plastic, Player, Printer, Refrigerator, Television, Textile Trash, Washing Machine, automobile wastes, clothing, disposable_plastic_cutlery, light bulbs, shoes, styrofoam_cups, styrofoam_food_containers |
 
-### YOLOv8n Detection Model
+### YOLO Detection Model
 
 | Property | Value |
 |----------|-------|
-| Architecture | YOLOv8 nano |
-| Input | Dynamic resolution (auto-resized) |
-| Output | 80 COCO class bounding boxes |
+| Architecture | YOLO11n (Ultralytics) |
+| Input | 640×640 RGB image |
+| Output | 15-class visual waste bounding boxes (COCO-80 fallback) |
 | Use case | Real-time object detection in live camera view |
+| License | AGPL-3.0 (free for personal/research; Enterprise License required for closed-source commercial) |
+
+> **Note**: YOLO11n is faster and more accurate than YOLOv8n. For commercial licensing, see [Ultralytics Enterprise](https://www.ultralytics.com/license). For AGPL-free alternatives, see [Training Guide](docs/training-guide.md).
 
 ### Model Arbitration
 
@@ -310,7 +313,7 @@ WasegMul/
 
 - **Classification accuracy**: Models are trained on specific datasets and may not generalize perfectly to all waste types in all contexts
 - **Single-object focus**: The EfficientNet classifiers process one item at a time; multi-object detection is under development
-- **YOLO is COCO-based**: The YOLOv8n model detects general objects (80 COCO classes), not waste-specific categories
+- **YOLO uses COCO labels (current)**: The default YOLOv8n model detects general objects (80 COCO classes), not waste-specific categories. **Custom waste-trained YOLOX-S available**: see [Training Guide](docs/training-guide.md)
 - **No iOS classification yet**: The iOS shell demonstrates the shared knowledge base but does not yet include camera or ML inference
 - **No cloud features**: All data is local; there is no sync, backup, or cloud-based analysis
 
@@ -318,8 +321,10 @@ WasegMul/
 
 ## Roadmap
 
+- [x] YOLO model training pipeline (YOLO11n): **Completed** (see `scripts/train_waste_yolo.py`)
+- [x] TFLite export script for trained models: **Completed** (see `scripts/export_waste_model_tflite.py`)
+- [ ] Train custom YOLO11n on 30-class waste dataset (TACO + TrashNet + Roboflow)
 - [ ] Multi-object detection with simultaneous classification
-- [ ] TACO dataset fine-tuning for waste-specific object detection
 - [ ] iOS camera and classification pipeline
 - [ ] Batch image processing
 - [ ] Classification report export (PDF/share)
@@ -338,22 +343,22 @@ Contributions are welcome! Please read the [Contributing Guidelines](CONTRIBUTIN
 
 ## License
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License: see the [LICENSE](LICENSE) file for details.
 
 ---
 
 ## Acknowledgements
 
-- [TensorFlow Lite](https://www.tensorflow.org/lite) — On-device ML inference
-- [Ultralytics YOLOv8](https://docs.ultralytics.com/) — Object detection
-- [Jetpack Compose](https://developer.android.com/jetpack/compose) — Modern Android UI
-- [CameraX](https://developer.android.com/media/camerax) — Camera integration
-- [EPA Recycling Guidelines](https://www.epa.gov/recycle) — Disposal information
-- [Call2Recycle](https://call2recycle.org/) — Battery recycling data
-- [Contributor Covenant](https://www.contributor-covenant.org/) — Code of Conduct
+- [TensorFlow Lite](https://www.tensorflow.org/lite): On-device ML inference
+- [Ultralytics YOLOv8](https://docs.ultralytics.com/): Object detection
+- [Jetpack Compose](https://developer.android.com/jetpack/compose): Modern Android UI
+- [CameraX](https://developer.android.com/media/camerax): Camera integration
+- [EPA Recycling Guidelines](https://www.epa.gov/recycle): Disposal information
+- [Call2Recycle](https://call2recycle.org/): Battery recycling data
+- [Contributor Covenant](https://www.contributor-covenant.org/): Code of Conduct
 
 ---
 
 ## Author
 
-**Manoj** — [GitHub](https://github.com/manoj-ck2008)
+**Manoj**: [GitHub](https://github.com/manoj-ck2008)

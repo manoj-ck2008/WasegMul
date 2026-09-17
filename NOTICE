@@ -1,0 +1,45 @@
+WasegMul
+Copyright (c) 2024 WasegMul Contributors
+
+This product includes software developed as part of WasegMul under the MIT License.
+
+========================================================================
+Third-Party Software and Dataset Notices
+========================================================================
+
+1. Ultralytics YOLO (AGPL-3.0)
+   Certain computer vision scripts and optional object detection weights
+   (e.g., yolov8n.tflite, waste_yolo11n.tflite, scripts/train_waste_yolo.py,
+   scripts/export_yolo_tflite.py) utilize or derive from Ultralytics YOLO,
+   licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
+
+   In accordance with the AGPL-3.0:
+   - The complete corresponding source code for this software is available
+     at: https://github.com/manoj-ck2008/WasegMul
+   - A copy of the GNU Affero General Public License v3.0 is available at:
+     https://www.gnu.org/licenses/agpl-3.0.en.html
+   - Commercial deployments that do not wish to be bound by AGPL-3.0 copyleft
+     terms must obtain an Enterprise License from Ultralytics
+     (https://www.ultralytics.com/license) or substitute an Apache-2.0
+     detector such as YOLOX.
+
+2. TACO: Trash Annotations in Context (CC BY 4.0)
+   Training datasets and taxonomy definitions incorporate or adapt data
+   from the TACO dataset:
+   - Reference: Pedro F. Proenca and Pedro Simoes,
+     "TACO: Trash Annotations in Context for Litter Detection", 2020.
+     https://github.com/pedropro/TACO
+   - Licensed under the Creative Commons Attribution 4.0 International License:
+     https://creativecommons.org/licenses/by/4.0/
+
+3. TrashNet / WasteNet (MIT License)
+   Dataset references and benchmark classes derive from TrashNet:
+   - Reference: Gary Thung and Mindy Yang, "Classification of Trash for
+     Recyclability Status", Stanford University CS229 Project, 2016.
+     https://github.com/garythung/trashnet
+   - Licensed under the MIT License.
+
+4. TensorFlow Lite & Google Play Services
+   This application utilizes TensorFlow Lite runtime libraries under the
+   Apache License, Version 2.0:
+   - https://www.apache.org/licenses/LICENSE-2.0

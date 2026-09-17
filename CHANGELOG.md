@@ -5,6 +5,37 @@ All notable changes to WasegMul will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - Unreleased
+
+### Added
+- **Interactive ROI Tap-and-Classify**: Tap detected bounding boxes in YOLO live camera view to crop and classify items directly with EfficientNet.
+- **Energy Metric**: Added `energySavedKwh` (kWh) to `EcoImpactCalculator` (Recyclables: 4.2 kWh/kg, E-Waste: 6.5 kWh/kg, Organic: 0.3 kWh/kg).
+- **Material 3 Dynamic Color**: Support for Android 12+ Material You dynamic color palettes with toggle in Settings.
+- **Frosted Glass Blur**: Background blur on Android 12+ (API 31+) in `GlassCard` without blurring card content.
+- **Room Migration 8 to 9**: Compound indices on `category`, `subclass`, and `feedback` columns in `waste_history`.
+- **History Management**: Individual item deletion with confirmation dialog, sorting chips (Newest, Oldest, Confidence), and background CSV export with cache file cleanup.
+- **Result Screen Thumbnail**: Display of captured waste image alongside classification metrics, with a "Scan Another" action.
+- **Compose Previews**: Comprehensive `@Preview` composables across screens and UI components.
+- **Swift Interop Bridge**: Flat primitive array API `arbitrateMLFlat` in `IOSBridge` for clean Swift consumption.
+- **Waste Taxonomy Harmonization**: Unified YOLO visual classes with classifier subclasses in `WasteMapping` and `WasteKnowledgeBase`.
+
+### Changed
+- **Zero-Allocation ML Inference**: Preallocated reusable direct ByteBuffers, pixel arrays, and canvas buffers in `YoloDetector`, eliminating 9+ MB per frame GC allocation churn.
+- **Zero-Allocation Transpose**: Direct indexing in YOLO output parsing supporting both channel-first and anchor-first layouts.
+- **NMS Optimization**: Switched to boolean suppression mask to eliminate list mutation and object allocation in the detection loop.
+- **Classifier Architecture**: Extracted shared `TfliteClassifier` base class, eliminating 95% of boilerplate across category and subclass classifiers.
+- **Repository Interface**: Extracted `interface WasteRepository` with `DefaultWasteRepository` implementation.
+- **Domain Harmonization**: Aligned `PredictionResult` with canonical `subclass` nomenclature, validated confidence ranges (0f..1f), and removed obsolete `ScoredPrediction`.
+
+### Fixed
+- **Native SIGSEGV Crashes**: Fixed race conditions during `ModelManager.close()` and `YoloDetector.close()` with cooperative cancellation flags.
+- **CameraX Aspect Ratio Drift**: Fixed coordinate stretching in `DetectionOverlay` by tracking camera frame dimensions against viewport with `FILL_CENTER` scaling.
+- **ML Arbitrator Confused Category Bug**: Corrected priority logic to trust high-confidence subclass predictions when category classifier entropy is high.
+- **Correction Data Integrity**: Synchronized category re-derivation in `WasteRepository` when users submit a corrected subclass.
+- **Timestamp Desync**: Ensured generated entity timestamps are mirrored into in-memory ViewModel state.
+- **UI Visual Bugs**: Fixed orbiting node ring positioning in `AppLogo`, dp-to-px scaling in `FallingPetals`, and double TalkBack speech in `FeedbackSection`.
+- **Stale Documentation**: Corrected training guide non-ASCII characters, FAQ offline runtime details, and YOLO naming consistency.
+
 ## [1.1.0] - 2026-07-16
 
 ### Added
