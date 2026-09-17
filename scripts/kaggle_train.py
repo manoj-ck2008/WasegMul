@@ -268,33 +268,56 @@ print(f"  PyTorch:    {torch.__version__}")
 print(f"  CUDA:       {torch.cuda.is_available()}")
 
 if torch.cuda.is_available():
-    print(f"  GPU:        {torch.cuda.get_device_name(0)}")
+    gpu_count = torch.cuda.device_count()
+    gpu_name = torch.cuda.get_device_name(0)
     vram_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
-    print(f"  VRAM:       {vram_gb:.1f} GB")
-
-    # Check CUDA compute capability compatibility
     cap = torch.cuda.get_device_capability(0)
     capability = cap[0] * 10 + cap[1]
-    gpu_compatible = capability >= 70
 
-    if not gpu_compatible:
+    print(f"  GPU(s):     {gpu_count}x {gpu_name}")
+    print(f"  VRAM:       {vram_gb:.1f} GB per device")
+    print(f"  Compute:    sm_{capability}")
+
+    # Modern accelerator hardware optimizations (Ampere sm_80, Ada sm_89, Hopper H100 sm_90, Blackwell sm_100+)
+    if capability >= 80:
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        print("  Accelerations: TensorFloat-32 (TF32) enabled for matmul and cuDNN")
+
+    torch.backends.cudnn.benchmark = True
+
+    # Check CUDA compute capability compatibility
+    if capability < 70:
         print(f"\n  WARNING: GPU sm_{capability} incompatible with PyTorch {torch.__version__}")
-        print(f"  PyTorch 2.10+ requires sm_70+ (T4, A100, L4, etc.)")
-        print(f"  Switch GPU: Settings -> Accelerator -> GPU T4 x2")
-        print(f"  Falling back to CPU (training will be significantly slower)...")
+        print(f"  PyTorch 2.10+ requires sm_70+ (T4, P100, A100, H100, L4, Blackwell, etc.)")
+        print(f"  Falling back to CPU...")
         CONFIG["device"] = "cpu"
         CONFIG["batch"] = 8
-    elif torch.cuda.device_count() > 1:
-        gpu_count = torch.cuda.device_count()
+    elif vram_gb >= 60:
+        # Ultra-capacity accelerators (NVIDIA H100 80GB, Blackwell B200 192GB, A100 80GB)
+        CONFIG["device"] = [i for i in range(gpu_count)] if gpu_count > 1 else 0
+        CONFIG["batch"] = 64 * max(1, gpu_count)
+        CONFIG["workers"] = min(8, os.cpu_count() or 4)
+        CONFIG["amp"] = True
+        print(f"  High-Capacity Profile (H100/Blackwell/A100): Batch {CONFIG['batch']}, Workers {CONFIG['workers']}, AMP FP16/BF16")
+    elif vram_gb >= 24:
+        # High VRAM accelerators (RTX 4090/3090, A10G, L4)
+        CONFIG["device"] = [i for i in range(gpu_count)] if gpu_count > 1 else 0
+        CONFIG["batch"] = 32 * max(1, gpu_count)
+        CONFIG["workers"] = min(6, os.cpu_count() or 4)
+        print(f"  Workstation Profile: Batch {CONFIG['batch']}, Workers {CONFIG['workers']}")
+    elif gpu_count > 1:
+        # Multi-GPU (e.g. Kaggle dual T4 x 2)
         CONFIG["device"] = [i for i in range(gpu_count)]
-        # Auto-batch (-1) is not supported with multi-GPU; set explicit batch
         CONFIG["batch"] = 16 * gpu_count
-        print(f"  Multi-GPU:  {gpu_count} GPUs detected")
-        print(f"  Batch:      {CONFIG['batch']} ({16} per GPU)")
-        print(f"  GPU capability: sm_{capability}")
+        CONFIG["workers"] = 2
+        print(f"  Multi-GPU Profile: {gpu_count} devices -> Batch {CONFIG['batch']}")
     else:
+        # Single standard GPU (e.g. Kaggle T4, P100)
         CONFIG["device"] = 0
-        print(f"  GPU capability: sm_{capability}")
+        CONFIG["batch"] = 16
+        CONFIG["workers"] = 2
+        print(f"  Standard Profile: Single device -> Batch {CONFIG['batch']}")
 else:
     print("\n  WARNING: No GPU detected!")
     print("  Enable GPU: Settings -> Accelerator -> GPU")

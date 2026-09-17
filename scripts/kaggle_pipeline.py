@@ -45,7 +45,7 @@ TAXONOMY_PATH = PROJECT_ROOT / "taxonomy.yaml"
 TRAIN_SCRIPT = SCRIPT_DIR / "kaggle_train.py"
 
 DEFAULT_USERNAME = "manojkari"
-DEFAULT_SLUG = "wasegmul-yolo11n-training"
+DEFAULT_SLUG = "wasegmul-yolo11n-waste-training"
 DEFAULT_TITLE = "WasegMul YOLO11n Waste Training"
 DEFAULT_DATASETS = ["manojkari/taco-dataset1"]
 
