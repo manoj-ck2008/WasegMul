@@ -13,33 +13,45 @@ import kotlin.experimental.and
  */
 object PredictionCodec {
 
+    private const val HEX_CHARS = "0123456789ABCDEF"
+
     fun encode(predictions: List<Pair<String, Float>>): String =
-        predictions.joinToString(";") { (label, conf) ->
-            percentEncodeUtf8(label) + "|" + conf
-        }
+        predictions
+            .filter { (label, conf) -> label.isNotBlank() && conf.isFinite() }
+            .joinToString(";") { (label, conf) ->
+                percentEncodeUtf8(label) + "|" + conf
+            }
 
     fun decode(raw: String?): List<Pair<String, Float>> {
         if (raw.isNullOrBlank()) return emptyList()
         return raw.split(';').mapNotNull { entry ->
             val pipeIdx = entry.lastIndexOf('|')
-            if (pipeIdx < 0) return@mapNotNull null
-            val label = percentDecodeUtf8(entry.substring(0, pipeIdx))
-            val conf = entry.substring(pipeIdx + 1).toFloatOrNull() ?: return@mapNotNull null
+            if (pipeIdx <= 0) return@mapNotNull null
+            val label = percentDecodeUtf8(entry.substring(0, pipeIdx)).trim()
+            if (label.isEmpty()) return@mapNotNull null
+            val conf = entry.substring(pipeIdx + 1).trim().toFloatOrNull() ?: return@mapNotNull null
+            if (!conf.isFinite()) return@mapNotNull null
             label to conf
         }
     }
 
     private fun percentEncodeUtf8(s: String): String {
-        val utf8Bytes = s.toByteArray(Charsets.UTF_8)
+        val utf8Bytes = s.encodeToByteArray()
         return buildString {
             for (b in utf8Bytes) {
                 val unsigned = b.toInt() and 0xFF
-                val c = unsigned.toChar()
-                if (c.isLetterOrDigit() || c in "-_.~") {
-                    append(c)
+                // ASCII-only unreserved check: multibyte UTF-8 bytes (0x80+) MUST be encoded.
+                val isUnreservedAscii = (unsigned in 48..57) || // 0-9
+                    (unsigned in 65..90) || // A-Z
+                    (unsigned in 97..122) || // a-z
+                    unsigned == '-'.code || unsigned == '_'.code ||
+                    unsigned == '.'.code || unsigned == '~'.code
+                if (isUnreservedAscii) {
+                    append(unsigned.toChar())
                 } else {
                     append('%')
-                    append("%02X".format(unsigned))
+                    append(HEX_CHARS[(unsigned shr 4) and 0x0F])
+                    append(HEX_CHARS[unsigned and 0x0F])
                 }
             }
         }
@@ -61,16 +73,15 @@ object PredictionCodec {
                         i++
                     }
                 }
-                s[i] == '+' -> {
-                    bytes.add(' '.code.toByte())
-                    i++
-                }
+                // NOTE: '+' is NOT decoded to space. Encode emits %2B for '+',
+                // so a raw '+' is a literal plus (e.g. legacy data). Decoding it
+                // to space would corrupt labels.
                 else -> {
                     bytes.add(s[i].code.toByte())
                     i++
                 }
             }
         }
-        return bytes.toByteArray().toString(Charsets.UTF_8)
+        return bytes.toByteArray().decodeToString()
     }
 }

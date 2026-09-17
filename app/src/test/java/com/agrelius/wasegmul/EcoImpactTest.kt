@@ -1,0 +1,128 @@
+package com.agrelius.wasegmul
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class EcoImpactTest {
+
+    @Test
+    fun calculate_emptyHistory_returnsZeroMetrics() {
+        val metrics = EcoImpactCalculator.calculate(emptyList())
+        assertEquals(0.0, metrics.totalWeightKg, 0.001)
+        assertEquals(0.0, metrics.co2PreventedKg, 0.001)
+        assertEquals(0.0, metrics.waterSavedLiters, 0.001)
+        assertEquals(0.0, metrics.treeYearEquivalent, 0.001)
+        assertEquals(0, metrics.totalItems)
+        assertEquals(null, metrics.accuracyPercentage)
+    }
+
+    @Test
+    fun calculate_mixedWasteRecords_computesCorrectEnvironmentalOffsets() {
+        val records = listOf(
+            WasteRecord(id = 1, category = "Recyclable", subclass = "Plastic", confidence = 0.9f, estimatedWeight = 1.0),
+            WasteRecord(id = 2, category = "Organic", subclass = "Organic", confidence = 0.85f, estimatedWeight = 2.0),
+            WasteRecord(id = 3, category = "E-Waste", subclass = "Battery", confidence = 0.95f, estimatedWeight = 0.5),
+            WasteRecord(id = 4, category = "Trash", subclass = "Miscellaneous Trash", confidence = 0.7f, estimatedWeight = 0.1)
+        )
+
+        val metrics = EcoImpactCalculator.calculate(records)
+
+        // Total weight = 1.0 + 2.0 + 0.5 + 0.1 = 3.6 kg
+        assertEquals(3.6, metrics.totalWeightKg, 0.001)
+
+        // CO2 prevented:
+        // Recyclable: 1.0 * 1.5 = 1.5 kg
+        // Organic: 2.0 * 0.8 = 1.6 kg
+        // E-Waste: 0.5 * 2.2 = 1.1 kg
+        // Trash: 0 kg
+        // Total CO2: 1.5 + 1.6 + 1.1 = 4.2 kg
+        assertEquals(4.2, metrics.co2PreventedKg, 0.001)
+
+        // Water saved: 1.0 * 15.0 = 15.0 Liters
+        assertEquals(15.0, metrics.waterSavedLiters, 0.001)
+
+        // Tree-year equivalent: 4.2 / 21.77
+        val expectedTreeYears = 4.2 / 21.77
+        assertEquals(expectedTreeYears, metrics.treeYearEquivalent, 0.001)
+        assertEquals(4, metrics.totalItems)
+
+        // Energy saved:
+        // Recyclable: 1.0 * 4.2 = 4.2 kWh
+        // Organic: 2.0 * 0.3 = 0.6 kWh
+        // E-Waste: 0.5 * 6.5 = 3.25 kWh
+        // Total Energy: 4.2 + 0.6 + 3.25 = 8.05 kWh
+        assertEquals(8.05, metrics.energySavedKwh, 0.001)
+    }
+
+    @Test
+    fun calculate_withUserFeedback_computesAccuracyPercentage() {
+        val records = listOf(
+            WasteRecord(id = 1, category = "Recyclable", subclass = "Plastic", confidence = 0.9f, feedback = "correct"),
+            WasteRecord(id = 2, category = "Recyclable", subclass = "Metal", confidence = 0.8f, feedback = "correct"),
+            WasteRecord(id = 3, category = "Organic", subclass = "Organic", confidence = 0.7f, feedback = "incorrect"),
+            WasteRecord(id = 4, category = "Trash", subclass = "Miscellaneous Trash", confidence = 0.6f, feedback = null)
+        )
+
+        val metrics = EcoImpactCalculator.calculate(records)
+        // 3 with feedback, 2 correct -> 2/3 = 66.67%
+        assertNotNull(metrics.accuracyPercentage)
+        assertEquals(66.666f, metrics.accuracyPercentage!!, 0.1f)
+    }
+
+    @Test
+    fun calculate_withCorrection_usesCorrectedCategory() {
+        val records = listOf(
+            // Initially marked Trash (0 kg CO2 offset), but user corrected to Battery (E-Waste)
+            WasteRecord(
+                id = 1,
+                category = "Trash",
+                subclass = "Miscellaneous Trash",
+                confidence = 0.7f,
+                estimatedWeight = 1.0,
+                feedback = "incorrect",
+                correctedSubclass = "Battery"
+            )
+        )
+        val metrics = EcoImpactCalculator.calculate(records)
+        // Battery maps to E-Waste -> 1.0 kg * 2.2 = 2.2 kg CO2, 6.5 kWh energy
+        assertEquals(2.2, metrics.co2PreventedKg, 0.001)
+        assertEquals(6.5, metrics.energySavedKwh, 0.001)
+    }
+
+    @Test
+    fun calculate_incorrectFeedbackWithoutCorrection_excludedFromDivertedTotals() {
+        val records = listOf(
+            // User flagged as incorrect, but provided no correction -> excluded from positive offsets
+            WasteRecord(
+                id = 1,
+                category = "Recyclable",
+                subclass = "Plastic",
+                confidence = 0.7f,
+                estimatedWeight = 1.0,
+                feedback = "incorrect",
+                correctedSubclass = null
+            )
+        )
+        val metrics = EcoImpactCalculator.calculate(records)
+        assertEquals(0.0, metrics.totalWeightKg, 0.001)
+        assertEquals(0.0, metrics.co2PreventedKg, 0.001)
+        assertEquals(0.0, metrics.energySavedKwh, 0.001)
+        assertEquals(1, metrics.totalItems)
+    }
+
+    @Test
+    fun wasteKnowledgeBase_all30ClassesHaveDetailedGuidance() {
+        assertEquals(30, WasteMapping.MAPPING.size)
+
+        for ((subclass, meta) in WasteMapping.MAPPING) {
+            val info = WasteKnowledgeBase.getInfo(meta.category, subclass)
+            assertTrue("Guide for $subclass should not be blank", info.disposalGuide.isNotBlank())
+            assertTrue("Environmental impact for $subclass should not be blank", info.environmentalImpact.isNotBlank())
+            assertTrue("Recycling benefits for $subclass should not be blank", info.recyclingBenefits.isNotBlank())
+            assertTrue("Sources for $subclass should not be blank", info.sources.isNotBlank())
+            assertTrue("Weight for $subclass must be positive", meta.weightKg > 0.0)
+        }
+    }
+}

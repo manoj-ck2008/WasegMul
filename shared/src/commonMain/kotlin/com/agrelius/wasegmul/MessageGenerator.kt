@@ -1,5 +1,6 @@
 package com.agrelius.wasegmul
 
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 /**
@@ -16,42 +17,29 @@ import kotlin.random.Random
  */
 object MessageGenerator {
 
-    private val rng = Random.Default
+    // Injectable for tests; defaults to Random.Default for production.
+    var rng: Random = Random.Default
 
-    // ── Category-specific descriptors ────────────────────────────────────────
+    fun humanizeLabel(raw: String): String {
+        val s = raw.trim().replace('_', ' ')
+        if (s.isEmpty()) return s
+        return s.split(' ').joinToString(" ") { w ->
+            if (w.isEmpty()) w else w[0].uppercaseChar() + w.drop(1).lowercase()
+        }
+    }
 
-    private val categoryDescriptors = mapOf(
-        "E-Waste" to listOf(
-            "electronic item", "e-waste component", "electronic device",
-            "piece of electronics", "digital device"
-        ),
-        "Recyclable" to listOf(
-            "recyclable material", "recoverable item", "recyclable resource",
-            "reclaimable material"
-        ),
-        "Organic" to listOf(
-            "organic material", "biodegradable item", "compostable waste",
-            "natural material"
-        ),
-        "Trash" to listOf(
-            "non-recyclable item", "residual waste piece", "general waste item",
-            "disposal-bound material"
-        )
-    )
-
-    private fun categoryDescriptor(category: String): String =
-        categoryDescriptors[category]?.random() ?: "item"
+    private fun pct(conf: Float): Int = ((conf.coerceIn(0f, 1f)) * 100f).roundToInt()
 
     // ── Case 1: Both models agree ────────────────────────────────────────────
 
     private val agreeHighConfidence = listOf(
         { cat: String, sub: String ->
-            "Both our neural models agree — this is $sub ($cat). " +
+            "Both our neural models agree: this is $sub ($cat). " +
                 "You're looking at one of the clearest identifications our system can make."
         },
         { cat: String, sub: String ->
             "High-confidence match: category model says $cat, subclass model confirms $sub. " +
-                "Dual-model consensus — this classification is reliable."
+                "Dual-model consensus: this classification is reliable."
         },
         { cat: String, sub: String ->
             "Category and subclass classifiers are in full agreement. " +
@@ -67,18 +55,18 @@ object MessageGenerator {
         }
     )
 
-    // ── Case 2: Category overrides — subclass has a match in top predictions ─
+    // ── Case 2: Category overrides: subclass has a match in top predictions ─
 
     private val categoryOverrideMatch = listOf(
         { cat: String, sub: String, bestSub: String, bestConf: Float ->
             "Our primary model is confident this belongs to $cat. " +
                 "While the subclass model initially suggested $sub, we found $bestSub " +
-                "(${(bestConf * 100).toInt()}%) among its predictions — a better fit for the $cat category. " +
+                "(${pct(bestConf)}%) among its predictions, a better fit for the $cat category. " +
                 "Using $bestSub as the final identification."
         },
         { cat: String, sub: String, bestSub: String, bestConf: Float ->
             "Category model override applied. The broad classifier identifies this as $cat with high confidence. " +
-                "Cross-referencing subclass predictions: $bestSub at ${(bestConf * 100).toInt()}% " +
+                "Cross-referencing subclass predictions: $bestSub at ${pct(bestConf)}% " +
                 "aligns with the $cat classification. Final result: $bestSub."
         },
         { cat: String, sub: String, bestSub: String, bestConf: Float ->
@@ -87,22 +75,22 @@ object MessageGenerator {
         },
         { cat: String, sub: String, bestSub: String, bestConf: Float ->
             "Disagreement detected between models. Trusting the category classifier ($cat) and " +
-                "finding the best subclass match from its prediction list: $bestSub at ${(bestConf * 100).toInt()}%. " +
+                "finding the best subclass match from its prediction list: $bestSub at ${pct(bestConf)}%. " +
                 "This $bestSub falls squarely within $cat."
         },
         { cat: String, sub: String, bestSub: String, bestConf: Float ->
             "The $cat classifier is more reliable at this confidence level. " +
                 "Subclass model's top pick ($sub) was overridden; $bestSub " +
-                "(${(bestConf * 100).toInt()}%) matches the $cat grouping. Using $bestSub."
+                "(${pct(bestConf)}%) matches the $cat grouping. Using $bestSub."
         }
     )
 
-    // ── Case 3: Category overrides — no matching subclass in predictions ──────
+    // ── Case 3: Category overrides: no matching subclass in predictions ──────
 
     private val categoryOverrideNoMatch = listOf(
         { cat: String, sub: String ->
             "The primary classifier identifies this as $cat, but the subclass model " +
-                "couldn't pinpoint a specific type. We're categorizing this as $cat — " +
+                "couldn't pinpoint a specific type. We're categorizing this as $cat: " +
                 "the broad classification remains reliable even without subclass confirmation."
         },
         { cat: String, sub: String ->
@@ -113,7 +101,7 @@ object MessageGenerator {
         { cat: String, sub: String ->
             "Primary neural pathway: $cat. The specialist model's predictions " +
                 "don't contain a matching subclass for this $cat item. " +
-                "Broad classification is still valid — treat this as $cat."
+                "Broad classification is still valid: treat this as $cat."
         },
         { cat: String, sub: String ->
             "Both models ran but disagree on specifics. The category classifier ($cat) " +
@@ -122,12 +110,12 @@ object MessageGenerator {
         }
     )
 
-    // ── Case 4: Category-only (degraded — subclass model failed) ──────────────
+    // ── Case 4: Category-only (degraded: subclass model failed) ──────────────
 
     private val categoryOnlyDegraded = listOf(
         { cat: String ->
             "The fine-grained subclass model encountered an issue, but our primary " +
-                "classifier still identified this as $cat. Result is category-level only — " +
+                "classifier still identified this as $cat. Result is category-level only: " +
                 "we can't determine the specific type without the subclass model."
         },
         { cat: String ->
@@ -141,18 +129,18 @@ object MessageGenerator {
         },
         { cat: String ->
             "Partial analysis: the subclass model couldn't handle this input. " +
-                "The primary classifier says $cat. This is a coarser result than usual — " +
+                "The primary classifier says $cat. This is a coarser result than usual: " +
                 "the specific material type couldn't be determined."
         }
     )
 
-    // ── Case 5: Subclass-only (degraded — category model failed) ──────────────
+    // ── Case 5: Subclass-only (degraded: category model failed) ──────────────
 
     private val subclassOnlyDegraded = listOf(
         { sub: String, cat: String ->
             "The broad category model couldn't process this image, but our specialist " +
                 "model identified it as $sub ($cat). Classification is based on the subclass " +
-                "model alone — category was derived from the material mapping."
+                "model alone - category was derived from the material mapping."
         },
         { sub: String, cat: String ->
             "Category analysis unavailable. The subclass classifier identified this as $sub, " +
@@ -165,7 +153,7 @@ object MessageGenerator {
         },
         { sub: String, cat: String ->
             "Partial analysis: category model failed, but subclass model says $sub ($cat). " +
-                "We're trusting the subclass result — it was able to identify the specific material type."
+                "We're trusting the subclass result: it was able to identify the specific material type."
         }
     )
 
@@ -178,7 +166,7 @@ object MessageGenerator {
                 "Try repositioning the item or taking a clearer photo."
         },
         { ->
-            "Low confidence across both classifiers — this image doesn't match our " +
+            "Low confidence across both classifiers: this image doesn't match our " +
                 "training data well enough for a reliable classification. " +
                 "Please verify the item type manually."
         },
@@ -224,28 +212,34 @@ object MessageGenerator {
         topSubcategories: List<Pair<String, Float>>,
         topCategories: List<Pair<String, Float>>,
         mode: ClassificationMode
-    ): String = when (mode) {
-        ClassificationMode.BOTH_AGREE_HIGH, ClassificationMode.BOTH_AGREE -> rng.nextFrom(agreeHighConfidence)(category, subcategory)
-        ClassificationMode.CATEGORY_OVERRIDE_MATCH -> {
-            val best = findBestSubclassMatch(category, topSubcategories)
-            if (best != null) {
-                rng.nextFrom(categoryOverrideMatch)(category, subcategory, best.first, best.second)
-            } else {
-                rng.nextFrom(categoryOverrideNoMatch)(category, subcategory)
+    ): String {
+        val hSub = humanizeLabel(subcategory)
+        val hCat = category.trim()
+        return when (mode) {
+            ClassificationMode.BOTH_AGREE_HIGH, ClassificationMode.BOTH_AGREE ->
+                rng.nextFrom(agreeHighConfidence)(hCat, hSub)
+            ClassificationMode.CATEGORY_OVERRIDE_MATCH -> {
+                val best = findBestSubclassMatch(category, topSubcategories)
+                if (best != null) {
+                    val hBest = humanizeLabel(best.first)
+                    rng.nextFrom(categoryOverrideMatch)(hCat, hSub, hBest, best.second)
+                } else {
+                    rng.nextFrom(categoryOverrideNoMatch)(hCat, hSub)
+                }
             }
+            ClassificationMode.CATEGORY_OVERRIDE_NO_MATCH ->
+                rng.nextFrom(categoryOverrideNoMatch)(hCat, hSub)
+            ClassificationMode.CATEGORY_ONLY ->
+                rng.nextFrom(categoryOnlyDegraded)(hCat)
+            ClassificationMode.SUBCLASS_ONLY -> {
+                val mappedCat = WasteMapping.getCategory(subcategory)
+                rng.nextFrom(subclassOnlyDegraded)(hSub, mappedCat)
+            }
+            ClassificationMode.BOTH_UNCERTAIN ->
+                rng.nextFrom(bothUncertain)()
+            ClassificationMode.UNMAPPED_SUBCLASS ->
+                rng.nextFrom(unmappedSubclass)(hSub)
         }
-        ClassificationMode.CATEGORY_OVERRIDE_NO_MATCH ->
-            rng.nextFrom(categoryOverrideNoMatch)(category, subcategory)
-        ClassificationMode.CATEGORY_ONLY ->
-            rng.nextFrom(categoryOnlyDegraded)(category)
-        ClassificationMode.SUBCLASS_ONLY -> {
-            val mappedCat = WasteMapping.getCategory(subcategory)
-            rng.nextFrom(subclassOnlyDegraded)(subcategory, mappedCat)
-        }
-        ClassificationMode.BOTH_UNCERTAIN ->
-            rng.nextFrom(bothUncertain)()
-        ClassificationMode.UNMAPPED_SUBCLASS ->
-            rng.nextFrom(unmappedSubclass)(subcategory)
     }
 
     /**
@@ -256,12 +250,13 @@ object MessageGenerator {
         targetCategory: String,
         topSubcategories: List<Pair<String, Float>>
     ): Pair<String, Float>? {
+        val trimmedTarget = targetCategory.trim()
         return topSubcategories
-            .filter { WasteMapping.getCategory(it.first) == targetCategory }
+            .filter { WasteMapping.getCategory(it.first).equals(trimmedTarget, ignoreCase = true) }
             .maxByOrNull { it.second }
     }
 
-    private fun <T> Random.nextFrom(list: List<T>): T = list.random()
+    private fun <T> Random.nextFrom(list: List<T>): T = list.random(this)
 }
 
 /**

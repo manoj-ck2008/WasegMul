@@ -10,10 +10,8 @@ kotlin {
         }
     }
     
-    iosArm64()
-    iosSimulatorArm64()
-
-    listOf(iosArm64(), iosSimulatorArm64()).forEach {
+    val iosTargets = listOf(iosArm64(), iosSimulatorArm64(), iosX64())
+    iosTargets.forEach {
         it.binaries.framework {
             baseName = "shared"
             isStatic = true
@@ -24,6 +22,11 @@ kotlin {
         val commonMain by getting {
             dependencies {
                 // Shared logic dependencies
+            }
+        }
+        val commonTest by getting {
+            dependencies {
+                implementation(kotlin("test"))
             }
         }
         val androidMain by getting {
@@ -38,6 +41,9 @@ kotlin {
             dependsOn(iosMain)
         }
         val iosSimulatorArm64Main by getting {
+            dependsOn(iosMain)
+        }
+        val iosX64Main by getting {
             dependsOn(iosMain)
         }
     }

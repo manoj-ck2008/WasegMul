@@ -24,15 +24,15 @@ import kotlin.math.ln
  * When one model fails, the other's output is used with appropriate caveats.
  * Every case generates a dynamic user-facing message via [MessageGenerator].
  *
- * Pure Kotlin (multiplatform) logic — no Android dependencies.
+ * Pure Kotlin (multiplatform) logic - no Android dependencies.
  */
 object MLArbitrator {
 
     /** Subclass confidence must exceed this to be considered reliable on its own. */
-    private const val SUBCLASS_CONFIDENCE_THRESHOLD = 0.65f
+    const val SUBCLASS_CONFIDENCE_THRESHOLD = 0.65f
 
     /** Below this, a model's output is considered low-confidence. */
-    private const val LOW_CONFIDENCE_THRESHOLD = 0.50f
+    const val LOW_CONFIDENCE_THRESHOLD = 0.50f
 
     /** Maximum acceptable entropy (bits) for a 4-class distribution to be considered "certain". */
     private const val CATEGORY_ENTROPY_CEILING = 1.2f
@@ -52,9 +52,15 @@ object MLArbitrator {
     // ── Full pipeline (both models available) ─────────────────────────────────
 
     private fun arbitrateFull(prediction: PredictionResult): PredictionResult {
-        val rawCategory = prediction.category
+        val rawCategory = prediction.category.trim()
         if (rawCategory.isBlank()) {
-            return arbitrateNeither(prediction)
+            // Blank category with valid subclass evidence -> use subclass-only path,
+            // not neither (which would discard evidence).
+            return if (prediction.topSubcategories.isNotEmpty()) {
+                arbitrateSubclassOnly(prediction)
+            } else {
+                arbitrateNeither(prediction)
+            }
         }
         val catConf = prediction.categoryConfidence
         val subConf = prediction.subcategoryConfidence
@@ -62,7 +68,9 @@ object MLArbitrator {
 
         // Unmapped subclass → try to preserve the category if it's valid.
         if (mappedCategory == WasteMapping.UNKNOWN) {
-            // If the category itself is valid, keep it and fall back to category-level result.
+            // If the category itself is valid, keep it but DO NOT fabricate a
+            // subclass equal to the category (no such subclass exists). Use
+            // UNCERTAIN subclass so KB fallback shows honest category-level guidance.
             if (rawCategory != WasteMapping.UNKNOWN && rawCategory != WasteMapping.UNCERTAIN) {
                 val msg = MessageGenerator.generate(
                     category = rawCategory,
@@ -75,12 +83,12 @@ object MLArbitrator {
                 )
                 return prediction.copy(
                     category = rawCategory,
-                    subcategory = rawCategory,
-                    subcategoryConfidence = catConf,
+                    subcategory = WasteMapping.UNCERTAIN,
+                    subcategoryConfidence = 0f,
                     classificationMessage = msg
                 )
             }
-            // Category is also unknown — genuinely don't know.
+            // Category is also unknown - genuinely don't know.
             val msg = MessageGenerator.generate(
                 category = rawCategory,
                 subcategory = prediction.subcategory,
@@ -96,9 +104,32 @@ object MLArbitrator {
             )
         }
 
-        // Both models agree on the category → high confidence.
-        if (rawCategory == mappedCategory) {
-            val mode = ClassificationMode.BOTH_AGREE
+        // Both models agree on the category (case-insensitive)
+        if (rawCategory.equals(mappedCategory, ignoreCase = true)) {
+            if (catConf < LOW_CONFIDENCE_THRESHOLD && subConf < LOW_CONFIDENCE_THRESHOLD) {
+                val msg = MessageGenerator.generate(
+                    category = rawCategory,
+                    subcategory = prediction.subcategory,
+                    catConfidence = catConf,
+                    subConfidence = subConf,
+                    topSubcategories = prediction.topSubcategories,
+                    topCategories = prediction.topCategories,
+                    mode = ClassificationMode.BOTH_UNCERTAIN
+                )
+                return prediction.copy(
+                    category = WasteMapping.UNCERTAIN,
+                    subcategory = WasteMapping.UNCERTAIN,
+                    categoryConfidence = 0f,
+                    subcategoryConfidence = 0f,
+                    classificationMessage = msg
+                )
+            }
+
+            val mode = if (catConf >= 0.80f && subConf >= 0.80f) {
+                ClassificationMode.BOTH_AGREE_HIGH
+            } else {
+                ClassificationMode.BOTH_AGREE
+            }
             val msg = MessageGenerator.generate(
                 category = rawCategory,
                 subcategory = prediction.subcategory,
@@ -114,11 +145,25 @@ object MLArbitrator {
             )
         }
 
-        // Models disagree → category model takes priority.
+        // Models disagree → category model takes priority unless it is confused.
+
+        // If category itself is Unknown/Uncertain but subclass maps to a valid
+        // category, trust the subclass evidence instead of discarding it.
+        if ((rawCategory.equals(WasteMapping.UNKNOWN, ignoreCase = true) || rawCategory.equals(WasteMapping.UNCERTAIN, ignoreCase = true)) &&
+            mappedCategory != WasteMapping.UNKNOWN && mappedCategory != WasteMapping.UNCERTAIN
+        ) {
+            return arbitrateSubclassOnly(prediction)
+        }
 
         // Check entropy: if the category model is truly confused, check both models' confidence.
         val catEntropy = computeEntropy(prediction.topCategories)
-        val categoryModelConfused = catEntropy > CATEGORY_ENTROPY_CEILING && catConf < LOW_CONFIDENCE_THRESHOLD
+        val categoryModelConfused = catEntropy > CATEGORY_ENTROPY_CEILING || catConf < LOW_CONFIDENCE_THRESHOLD
+
+        // If category model is confused but subclass model is highly confident (>= SUBCLASS_CONFIDENCE_THRESHOLD),
+        // trust the reliable subclass model over the confused category model!
+        if (categoryModelConfused && subConf >= SUBCLASS_CONFIDENCE_THRESHOLD && mappedCategory != WasteMapping.UNKNOWN) {
+            return arbitrateSubclassOnly(prediction)
+        }
 
         if (categoryModelConfused && subConf < LOW_CONFIDENCE_THRESHOLD) {
             // Both models are uncertain.
@@ -133,16 +178,19 @@ object MLArbitrator {
             )
             return prediction.copy(
                 category = WasteMapping.UNCERTAIN,
+                subcategory = WasteMapping.UNCERTAIN,
+                categoryConfidence = 0f,
+                subcategoryConfidence = 0f,
                 classificationMessage = msg
             )
         }
 
         // Cross-check: does any subclass prediction map to the category model's result?
         val matchingSubclass = prediction.topSubcategories
-            .filter { WasteMapping.getCategory(it.first) == rawCategory }
+            .filter { WasteMapping.getCategory(it.first).equals(rawCategory, ignoreCase = true) }
             .maxByOrNull { it.second }
 
-        return if (matchingSubclass != null && matchingSubclass.second > LOW_CONFIDENCE_THRESHOLD) {
+        return if (matchingSubclass != null && matchingSubclass.second >= LOW_CONFIDENCE_THRESHOLD) {
             // Found a subclass that matches the category → use it.
             val msg = MessageGenerator.generate(
                 category = rawCategory,
@@ -160,7 +208,7 @@ object MLArbitrator {
                 classificationMessage = msg
             )
         } else {
-            // No matching subclass → category-level result only.
+            // No matching subclass → category-level result only (honest UNCERTAIN subclass).
             val msg = MessageGenerator.generate(
                 category = rawCategory,
                 subcategory = prediction.subcategory,
@@ -172,8 +220,8 @@ object MLArbitrator {
             )
             prediction.copy(
                 category = rawCategory,
-                subcategory = rawCategory,
-                subcategoryConfidence = catConf,
+                subcategory = WasteMapping.UNCERTAIN,
+                subcategoryConfidence = 0f,
                 classificationMessage = msg
             )
         }
@@ -186,7 +234,7 @@ object MLArbitrator {
         if (catConf < LOW_CONFIDENCE_THRESHOLD) {
             val msg = MessageGenerator.generate(
                 category = prediction.category,
-                subcategory = "Unknown",
+                subcategory = WasteMapping.UNKNOWN,
                 catConfidence = catConf,
                 subConfidence = 0f,
                 topSubcategories = emptyList(),
@@ -196,12 +244,14 @@ object MLArbitrator {
             return prediction.copy(
                 category = WasteMapping.UNCERTAIN,
                 subcategory = WasteMapping.UNCERTAIN,
+                categoryConfidence = 0f,
+                subcategoryConfidence = 0f,
                 classificationMessage = msg
             )
         }
         val msg = MessageGenerator.generate(
             category = prediction.category,
-            subcategory = "Unknown",
+            subcategory = WasteMapping.UNKNOWN,
             catConfidence = catConf,
             subConfidence = 0f,
             topSubcategories = emptyList(),
@@ -209,8 +259,8 @@ object MLArbitrator {
             mode = ClassificationMode.CATEGORY_ONLY
         )
         return prediction.copy(
-            subcategory = prediction.category,
-            subcategoryConfidence = catConf,
+            subcategory = WasteMapping.UNCERTAIN,
+            subcategoryConfidence = 0f,
             classificationMessage = msg
         )
     }
@@ -223,7 +273,7 @@ object MLArbitrator {
 
         if (mappedCategory == WasteMapping.UNKNOWN) {
             val msg = MessageGenerator.generate(
-                category = "Unknown",
+                category = WasteMapping.UNKNOWN,
                 subcategory = prediction.subcategory,
                 catConfidence = 0f,
                 subConfidence = subConf,
@@ -248,6 +298,9 @@ object MLArbitrator {
             )
             return prediction.copy(
                 category = WasteMapping.UNCERTAIN,
+                subcategory = WasteMapping.UNCERTAIN,
+                categoryConfidence = 0f,
+                subcategoryConfidence = 0f,
                 classificationMessage = msg
             )
         }
@@ -290,16 +343,21 @@ object MLArbitrator {
 
     /**
      * Computes Shannon entropy (in bits) over the probability distribution implied by
-     * [topPredictions]. The remaining probability mass (beyond the top-K) is conservatively
-     * lumped into a single "rest" bucket.
+     * [topPredictions]. Remaining probability mass is lumped into a single "rest" bucket
+     * which OVERESTIMATES certainty (underestimates true entropy) - callers must treat
+     * this as a lower bound.
      */
-    private fun computeEntropy(topPredictions: List<Pair<String, Float>>): Float {
+    fun computeEntropy(topPredictions: List<Pair<String, Float>>): Float {
         if (topPredictions.isEmpty()) return 0f
-        val accounted = topPredictions.sumOf { it.second.toDouble() }.toFloat()
-        val rest = (1f - accounted).coerceAtLeast(0f)
-        val probs = topPredictions.map { it.second } + listOfNotNull(rest.takeIf { it > 0f })
+        val raw = topPredictions.map { it.second.coerceAtLeast(0f).toDouble() }
+        val sum = raw.sum()
+        if (sum <= 0.0) return 0f
+        val normalized = if (sum > 1.0) raw.map { it / sum } else raw
+        val accounted = normalized.sum()
+        val rest = (1.0 - accounted).coerceAtLeast(0.0)
+        val probs = normalized + listOfNotNull(rest.takeIf { it > 1e-6 })
         return probs.sumOf { p ->
-            if (p > 0f) -p * ln(p) / ln(2.0) else 0.0
+            if (p > 0.0) -p * ln(p) / ln(2.0) else 0.0
         }.toFloat()
     }
 }
