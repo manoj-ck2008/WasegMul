@@ -44,7 +44,7 @@ class ClassificationViewModel(
     private val _currentRecord = MutableStateFlow<WasteRecord?>(null)
     val currentRecord: StateFlow<WasteRecord?> = _currentRecord
 
-    private val _navigateToResult = Channel<Unit>(Channel.CONFLATED)
+    private val _navigateToResult = Channel<Long>(Channel.CONFLATED)
     val navigateToResult = _navigateToResult.receiveAsFlow()
 
     fun initModel(context: Context) {
@@ -54,7 +54,9 @@ class ClassificationViewModel(
     }
 
     fun setBitmap(bitmap: Bitmap) {
-        _capturedBitmap.value?.takeIf { !it.isRecycled }?.recycle()
+        // Do NOT manually recycle: Compose may still be drawing the old bitmap
+        // during navigation transitions (native crash). Just drop the reference
+        // and let GC reclaim. Callers pass a fresh bitmap each time.
         _capturedBitmap.value = bitmap
         _classificationResult.value = null
         _error.value = null
@@ -62,7 +64,15 @@ class ClassificationViewModel(
     }
 
     fun classify() {
-        val bitmap = _capturedBitmap.value ?: return
+        val bitmap = _capturedBitmap.value ?: run {
+            _error.value = "No image selected. Please capture or pick a photo first."
+            return
+        }
+        if (bitmap.isRecycled) {
+            _error.value = "Image was released. Please reselect the photo."
+            return
+        }
+        if (_isLoading.value) return
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
@@ -100,21 +110,25 @@ class ClassificationViewModel(
                         )
 
                         _classificationResult.value = result
-                        _navigateToResult.trySend(Unit)
 
                         val estimatedWeight = if (isUncertain) 0.0
                         else WasteMapping.getWeight(result.subclass)
 
+                        val now = System.currentTimeMillis()
                         val record = WasteRecord(
                             category = result.category,
                             subclass = result.subclass,
                             confidence = result.confidence,
                             estimatedWeight = estimatedWeight,
                             featureVector = null,
-                            topPredictions = PredictionCodec.encode(result.topPredictions)
+                            topPredictions = PredictionCodec.encode(result.topPredictions),
+                            timestamp = now
                         )
+                        // Insert FIRST, then navigate: ResultScreen needs the row ID
+                        // for feedback/corrections. Navigating before insert loses data.
                         val id = repository.insert(record)
                         _currentRecord.value = record.copy(id = id)
+                        _navigateToResult.trySend(id)
                     }
                     is ClassificationOutcome.Failure -> {
                         val msg = when (outcome.reason) {
@@ -129,7 +143,7 @@ class ClassificationViewModel(
                             FailureReason.UNKNOWN ->
                                 outcome.message.ifBlank { "An unexpected error occurred. Please try again." }
                         }
-                        Log.e(TAG, "Classification failed: ${outcome.reason} — $msg", outcome.cause)
+                        Log.e(TAG, "Classification failed: ${outcome.reason}: $msg", outcome.cause)
                         _error.value = msg
                     }
                 }
@@ -150,7 +164,7 @@ class ClassificationViewModel(
     }
 
     fun releaseBitmap() {
-        _capturedBitmap.value?.takeIf { !it.isRecycled }?.recycle()
+        // Drop reference only; do not recycle (Compose may still hold it).
         _capturedBitmap.value = null
     }
 
@@ -162,7 +176,7 @@ class ClassificationViewModel(
                 if (rows > 0) {
                     _currentRecord.value = _currentRecord.value?.copy(feedback = feedback)
                 } else {
-                    _error.value = "Record not found — feedback not saved."
+                    _error.value = "Record not found: feedback not saved."
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to update feedback", e)
@@ -175,11 +189,16 @@ class ClassificationViewModel(
         val recordId = _currentRecord.value?.id ?: return
         viewModelScope.launch {
             try {
-                val rows = repository.updateCorrection(recordId, correction)
+                val rows = repository.updateCorrectionWithCategory(recordId, correction)
                 if (rows > 0) {
-                    _currentRecord.value = _currentRecord.value?.copy(correctedSubclass = correction)
+                    val correctedCategory = WasteMapping.getCategory(correction)
+                    _currentRecord.value = _currentRecord.value?.copy(
+                        correctedSubclass = correction,
+                        category = if (correctedCategory != WasteMapping.UNKNOWN) correctedCategory
+                                   else _currentRecord.value?.category ?: ""
+                    )
                 } else {
-                    _error.value = "Record not found — correction not saved."
+                    _error.value = "Record not found: correction not saved."
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to update correction", e)
@@ -192,6 +211,8 @@ class ClassificationViewModel(
         viewModelScope.launch {
             _classificationResult.value = null
             _currentRecord.value = null
+            // Drop any large camera bitmap while viewing history to halve memory.
+            _capturedBitmap.value = null
             try {
                 val record = repository.getRecordById(recordId)
                 if (record == null) {
@@ -208,7 +229,7 @@ class ClassificationViewModel(
                     environmentalImpact = info.environmentalImpact,
                     recyclingBenefits = info.recyclingBenefits,
                     sources = info.sources,
-                    classificationMessage = "Historical record — originally classified as ${record.subclass} (${record.category})."
+                    classificationMessage = "Historical record: originally classified as ${record.subclass} (${record.category})."
                 )
                 _currentRecord.value = record
             } catch (e: Exception) {
@@ -221,7 +242,7 @@ class ClassificationViewModel(
     override fun onCleared() {
         super.onCleared()
         modelManager?.close()
-        _capturedBitmap.value?.takeIf { !it.isRecycled }?.recycle()
+        _capturedBitmap.value = null
     }
 
     class Factory(

@@ -30,6 +30,22 @@ interface WasteDao {
     @Query("UPDATE waste_history SET correctedSubclass = :correction WHERE id = :recordId")
     suspend fun updateCorrection(recordId: Long, correction: String): Int
 
+    /** @return number of rows updated (0 when [recordId] does not exist). */
+    @Query("UPDATE waste_history SET category = :category WHERE id = :recordId")
+    suspend fun updateCategory(recordId: Long, category: String): Int
+
+    @Query("SELECT * FROM waste_history WHERE category = :category ORDER BY timestamp DESC LIMIT :limit")
+    fun getHistoryByCategory(category: String, limit: Int = 500): Flow<List<WasteRecord>>
+
+    @Query("SELECT COUNT(*) FROM waste_history")
+    suspend fun getCount(): Int
+
+    @Query("SELECT * FROM waste_history ORDER BY timestamp ASC")
+    suspend fun getAllForExport(): List<WasteRecord>
+
     @Query("DELETE FROM waste_history")
     suspend fun clearHistory()
+
+    @Query("DELETE FROM waste_history WHERE id = :id")
+    suspend fun deleteById(id: Long): Int
 }

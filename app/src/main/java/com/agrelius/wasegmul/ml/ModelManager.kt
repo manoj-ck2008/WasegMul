@@ -44,6 +44,8 @@ class ModelManager(private val context: Context) {
 
     @Volatile
     private var isInitialized = false
+    @Volatile
+    private var closed = false
 
     private val initMutex = Mutex()
     private val classifyMutex = Mutex()
@@ -53,11 +55,15 @@ class ModelManager(private val context: Context) {
         initMutex.withLock {
             if (isInitialized) return
             try {
-                TfLite.initialize(context).await()
-                categoryClassifier = CategoryClassifier(context.applicationContext)
-                subclassClassifier = SubclassClassifier(context.applicationContext)
+                // Heavy mmap + init MUST NOT run on Main.
+                withContext(Dispatchers.IO) {
+                    // Play Services TFLite init removed: classifiers use bundled
+                    // org.tensorflow.lite.Interpreter, not InterpreterApi.
+                    categoryClassifier = CategoryClassifier(context.applicationContext)
+                    subclassClassifier = SubclassClassifier(context.applicationContext)
+                }
                 isInitialized = true
-                Log.d(TAG, "Classifiers initialised via Play Services successfully")
+                Log.d(TAG, "Classifiers initialised successfully")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to initialise classifiers", e)
                 cleanup()
@@ -81,72 +87,96 @@ class ModelManager(private val context: Context) {
         }
 
         classifyMutex.withLock {
-            val catClassifier = categoryClassifier
-            val subClassifier = subclassClassifier
-
-            var catResult: com.agrelius.wasegmul.InternalResult? = null
-            var subResult: com.agrelius.wasegmul.InternalResult? = null
-            var catError: String? = null
-            var subError: String? = null
-
-            coroutineScope {
-                val catJob = async {
-                    try {
-                        if (catClassifier != null) catClassifier.classify(bitmap) to null
-                        else null to "Category classifier not available (closed)"
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Category classifier threw", e)
-                        null to (e.message ?: "Category classifier error")
-                    }
-                }
-                val subJob = async {
-                    try {
-                        if (subClassifier != null) subClassifier.classify(bitmap) to null
-                        else null to "Subclass classifier not available (closed)"
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Subclass classifier threw", e)
-                        null to (e.message ?: "Subclass classifier error")
-                    }
-                }
-                val (catRes, catErr) = catJob.await()
-                val (subRes, subErr) = subJob.await()
-                catResult = catRes; catError = catErr
-                subResult = subRes; subError = subErr
-            }
-
-            // Both failed → total failure.
-            if (catResult == null && subResult == null) {
-                val detail = listOfNotNull(catError, subError).joinToString("; ")
-                Log.e(TAG, "Both classifiers failed: $detail")
+            if (closed) {
                 return@withLock ClassificationOutcome.Failure(
-                    FailureReason.UNKNOWN,
-                    "Classification failed: $detail. Please try again.",
+                    FailureReason.NOT_INITIALIZED,
+                    "Models have been closed.",
                     null
                 )
             }
+            try {
+                val catClassifier = categoryClassifier
+                val subClassifier = subclassClassifier
 
-            if (catError != null) Log.w(TAG, "Degraded mode — category model failed: $catError")
-            if (subError != null) Log.w(TAG, "Degraded mode — subclass model failed: $subError")
+                var catResult: com.agrelius.wasegmul.InternalResult? = null
+                var subResult: com.agrelius.wasegmul.InternalResult? = null
+                var catError: String? = null
+                var subError: String? = null
 
-            ClassificationOutcome.Success(
-                PredictionResult(
-                    category = catResult?.label ?: "Unknown",
-                    categoryConfidence = catResult?.confidence ?: 0f,
-                    subcategory = subResult?.label ?: "Unknown",
-                    subcategoryConfidence = subResult?.confidence ?: 0f,
-                    topSubcategories = subResult?.topPredictions ?: emptyList(),
-                    topCategories = catResult?.topPredictions ?: emptyList()
+                coroutineScope {
+                    val catJob = async {
+                        try {
+                            if (catClassifier != null) catClassifier.classify(bitmap) to null
+                            else null to "Category classifier not available (closed)"
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Category classifier threw", e)
+                            null to (e.message ?: "Category classifier error")
+                        }
+                    }
+                    val subJob = async {
+                        try {
+                            if (subClassifier != null) subClassifier.classify(bitmap) to null
+                            else null to "Subclass classifier not available (closed)"
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Subclass classifier threw", e)
+                            null to (e.message ?: "Subclass classifier error")
+                        }
+                    }
+                    val (catRes, catErr) = catJob.await()
+                    val (subRes, subErr) = subJob.await()
+                    catResult = catRes; catError = catErr
+                    subResult = subRes; subError = subErr
+                }
+
+                // Both failed -> total failure.
+                if (catResult == null && subResult == null) {
+                    val detail = listOfNotNull(catError, subError).joinToString("; ")
+                    Log.e(TAG, "Both classifiers failed: $detail")
+                    val reason = when {
+                        catError != null && subError == null -> FailureReason.CATEGORY_INFERENCE_FAILED
+                        subError != null && catError == null -> FailureReason.SUBCLASS_INFERENCE_FAILED
+                        else -> FailureReason.UNKNOWN
+                    }
+                    return@withLock ClassificationOutcome.Failure(
+                        reason,
+                        "Classification failed: $detail. Please try again.",
+                        null
+                    )
+                }
+
+                if (catError != null) Log.w(TAG, "Degraded mode: category model failed: $catError")
+                if (subError != null) Log.w(TAG, "Degraded mode: subclass model failed: $subError")
+
+                ClassificationOutcome.Success(
+                    PredictionResult(
+                        category = catResult?.label ?: "Unknown",
+                        categoryConfidence = catResult?.confidence ?: 0f,
+                        subcategory = subResult?.label ?: "Unknown",
+                        subcategoryConfidence = subResult?.confidence ?: 0f,
+                        topSubcategories = subResult?.topPredictions ?: emptyList(),
+                        topCategories = catResult?.topPredictions ?: emptyList()
+                    )
                 )
-            )
+            } finally {
+                if (closed) {
+                    cleanup()
+                }
+            }
         }
     }
 
     fun close() {
+        closed = true
         isInitialized = false
-        runCatching { categoryClassifier?.close() }
-        runCatching { subclassClassifier?.close() }
-        categoryClassifier = null
-        subclassClassifier = null
+        if (classifyMutex.tryLock()) {
+            try {
+                cleanup()
+            } finally {
+                classifyMutex.unlock()
+            }
+        }
+        // If classifyMutex is currently held, the in-flight classify()
+        // will call cleanup() in its finally block once inference finishes.
     }
 
     private fun cleanup() {
