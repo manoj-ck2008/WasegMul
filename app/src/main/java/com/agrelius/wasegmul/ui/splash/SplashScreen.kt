@@ -4,6 +4,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -79,7 +80,7 @@ fun SplashScreen(onTimeout: () -> Unit) {
         delay(300)
         stage = 2 // Vision & Petals Bloom
         
-        delay(500)
+        delay(2200)
         if (!navigated) {
             navigated = true
             onTimeout()
@@ -89,7 +90,13 @@ fun SplashScreen(onTimeout: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(Color.Black)
+            .clickable {
+                if (!navigated) {
+                    navigated = true
+                    onTimeout()
+                }
+            },
         contentAlignment = Alignment.Center
     ) {
         // Organic Vision Layer

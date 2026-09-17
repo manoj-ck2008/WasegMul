@@ -17,9 +17,31 @@ class SettingsViewModel(
     val themeMode: StateFlow<ThemeMode> = settingsManager.themeMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemeMode.DARK)
 
+    val dynamicColor: StateFlow<Boolean> = settingsManager.dynamicColor
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val confidenceThreshold: StateFlow<Float> = settingsManager.confidenceThreshold
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.50f)
+
+    val hapticsEnabled: StateFlow<Boolean> = settingsManager.hapticsEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
     fun setThemeMode(value: ThemeMode) {
         viewModelScope.launch { settingsManager.setThemeMode(value) }
     }
+
+    fun setDynamicColor(value: Boolean) {
+        viewModelScope.launch { settingsManager.setDynamicColor(value) }
+    }
+
+    fun setConfidenceThreshold(value: Float) {
+        viewModelScope.launch { settingsManager.setConfidenceThreshold(value) }
+    }
+
+    fun setHapticsEnabled(value: Boolean) {
+        viewModelScope.launch { settingsManager.setHapticsEnabled(value) }
+    }
+
 
     class Factory(
         private val settingsManager: SettingsManager

@@ -71,7 +71,7 @@ fun AppLogo(
         modifier = Modifier.size(size),
         contentAlignment = Alignment.Center
     ) {
-        // BACKGROUND NEURAL FABRIC — hexagonal shield
+        // BACKGROUND NEURAL FABRIC: hexagonal shield
         Canvas(modifier = Modifier.fillMaxSize()) {
             val center = Offset(sizePx / 2, sizePx / 2)
 
@@ -126,7 +126,7 @@ fun AppLogo(
                 )
             }
 
-            // ORBITING NEURAL NODES — drawn in same Canvas for performance
+            // ORBITING NEURAL NODES: drawn in same Canvas for performance
             for (i in 0..4) {
                 val nodeAngle = i * 72f - (if (animate) rotation * 0.6f else 0f)
                 val dist = sizePx / 2.3f
@@ -138,6 +138,7 @@ fun AppLogo(
                 drawCircle(
                     color = EmeraldVibrant,
                     radius = 9.dp.toPx() * nodePulse,
+                    center = Offset(nx, ny),
                     style = Stroke(1.dp.toPx()),
                     alpha = (1f - nodePulse) * 0.35f
                 )
@@ -158,7 +159,7 @@ fun AppLogo(
             }
         }
 
-        // THE "BIO-CORE" — Neural Leaf
+        // THE "BIO-CORE": Neural Leaf
         Canvas(modifier = Modifier.size(size * 0.65f).rotate(if (animate) rotation * 0.1f else 0f)) {
             val w = sizePx * 0.65f
             val h = sizePx * 0.65f
@@ -173,7 +174,7 @@ fun AppLogo(
                 quadraticTo(w * 0.05f, h * 0.3f, w * 0.5f, 0f)
             }
 
-            // Leaf fill — richer gradient
+            // Leaf fill: richer gradient
             drawPath(
                 path = leafPath,
                 brush = Brush.linearGradient(
@@ -184,14 +185,14 @@ fun AppLogo(
                 alpha = 0.92f
             )
 
-            // Leaf outline — subtle border
+            // Leaf outline: subtle border
             drawPath(
                 path = leafPath,
                 color = Color.White.copy(alpha = 0.12f),
                 style = Stroke(width = 0.8.dp.toPx())
             )
 
-            // Central vein — pulsing data flow
+            // Central vein: pulsing data flow
             val pulseY = h * energyFlow
             drawLine(
                 brush = Brush.verticalGradient(
@@ -208,7 +209,7 @@ fun AppLogo(
                 strokeWidth = 2.dp.toPx()
             )
 
-            // Side veins — subtle branching
+            // Side veins: subtle branching
             for (i in 1..3) {
                 val vy = h * (i * 0.25f)
                 val spread = w * 0.18f * (1f - i * 0.15f)
@@ -236,3 +237,14 @@ private object SinEasing : Easing {
     override fun transform(fraction: Float): Float =
         ((sin(fraction * PI) / PI) + 0.5).toFloat().coerceIn(0f, 1f)
 }
+
+@androidx.compose.ui.tooling.preview.Preview(name = "AppLogo Preview", showBackground = true, backgroundColor = 0xFF121212)
+@Composable
+private fun AppLogoPreview() {
+    WasegMulTheme {
+        Box(modifier = Modifier.padding(24.dp)) {
+            AppLogo(size = 120.dp, animate = false)
+        }
+    }
+}
+

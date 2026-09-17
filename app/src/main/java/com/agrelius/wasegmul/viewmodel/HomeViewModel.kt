@@ -24,13 +24,26 @@ class HomeViewModel(private val repository: WasteRepository) : ViewModel() {
     val allHistory: StateFlow<List<WasteRecord>> = repository.allHistory
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun clearHistory() {
+    fun clearHistory(onComplete: (() -> Unit)? = null) {
         viewModelScope.launch {
             try {
                 repository.clear()
+                onComplete?.invoke()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to clear history", e)
                 _error.value = "Failed to clear history"
+            }
+        }
+    }
+
+    fun deleteRecord(id: Long, onComplete: (() -> Unit)? = null) {
+        viewModelScope.launch {
+            try {
+                repository.deleteById(id)
+                onComplete?.invoke()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to delete record $id", e)
+                _error.value = "Failed to delete record"
             }
         }
     }
@@ -49,7 +62,7 @@ class HomeViewModel(private val repository: WasteRepository) : ViewModel() {
     fun updateCorrection(recordId: Long, correction: String) {
         viewModelScope.launch {
             try {
-                repository.updateCorrection(recordId, correction)
+                repository.updateCorrectionWithCategory(recordId, correction)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to update correction", e)
                 _error.value = "Failed to update correction"

@@ -58,3 +58,26 @@ fun HeroCard(
         content()
     }
 }
+
+@androidx.compose.ui.tooling.preview.Preview(name = "HeroCard Preview", showBackground = true, backgroundColor = 0xFF121212)
+@Composable
+private fun HeroCardPreview() {
+    com.agrelius.wasegmul.ui.theme.WasegMulTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            HeroCard {
+                androidx.compose.material3.Text(
+                    text = "Hero Card Title",
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                androidx.compose.material3.Text(
+                    text = "Hero Card description and body content.",
+                    color = Color.LightGray,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    }
+}
+

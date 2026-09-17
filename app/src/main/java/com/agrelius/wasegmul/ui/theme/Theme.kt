@@ -1,12 +1,18 @@
 package com.agrelius.wasegmul.ui.theme
 
 import android.app.Activity
+import android.os.Build
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.view.WindowCompat
+
 
 enum class AppThemeMode {
     DARK, LIGHT, COLOUR
@@ -91,12 +97,22 @@ private val ColourColorScheme = darkColorScheme(
 @Composable
 fun WasegMulTheme(
     themeMode: AppThemeMode = AppThemeMode.DARK,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when(themeMode) {
-        AppThemeMode.DARK -> DarkColorScheme
-        AppThemeMode.LIGHT -> LightColorScheme
-        AppThemeMode.COLOUR -> ColourColorScheme
+    val context = LocalContext.current
+    val colorScheme = when {
+        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            if (themeMode == AppThemeMode.LIGHT) {
+                dynamicLightColorScheme(context)
+            } else {
+                dynamicDarkColorScheme(context)
+            }
+        }
+        themeMode == AppThemeMode.DARK -> DarkColorScheme
+        themeMode == AppThemeMode.LIGHT -> LightColorScheme
+        themeMode == AppThemeMode.COLOUR -> ColourColorScheme
+        else -> DarkColorScheme
     }
 
     val glassColors = when(themeMode) {
@@ -131,3 +147,24 @@ fun WasegMulTheme(
         )
     }
 }
+
+@Preview(name = "Dark Theme", showBackground = true)
+@Composable
+private fun DarkThemePreview() {
+    WasegMulTheme(themeMode = AppThemeMode.DARK) {
+        Surface {
+            Text("Dark Theme Preview", modifier = androidx.compose.ui.Modifier.padding(16.dp))
+        }
+    }
+}
+
+@Preview(name = "Light Theme", showBackground = true)
+@Composable
+private fun LightThemePreview() {
+    WasegMulTheme(themeMode = AppThemeMode.LIGHT) {
+        Surface {
+            Text("Light Theme Preview", modifier = androidx.compose.ui.Modifier.padding(16.dp))
+        }
+    }
+}
+

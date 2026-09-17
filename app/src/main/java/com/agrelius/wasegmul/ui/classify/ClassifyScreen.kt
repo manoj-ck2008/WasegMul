@@ -39,7 +39,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun ClassifyScreen(
     viewModel: ClassificationViewModel,
-    onNavigateToResult: () -> Unit,
+    onNavigateToResult: (Long) -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -54,8 +54,8 @@ fun ClassifyScreen(
     }
 
     LaunchedEffect(Unit) {
-        viewModel.navigateToResult.collect {
-            onNavigateToResult()
+        viewModel.navigateToResult.collect { recordId ->
+            onNavigateToResult(recordId)
         }
     }
 
@@ -190,12 +190,13 @@ fun ClassifyScreen(
                 Spacer(modifier = Modifier.height(40.dp))
 
                 GradientActionButton(
-                    text = if (isLoading) stringResource(R.string.common_processing) else stringResource(R.string.home_launch_scanner),
+                    text = if (isLoading) stringResource(R.string.common_processing) else stringResource(R.string.classify_action_analyze),
                     icon = Icons.Default.AutoAwesome,
                     onClick = {
                         viewModel.classify()
                     },
-                    modifier = Modifier.alpha(if (isLoading) 0.7f else 1f),
+                    modifier = Modifier.alpha(if (isLoading || capturedBitmap == null) 0.5f else 1f),
+                    enabled = (capturedBitmap != null && !isLoading),
                     containerColor = MaterialTheme.colorScheme.tertiary
                 )
 
@@ -256,3 +257,14 @@ fun ScanningOverlay() {
         )
     }
 }
+
+@androidx.compose.ui.tooling.preview.Preview(name = "ScanningOverlay Preview", showBackground = true, backgroundColor = 0xFF121212)
+@Composable
+private fun ScanningOverlayPreview() {
+    WasegMulTheme {
+        Box(modifier = Modifier.size(300.dp)) {
+            ScanningOverlay()
+        }
+    }
+}
+

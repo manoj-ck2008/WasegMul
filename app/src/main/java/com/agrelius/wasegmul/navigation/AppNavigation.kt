@@ -17,6 +17,7 @@ import com.agrelius.wasegmul.ui.result.ResultScreen
 import com.agrelius.wasegmul.ui.settings.SettingsScreen
 import com.agrelius.wasegmul.ui.splash.SplashScreen
 import com.agrelius.wasegmul.ui.yolo.YoloScreen
+import com.agrelius.wasegmul.ui.guide.GuideScreen
 import com.agrelius.wasegmul.viewmodel.HomeViewModel
 
 @Composable
@@ -24,7 +25,11 @@ fun AppNavigation() {
     val navController = rememberNavController()
     val context = LocalContext.current
     val app = context.applicationContext as? com.agrelius.wasegmul.WasegMulApp
-        ?: return
+    if (app == null) {
+        android.util.Log.e("AppNavigation", "WasegMulApp missing in manifest: check android:name")
+        androidx.compose.material3.Text("App failed to start (bad Application class).")
+        return
+    }
     val repository = app.repository
     val settingsManager = app.settingsManager
 
@@ -62,6 +67,9 @@ fun AppNavigation() {
                 },
                 onNavigateToYolo = {
                     navController.navigate(Screen.Yolo.route) { launchSingleTop = true }
+                },
+                onNavigateToGuide = {
+                    navController.navigate(Screen.Guide.route) { launchSingleTop = true }
                 }
             )
         }
@@ -76,8 +84,8 @@ fun AppNavigation() {
         composable(Screen.Classify.route) {
             ClassifyScreen(
                 viewModel = classificationViewModel,
-                onNavigateToResult = {
-                    navController.navigate(Screen.Result.route) { launchSingleTop = true }
+                onNavigateToResult = { recordId ->
+                    navController.navigate(Screen.Result.createRoute(recordId)) { launchSingleTop = true }
                 },
                 onBack = {
                     classificationViewModel.releaseBitmap()
@@ -87,7 +95,7 @@ fun AppNavigation() {
         }
 
         composable(
-            route = Screen.Result.route + "?recordId={recordId}",
+            route = Screen.Result.routeWithArgs,
             arguments = listOf(navArgument("recordId") { 
                 type = NavType.LongType
                 defaultValue = -1L
@@ -95,7 +103,7 @@ fun AppNavigation() {
         ) { backStackEntry ->
             val recordId = backStackEntry.arguments?.getLong("recordId") ?: -1L
             LaunchedEffect(recordId) {
-                if (recordId != -1L) {
+                if (recordId != -1L && classificationViewModel.currentRecord.value?.id != recordId) {
                     classificationViewModel.loadRecord(recordId)
                 }
             }
@@ -120,13 +128,23 @@ fun AppNavigation() {
                 viewModel = homeViewModel,
                 onBack = { navController.popBackStack() },
                 onNavigateToResult = { id ->
-                    navController.navigate(Screen.Result.route + "?recordId=$id")
+                    navController.navigate(Screen.Result.createRoute(id))
                 }
             )
         }
 
         composable(Screen.Yolo.route) {
             YoloScreen(
+                onBack = { navController.popBackStack() },
+                onCaptureAndClassify = { bitmap ->
+                    classificationViewModel.setBitmap(bitmap)
+                    navController.navigate(Screen.Classify.route) { launchSingleTop = true }
+                }
+            )
+        }
+
+        composable(Screen.Guide.route) {
+            GuideScreen(
                 onBack = { navController.popBackStack() }
             )
         }

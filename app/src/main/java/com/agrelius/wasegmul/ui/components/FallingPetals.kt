@@ -9,6 +9,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.unit.dp
 import com.agrelius.wasegmul.ui.theme.EmeraldVibrant
 import com.agrelius.wasegmul.ui.theme.SageGreen
 import kotlin.math.cos
@@ -29,7 +30,10 @@ private data class FallingPetal(
 )
 
 @Composable
-fun FallingPetals() {
+fun FallingPetals(
+    modifier: Modifier = Modifier,
+    count: Int = 18
+) {
     val infiniteTransition = rememberInfiniteTransition(label = "petals")
     val time by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -40,13 +44,13 @@ fun FallingPetals() {
         label = "time"
     )
 
-    val petals = remember {
-        List(18) { i ->
+    val petals = remember(count) {
+        (0 until count).map { i ->
             FallingPetal(
-                startX = (i * 137.508f % 1f),
-                startY = (i * 73.137f % 1f) * -0.3f,
-                fallSpeed = 0.012f + (i % 6) * 0.003f,
-                rotationSpeed = 0.3f + (i % 4) * 0.15f,
+                startX = (i * 0.053f + (i % 7) * 0.11f) % 1f,
+                startY = -0.1f - (i * 0.06f),
+                fallSpeed = 0.04f + (i % 4) * 0.015f,
+                rotationSpeed = 0.15f + (i % 3) * 0.1f,
                 scale = 0.7f + (i % 5) * 0.25f,
                 color = when (i % 3) {
                     0 -> EmeraldVibrant.copy(alpha = 0.18f)
@@ -65,6 +69,9 @@ fun FallingPetals() {
     val petalPath = remember { Path() }
 
     Canvas(modifier = Modifier.fillMaxSize()) {
+        val baseHeight = 12.dp.toPx()
+        val baseWidth = 8.dp.toPx()
+
         petals.forEach { petal ->
             val adjustedTime = (time - petal.delayFraction).coerceIn(0f, 1f)
             if (adjustedTime <= 0f) return@forEach
@@ -83,8 +90,8 @@ fun FallingPetals() {
 
             val currentRotation = petal.initialRotation + adjustedTime * petal.rotationSpeed * 360f
 
-            val leafHeight = 12f * petal.scale
-            val leafWidth = 8f * petal.scale
+            val leafHeight = baseHeight * petal.scale
+            val leafWidth = baseWidth * petal.scale
 
             petalPath.reset()
             when (petal.leafType) {

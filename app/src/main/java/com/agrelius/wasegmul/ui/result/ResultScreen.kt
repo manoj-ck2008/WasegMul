@@ -4,6 +4,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -18,9 +19,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.agrelius.wasegmul.R
+import com.agrelius.wasegmul.WasteMapping
 import com.agrelius.wasegmul.ui.classify.ClassificationViewModel
 import com.agrelius.wasegmul.ui.components.*
 import com.agrelius.wasegmul.ui.theme.*
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.Image
+import android.content.Intent
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,16 +37,30 @@ fun ResultScreen(
     onNavigateToHome: () -> Unit,
     onBack: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     val result by viewModel.classificationResult.collectAsState()
     val record by viewModel.currentRecord.collectAsState()
+    val capturedBitmap by viewModel.capturedBitmap.collectAsState()
+    val error by viewModel.error.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
     var showContent by remember { mutableStateOf(false) }
     
     LaunchedEffect(Unit) {
         showContent = true
     }
 
+    LaunchedEffect(error) {
+        error?.let { msg ->
+            if (result != null) {
+                snackbarHostState.showSnackbar(msg)
+                viewModel.clearError()
+            }
+        }
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { 
@@ -55,6 +77,49 @@ fun ResultScreen(
                     }
                 },
                 actions = {
+                    result?.let { r ->
+                        val shareSubject = stringResource(R.string.result_share_subject, r.subclass, r.category)
+                        val shareText = buildString {
+                            appendLine("🌿 WasegMul Waste Analysis Report")
+                            appendLine("═══════════════════════════════")
+                            appendLine("Item: ${r.subclass}")
+                            appendLine("Category: ${r.category}")
+                            appendLine("Confidence: ${(r.confidence.coerceIn(0f, 1f) * 100f).roundToInt()}%")
+                            if (WasteMapping.isHazardous(r.subclass)) {
+                                appendLine("\n⚠️ HAZARDOUS MATERIAL ALERT: Requires specialist drop-off!")
+                            }
+                            appendLine("\n📋 Disposal Protocol:")
+                            appendLine(r.disposalGuide)
+                            appendLine("\n🌍 Ecological Footprint:")
+                            appendLine(r.environmentalImpact)
+                            appendLine("\n♻️ Recycling Benefits:")
+                            appendLine(r.recyclingBenefits)
+                            appendLine("\n📚 Verification Sources:")
+                            appendLine(r.sources)
+                            appendLine("\nClassified on-device with WasegMul AI.")
+                        }
+
+                        IconButton(onClick = {
+                            try {
+                                val sendIntent = Intent().apply {
+                                    action = Intent.ACTION_SEND
+                                    putExtra(Intent.EXTRA_SUBJECT, shareSubject)
+                                    putExtra(Intent.EXTRA_TEXT, shareText)
+                                    type = "text/plain"
+                                }
+                                val shareIntent = Intent.createChooser(sendIntent, "Share Waste Analysis")
+                                context.startActivity(shareIntent)
+                            } catch (e: Exception) {
+                                android.util.Log.e("ResultShare", "Share failed", e)
+                            }
+                        }) {
+                            Icon(
+                                Icons.Default.Share,
+                                contentDescription = stringResource(R.string.result_share_report),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                     IconButton(onClick = onNavigateToHome) {
                         Icon(Icons.Default.Home, contentDescription = stringResource(R.string.common_home), tint = MaterialTheme.colorScheme.onSurface)
                     }
@@ -83,6 +148,26 @@ fun ResultScreen(
                     ) {
                         result?.let { r ->
                         Column {
+                            capturedBitmap?.let { bmp ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(180.dp)
+                                        .padding(bottom = 12.dp),
+                                    shape = MaterialTheme.shapes.large,
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+                                    )
+                                ) {
+                                    Image(
+                                        bitmap = bmp.asImageBitmap(),
+                                        contentDescription = stringResource(R.string.result_scanned_image),
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
+                            }
+
                             HeroCard {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -90,17 +175,19 @@ fun ResultScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
+                                        val isUncertain = r.category == WasteMapping.UNCERTAIN ||
+                                            r.category == WasteMapping.UNKNOWN
                                         Text(
                                             text = r.subclass,
                                             style = MaterialTheme.typography.displaySmall,
                                             fontWeight = FontWeight.Black,
-                                            color = if (r.category == "Uncertain") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                                            color = if (isUncertain) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                                             letterSpacing = 1.sp
                                         )
                                         Text(
-                                            text = if (r.category == "Uncertain") stringResource(R.string.result_low_confidence_match) else r.category.uppercase(),
+                                            text = if (isUncertain) stringResource(R.string.result_low_confidence_match) else r.category.uppercase(),
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = if (r.category == "Uncertain") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                            color = if (isUncertain) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                                             fontWeight = FontWeight.Bold,
                                             letterSpacing = 2.sp
                                         )
@@ -109,7 +196,41 @@ fun ResultScreen(
                                 }
                             }
 
-                            if (r.category == "Uncertain") {
+                            if (WasteMapping.isHazardous(r.subclass)) {
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                                    shape = MaterialTheme.shapes.medium
+                                ) {
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                Icons.Default.Warning,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = stringResource(R.string.result_hazard_title),
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.Black,
+                                                color = MaterialTheme.colorScheme.error
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                            text = stringResource(R.string.result_hazard_warning),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (r.category == WasteMapping.UNCERTAIN || r.category == WasteMapping.UNKNOWN) {
                                 Card(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
@@ -199,7 +320,7 @@ fun ResultScreen(
                                                     color = MaterialTheme.colorScheme.onSurface
                                                 )
                                                 Text(
-                                                    text = "${(conf * 100).toInt()}%",
+                                                    text = "${(conf * 100f).roundToInt()}%",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.primary,
                                                     fontWeight = FontWeight.Bold,
@@ -234,20 +355,48 @@ fun ResultScreen(
                                 }
                             )
 
-                            Spacer(modifier = Modifier.height(32.dp))
+                            Spacer(modifier = Modifier.height(28.dp))
 
-                            GradientActionButton(
-                                text = stringResource(R.string.result_acknowledge_close),
-                                onClick = onNavigateToHome,
-                                containerColor = MaterialTheme.colorScheme.primary
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = onBack,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(56.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.onSurface
+                                    )
+                                ) {
+                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(stringResource(R.string.result_scan_another), fontWeight = FontWeight.Bold)
+                                }
+
+                                Button(
+                                    onClick = onNavigateToHome,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(56.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                ) {
+                                    Text(
+                                        stringResource(R.string.result_acknowledge_close),
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.Black
+                                    )
+                                }
+                            }
                             
                             Spacer(modifier = Modifier.height(48.dp))
                         }
                         }
                     }
                 } else {
-                    val error by viewModel.error.collectAsState()
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
@@ -258,7 +407,7 @@ fun ResultScreen(
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Text(error.orEmpty(), color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(horizontal = 32.dp))
                                 Spacer(modifier = Modifier.height(16.dp))
-                                Button(onClick = onBack) { Text("Go Back") }
+                                Button(onClick = onBack) { Text(stringResource(R.string.common_go_back)) }
                             }
                         } else {
                             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
@@ -269,3 +418,14 @@ fun ResultScreen(
         }
     }
 }
+
+@androidx.compose.ui.tooling.preview.Preview(name = "Result Loading Preview", showBackground = true, backgroundColor = 0xFF121212)
+@Composable
+private fun ResultLoadingPreview() {
+    WasegMulTheme {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+        }
+    }
+}
+

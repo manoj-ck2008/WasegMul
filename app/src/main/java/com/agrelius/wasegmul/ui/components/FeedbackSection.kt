@@ -99,6 +99,7 @@ fun FeedbackSection(
                         }
                         1 -> {
                             CorrectionView(
+                                initialCorrection = initialCorrection,
                                 onSelected = { choice ->
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     onCorrectionSelected(choice)
@@ -141,9 +142,13 @@ private fun InitialFeedbackView(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CorrectionView(onSelected: (String) -> Unit, onBack: () -> Unit) {
+private fun CorrectionView(
+    initialCorrection: String? = null,
+    onSelected: (String) -> Unit,
+    onBack: () -> Unit
+) {
     val context = LocalContext.current
-    val options = context.resources.getStringArray(R.array.material_options).toList()
+    val options = remember(context) { context.resources.getStringArray(R.array.material_options).toList() }
     
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -162,7 +167,7 @@ private fun CorrectionView(onSelected: (String) -> Unit, onBack: () -> Unit) {
         ) {
             options.forEach { option ->
                 FilterChip(
-                    selected = false,
+                    selected = option.equals(initialCorrection, ignoreCase = true),
                     onClick = { onSelected(option) },
                     label = { Text(option) },
                     modifier = Modifier.padding(horizontal = 4.dp)
@@ -183,7 +188,7 @@ private fun FeedbackButton(
             onClick = onClick,
             modifier = Modifier.size(48.dp)
         ) {
-            Icon(imageVector = icon, contentDescription = label)
+            Icon(imageVector = icon, contentDescription = null)
         }
         Text(
             text = label,

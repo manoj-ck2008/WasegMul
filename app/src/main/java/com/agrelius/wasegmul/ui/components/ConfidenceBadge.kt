@@ -41,3 +41,10 @@ fun ConfidenceBadge(
         )
     }
 }
+
+@androidx.compose.ui.tooling.preview.Preview(name = "ConfidenceBadge High", showBackground = true)
+@Composable
+private fun ConfidenceBadgePreview() {
+    ConfidenceBadge(confidence = 0.95f)
+}
+

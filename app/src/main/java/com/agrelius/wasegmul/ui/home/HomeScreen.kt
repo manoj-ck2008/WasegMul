@@ -19,9 +19,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,11 +33,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.agrelius.wasegmul.BuildConfig
 import com.agrelius.wasegmul.R
+import com.agrelius.wasegmul.EcoImpactCalculator
 import com.agrelius.wasegmul.WasteRecord
 import com.agrelius.wasegmul.ui.components.*
 import com.agrelius.wasegmul.ui.theme.*
@@ -52,10 +56,12 @@ fun HomeScreen(
     onImageSelected: (Bitmap) -> Unit,
     onNavigateToHistory: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToYolo: () -> Unit = {}
+    onNavigateToYolo: () -> Unit = {},
+    onNavigateToGuide: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val recentHistory by viewModel.recentHistory.collectAsState()
+    val allHistory by viewModel.allHistory.collectAsState()
     var showImpactDetail by remember { mutableStateOf(false) }
     var showPermissionRationale by remember { mutableStateOf(false) }
     var section1Visible by remember { mutableStateOf(false) }
@@ -63,7 +69,10 @@ fun HomeScreen(
     var section3Visible by remember { mutableStateOf(false) }
     var section4Visible by remember { mutableStateOf(false) }
 
-    val totalImpact = remember(recentHistory) { recentHistory.sumOf { it.estimatedWeight } }
+    val totalImpact = remember(allHistory) {
+        // Show real cumulative CO2 prevented across all scans using full EcoImpact logic.
+        EcoImpactCalculator.calculate(allHistory).co2PreventedKg
+    }
 
     LaunchedEffect(Unit) {
         section1Visible = true
@@ -92,12 +101,37 @@ fun HomeScreen(
         }
     }
 
-    val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicturePreview()
-    ) { bitmap: Bitmap? ->
-        bitmap?.let {
-            val copied = it.copy(Bitmap.Config.ARGB_8888, true)
-            onImageSelected(copied ?: it)
+    var tempPhotoUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    val fullCameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success: Boolean ->
+        if (success) {
+            tempPhotoUri?.let { uri ->
+                scope.launch {
+                    val bitmap = withContext(Dispatchers.IO) {
+                        decodeSampledBitmap(context, uri, 1024, 1024)
+                    }
+                    if (bitmap != null) {
+                        onImageSelected(bitmap)
+                    }
+                }
+            }
+        }
+    }
+
+    fun launchCamera() {
+        try {
+            val photoFile = java.io.File(context.cacheDir, "camera_capture_${System.currentTimeMillis()}.jpg")
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                photoFile
+            )
+            tempPhotoUri = uri
+            fullCameraLauncher.launch(uri)
+        } catch (e: Exception) {
+            android.util.Log.e("HomeScreen", "Failed to launch camera via FileProvider, falling back to gallery", e)
+            galleryLauncher.launch("image/*")
         }
     }
 
@@ -105,7 +139,7 @@ fun HomeScreen(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
         if (isGranted) {
-            cameraLauncher.launch()
+            launchCamera()
         } else {
             showPermissionRationale = true
         }
@@ -272,6 +306,47 @@ fun HomeScreen(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(12.dp))
+
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { onNavigateToGuide() }
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column {
+                                Text(
+                                    stringResource(R.string.home_guide_title),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    stringResource(R.string.home_guide_subtitle),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.weight(1f))
+                            Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(24.dp))
 
                 HeroCard {
@@ -366,7 +441,7 @@ fun HomeScreen(
             if (showImpactDetail) {
                 ImpactDetailDialog(
                     onDismiss = { showImpactDetail = false },
-                    history = recentHistory
+                    history = allHistory
                 )
             }
         }
@@ -375,26 +450,113 @@ fun HomeScreen(
 
 @Composable
 fun ImpactDetailDialog(onDismiss: () -> Unit, history: List<WasteRecord>) {
+    val metrics = remember(history) { EcoImpactCalculator.calculate(history) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.home_impact_title), color = MaterialTheme.colorScheme.primary) },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Eco,
+                    contentDescription = null,
+                    tint = ForestGreen,
+                    modifier = Modifier.size(28.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    stringResource(R.string.home_impact_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
         text = {
-            Column {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     stringResource(R.string.home_impact_description),
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Metric Cards Grid (2x3)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ImpactStatCard(
+                        title = stringResource(R.string.impact_metric_co2),
+                        value = "${metrics.co2PreventedKg.format(2)} kg",
+                        icon = Icons.Default.Cloud,
+                        iconTint = ForestGreen,
+                        modifier = Modifier.weight(1f)
+                    )
+                    ImpactStatCard(
+                        title = stringResource(R.string.impact_metric_water),
+                        value = "${metrics.waterSavedLiters.format(1)} L",
+                        icon = Icons.Default.WaterDrop,
+                        iconTint = SkyBlueDeep,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ImpactStatCard(
+                        title = stringResource(R.string.impact_metric_energy),
+                        value = "${metrics.energySavedKwh.format(2)} kWh",
+                        icon = Icons.Default.Bolt,
+                        iconTint = Color(0xFFFFB300),
+                        modifier = Modifier.weight(1f)
+                    )
+                    ImpactStatCard(
+                        title = stringResource(R.string.impact_metric_trees),
+                        value = "${metrics.treeYearEquivalent.format(2)} yr",
+                        icon = Icons.Default.Park,
+                        iconTint = HighConfidenceGreen,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ImpactStatCard(
+                        title = stringResource(R.string.impact_metric_items),
+                        value = "${metrics.totalItems}",
+                        icon = Icons.Default.Numbers,
+                        iconTint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    val accuracy = metrics.accuracyPercentage
+                    ImpactStatCard(
+                        title = stringResource(R.string.impact_metric_accuracy),
+                        value = if (accuracy != null) "${accuracy.toInt()}%" else "-",
+                        icon = Icons.Default.CheckCircle,
+                        iconTint = MintAccent,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = LocalGlassColors.current.border)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "MATERIAL BREAKDOWN",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
 
                 val groups = history.groupBy { it.category }
                 groups.forEach { (cat, items) ->
                     val weight = items.sumOf { it.estimatedWeight }
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(cat, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
-                        Text("${weight.format(3)} kg", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
+                        Text(cat, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                        Text("${weight.format(3)} kg (${items.size})", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
                     }
                 }
 
@@ -408,7 +570,7 @@ fun ImpactDetailDialog(onDismiss: () -> Unit, history: List<WasteRecord>) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(stringResource(R.string.home_cumulative_recovery), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Black)
-                    Text("${history.sumOf { it.estimatedWeight }.format(3)} kg", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+                    Text("${metrics.totalWeightKg.format(3)} kg", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
                 }
             }
         },
@@ -420,18 +582,65 @@ fun ImpactDetailDialog(onDismiss: () -> Unit, history: List<WasteRecord>) {
     )
 }
 
+@Composable
+private fun ImpactStatCard(
+    title: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconTint: Color,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .border(1.dp, LocalGlassColors.current.border, RoundedCornerShape(12.dp))
+            .padding(10.dp)
+    ) {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 9.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
 fun Long.toRelativeTime(): String {
     val now = System.currentTimeMillis()
-    val diff = now - this
+    val diff = (now - this).coerceAtLeast(0L)
     return when {
         diff < 60000 -> "Just now"
         diff < 3600000 -> "${diff / 60000}m ago"
         diff < 86400000 -> "${diff / 3600000}h ago"
-        else -> SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(this))
+        else -> SimpleDateFormat("MMM dd, yyyy", Locale.US).format(Date(this))
     }
 }
 
-fun Double.format(digits: Int) = "%.${digits}f".format(this)
+fun Double.format(digits: Int) = "%.${digits}f".format(Locale.US, this)
+
+fun Long.toIso8601(): String {
+    return SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }.format(Date(this))
+}
+
+fun String.csvEscape(): String = "\"${replace("\"", "\"\"")}\""
 
 @Composable
 fun RecentItem(name: String, time: String, type: String, feedback: String?) {
@@ -503,11 +712,38 @@ private fun decodeSampledBitmap(context: android.content.Context, uri: Uri, reqW
         options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight)
         options.inJustDecodeBounds = false
         options.inPreferredConfig = Bitmap.Config.ARGB_8888
-        context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+        val rawBitmap = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+            ?: return null
+
+        val orientation = try {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                val exif = android.media.ExifInterface(stream)
+                exif.getAttributeInt(
+                    android.media.ExifInterface.TAG_ORIENTATION,
+                    android.media.ExifInterface.ORIENTATION_NORMAL
+                )
+            } ?: android.media.ExifInterface.ORIENTATION_NORMAL
+        } catch (e: Exception) {
+            android.media.ExifInterface.ORIENTATION_NORMAL
+        }
+
+        when (orientation) {
+            android.media.ExifInterface.ORIENTATION_ROTATE_90 -> rotateBitmap(rawBitmap, 90f)
+            android.media.ExifInterface.ORIENTATION_ROTATE_180 -> rotateBitmap(rawBitmap, 180f)
+            android.media.ExifInterface.ORIENTATION_ROTATE_270 -> rotateBitmap(rawBitmap, 270f)
+            else -> rawBitmap
+        }
     } catch (e: Exception) {
         android.util.Log.e("HomeScreen", "Failed to decode sampled bitmap", e)
         null
     }
+}
+
+private fun rotateBitmap(bitmap: Bitmap, degrees: Float): Bitmap {
+    val matrix = android.graphics.Matrix().apply { postRotate(degrees) }
+    val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    if (rotated !== bitmap) bitmap.recycle()
+    return rotated
 }
 
 private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
@@ -522,3 +758,19 @@ private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int,
     }
     return inSampleSize
 }
+
+@androidx.compose.ui.tooling.preview.Preview(name = "RecentItem Preview", showBackground = true, backgroundColor = 0xFF121212)
+@Composable
+private fun RecentItemPreview() {
+    com.agrelius.wasegmul.ui.theme.WasegMulTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            RecentItem(
+                name = "cardboard_box",
+                time = "5m ago",
+                type = "Recyclable",
+                feedback = "correct"
+            )
+        }
+    }
+}
+

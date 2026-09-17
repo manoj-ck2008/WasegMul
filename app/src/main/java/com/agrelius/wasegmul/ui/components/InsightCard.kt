@@ -1,6 +1,8 @@
 package com.agrelius.wasegmul.ui.components
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -53,3 +55,18 @@ fun InsightCard(
         }
     }
 }
+
+@androidx.compose.ui.tooling.preview.Preview(name = "InsightCard Preview", showBackground = true, backgroundColor = 0xFF121212)
+@Composable
+private fun InsightCardPreview() {
+    com.agrelius.wasegmul.ui.theme.WasegMulTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            InsightCard(
+                title = "Recycling Tip",
+                content = "Rinse all plastic containers before disposal to prevent contamination.",
+                icon = androidx.compose.material.icons.Icons.Default.Info
+            )
+        }
+    }
+}
+

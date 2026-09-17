@@ -69,10 +69,11 @@
     <!-- Settings Screen -->
     <string name="settings_title">Neural Configuration</string>
     <string name="settings_interface_preference">INTERFACE PREFERENCE</string>
-    <string name="settings_dark_mode">Dark Mode (Optimized)</string>
-    <string name="settings_light_mode">Light Mode (Eye Strain / High Carbon)</string>
+    <string name="settings_dark_mode">Dark Mode (Emerald Neon)</string>
+    <string name="settings_light_mode">Light Mode (Clean Eco)</string>
+    <string name="settings_colour_mode">Nature Mode (Olive Organic)</string>
     <string name="settings_system_default">System Default</string>
-    <string name="settings_light_warning">Warning: Light Mode causes eye strain, is out of GenZ trends, and increases carbon impact (higher OLED draw).</string>
+    <string name="settings_theme_note">Tip: Dark and Nature modes optimize OLED energy efficiency and lower device carbon footprint.</string>
     <string name="settings_data_archive">DATA ARCHIVE</string>
     <string name="settings_purge_history">Purge Neural History</string>
     <string name="settings_purge_title">Purge Database?</string>
@@ -97,6 +98,25 @@
     <string name="confidence_low">Low</string>
     <string name="confidence_format">%1$s (%2$d%%)</string>
 
+    <!-- Additional Features -->
+    <string name="yolo_capture_classify">Capture &amp; Classify</string>
+    <string name="result_share_report">Share Report</string>
+    <string name="result_hazard_title">HAZARDOUS MATERIAL WARNING</string>
+    <string name="result_hazard_warning">This item is flagged as hazardous material. Do not dispose of in household garbage or curbside recycling. Follow specialist protocols below.</string>
+    <string name="result_share_subject">WasegMul Analysis: %1$s (%2$s)</string>
+
+    <!-- History Filters & Export -->
+    <string name="history_search_hint">Search history by item or category&#8230;</string>
+    <string name="history_filter_all">All</string>
+    <string name="history_filter_ewaste">E-Waste</string>
+    <string name="history_filter_recyclable">Recyclable</string>
+    <string name="history_filter_organic">Organic</string>
+    <string name="history_filter_trash">Trash</string>
+    <string name="history_filter_hazardous">Hazardous</string>
+    <string name="history_export_csv">Export CSV</string>
+    <string name="history_no_search_results">No records match your filter.</string>
+    <string name="history_export_title">Share WasegMul History</string>
+
     <!-- Common -->
     <string name="common_acknowledge">ACKNOWLEDGE</string>
     <string name="common_correct">Correct</string>
@@ -112,4 +132,55 @@
     <string name="common_home">Home</string>
     <string name="common_go_back">Go back</string>
     <string name="common_edit_feedback">Edit Feedback</string>
+
+    <!-- Eco Guide & Encyclopedia -->
+    <string name="guide_title">Eco Encyclopedia</string>
+    <string name="guide_subtitle">Authoritative disposal rules &amp; impact for 30+ items</string>
+    <string name="guide_search_hint">Search material, e-waste, item&#8230;</string>
+    <string name="guide_disposal_steps">Disposal Protocol</string>
+    <string name="guide_impact">Environmental Impact</string>
+    <string name="guide_benefits">Recycling Benefits</string>
+    <string name="guide_sources">Source Citation</string>
+    <string name="guide_hazardous_badge">HAZARDOUS</string>
+    <string name="guide_avg_weight">Est. %1$s kg / unit</string>
+    <string name="home_guide_title">Eco Disposal Guide</string>
+    <string name="home_guide_subtitle">Search materials, protocols &amp; impacts</string>
+
+    <!-- Camera Controls -->
+    <string name="yolo_torch_on">Turn on torch</string>
+    <string name="yolo_torch_off">Turn off torch</string>
+    <string name="yolo_tap_to_focus">Tap preview to focus</string>
+
+    <!-- Classify Actions -->
+    <string name="classify_action_analyze">Classify Waste Item</string>
+
+    <!-- Eco Impact Dashboard -->
+    <string name="impact_metric_co2">CO\u2082e Diverted</string>
+    <string name="impact_metric_water">Water Conserved</string>
+    <string name="impact_metric_energy">Energy Saved</string>
+    <string name="impact_metric_trees">Tree-Absorption Eq.</string>
+    <string name="impact_metric_accuracy">Sorting Accuracy</string>
+    <string name="impact_metric_items">Total Scans</string>
+
+    <!-- Additional UI Actions -->
+    <string name="result_scan_another">Scan Another</string>
+    <string name="result_scanned_image">Scanned Waste Image</string>
+    <string name="history_delete_item_title">Delete Record?</string>
+    <string name="history_delete_item_confirm">Are you sure you want to delete this classification record?</string>
+    <string name="history_sort_newest">Newest</string>
+    <string name="history_sort_oldest">Oldest</string>
+    <string name="history_sort_confidence">Confidence</string>
+
+    <!-- Advanced Settings -->
+    <string name="settings_dynamic_color">Dynamic Material You Color</string>
+    <string name="settings_dynamic_color_desc">Match app palette with device wallpaper (Android 12+)</string>
+    <string name="settings_haptics">Haptic Feedback</string>
+    <string name="settings_haptics_desc">Vibrate on scan capture and feedback</string>
+    <string name="settings_confidence_threshold">Confidence Threshold (%1$d%%)</string>
+    <string name="settings_confidence_desc">Minimum confidence before manual verification alert</string>
+    <string name="settings_legal_section">LEGAL &amp; ATTRIBUTION</string>
+    <string name="settings_licenses_button">Open Source Licenses &amp; Attribution</string>
+    <string name="settings_licenses_title">Licenses &amp; Attribution</string>
+    <string name="settings_close">Close</string>
 </resources>
+
