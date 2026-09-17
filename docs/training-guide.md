@@ -38,12 +38,19 @@ pip install roboflow
 
 ```bash
 # Get free API key at https://roboflow.com
-# Edit scripts/prepare_dataset.py → replace YOUR_ROBOFLOW_API_KEY
+# Edit scripts/prepare_dataset.py -> replace YOUR_ROBOFLOW_API_KEY
 
 python scripts/prepare_dataset.py
 ```
 
-**Option B: Manual Dataset**
+**Option B: Kaggle Cloud Dataset Download**
+
+```bash
+# Auto-download and unpack directly via Kaggle API
+python scripts/prepare_dataset.py --download-kaggle manojkari/taco-dataset1
+```
+
+**Option C: Manual Dataset**
 
 ```bash
 # Create the directory structure
@@ -80,7 +87,7 @@ After YOLO crops an item, the EfficientNet classifier assigns it to one of the 3
 ### 2. Train the Model
 
 ```bash
-# Basic training (YOLO11n, 100 epochs)
+# Basic local training (YOLO11n, 100 epochs)
 python scripts/train_waste_yolo.py
 
 # Custom settings
@@ -88,6 +95,19 @@ python scripts/train_waste_yolo.py --epochs 200 --batch 32 --img-size 640
 
 # Force CPU training (slower)
 python scripts/train_waste_yolo.py --device cpu
+```
+
+**Option B: Kaggle Cloud Training (Recommended - Free GPU T4 x2 / P100)**
+
+```bash
+# Push training job directly to Kaggle GPU cluster
+python scripts/kaggle_pipeline.py push
+
+# Monitor live training telemetry and status
+python scripts/kaggle_pipeline.py status
+
+# Download best weights, plots, and sync TFLite to app assets
+python scripts/kaggle_pipeline.py output --sync-assets
 ```
 
 Training outputs:

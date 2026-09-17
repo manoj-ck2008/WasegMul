@@ -29,6 +29,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 ASSETS_DIR = PROJECT_ROOT / "app" / "src" / "main" / "assets"

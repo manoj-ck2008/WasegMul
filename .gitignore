@@ -56,3 +56,18 @@ Desktop.ini
 *.tmp
 *.bak
 *.swp
+
+# Kotlin
+.kotlin/
+
+# Python
+__pycache__/
+*.pyc
+
+# ML Training & Kaggle Artifacts
+runs/
+.kaggle_staging/
+datasets/
+*.pt
+*.onnx
+

@@ -79,12 +79,95 @@ TAXONOMY_PATH = Path(__file__).resolve().parent.parent / "taxonomy.yaml"
 # ─── Load Taxonomy ────────────────────────────────────────────────────────────
 
 def _load_taxonomy(path: Path) -> dict:
-    """Load taxonomy.yaml and return the full taxonomy dictionary."""
-    if not path.exists():
-        raise FileNotFoundError(f"Taxonomy not found: {path}\n"
-                                f"Ensure taxonomy.yaml exists in the project root.")
-    with open(path) as f:
-        return yaml.safe_load(f)
+    """Load taxonomy.yaml with comprehensive search fallbacks for standalone Kaggle runs."""
+    candidates = [
+        path,
+        Path("taxonomy.yaml"),
+        Path("./taxonomy.yaml"),
+        Path("/kaggle/working/taxonomy.yaml"),
+        Path(__file__).resolve().parent / "taxonomy.yaml",
+        Path(__file__).resolve().parent.parent / "taxonomy.yaml",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            with open(candidate, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f)
+
+    if KAGGLE_INPUT.exists():
+        for candidate in KAGGLE_INPUT.rglob("taxonomy.yaml"):
+            with open(candidate, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f)
+
+    # Built-in fallback dictionary if running standalone without taxonomy.yaml file
+    return {
+        "yolo_classes": {
+            0: "battery", 1: "bottle", 2: "can", 3: "cardboard", 4: "cigarette",
+            5: "cup", 6: "electronic", 7: "food_waste", 8: "glass_container",
+            9: "metal", 10: "paper", 11: "plastic_bag", 12: "plastic_container",
+            13: "plastic_wrapper", 14: "textile"
+        },
+        "efficientnet_classes": {
+            0: "Air-Conditioner", 1: "Battery", 2: "Cardboard", 3: "Electronic Component",
+            4: "Electronic Device", 5: "Glass", 6: "Keyboard", 7: "Laptop", 8: "Metal",
+            9: "Microwave", 10: "Miscellaneous Trash", 11: "Mobile", 12: "Mouse",
+            13: "Organic", 14: "PCB", 15: "Paper", 16: "Plastic", 17: "Player",
+            18: "Printer", 19: "Refrigerator", 20: "Television", 21: "Textile Trash",
+            22: "Washing Machine", 23: "automobile wastes", 24: "clothing",
+            25: "disposable_plastic_cutlery", 26: "light bulbs", 27: "shoes",
+            28: "styrofoam_cups", 29: "styrofoam_food_containers"
+        },
+        "taco_mapping": {
+            "Aluminium blister pack": {"detector": "metal"},
+            "Battery": {"detector": "battery"},
+            "Cardboard": {"detector": "cardboard"},
+            "Corrugated carton": {"detector": "cardboard"},
+            "Drink carton": {"detector": "cardboard"},
+            "Meal carton": {"detector": "cardboard"},
+            "Cigarette": {"detector": "cigarette"},
+            "Glass bottle": {"detector": "bottle"},
+            "Glass jar": {"detector": "glass_container"},
+            "Broken glass": {"detector": "glass_container"},
+            "Food waste": {"detector": "food_waste"},
+            "Aerosol": {"detector": "metal"},
+            "Drink can": {"detector": "can"},
+            "Food can": {"detector": "can"},
+            "Metal bottle cap": {"detector": "metal"},
+            "Scrap metal": {"detector": "metal"},
+            "Aluminium foil": {"detector": "metal"},
+            "Other plastic bottle": {"detector": "bottle"},
+            "Clear plastic bottle": {"detector": "bottle"},
+            "Plastic bottle cap": {"detector": "plastic_container"},
+            "Plastic cup": {"detector": "cup"},
+            "Disposable plastic cup": {"detector": "cup"},
+            "Plastic lid": {"detector": "plastic_container"},
+            "Polypropylene bag": {"detector": "plastic_bag"},
+            "Plastic film": {"detector": "plastic_wrapper"},
+            "Garbage bag": {"detector": "plastic_bag"},
+            "Single-use carrier bag": {"detector": "plastic_bag"},
+            "Crisp packet": {"detector": "plastic_wrapper"},
+            "Spread tub": {"detector": "plastic_container"},
+            "Tupperware": {"detector": "plastic_container"},
+            "Disposable food container": {"detector": "plastic_container"},
+            "Other plastic container": {"detector": "plastic_container"},
+            "Plastic gloves": {"detector": "plastic_wrapper"},
+            "Plastic utensils": {"detector": "plastic_container"},
+            "Pop tab": {"detector": "metal"},
+            "Rope & strings": {"detector": "textile"},
+            "Shoe": {"detector": "textile"},
+            "Squeezable tube": {"detector": "plastic_container"},
+            "Styrofoam piece": {"detector": "plastic_container"},
+            "Normal paper": {"detector": "paper"},
+            "Paper bag": {"detector": "paper"},
+            "Tissues": {"detector": "paper"},
+            "Wrapping paper": {"detector": "paper"},
+            "Magazine paper": {"detector": "paper"},
+            "Paper cup": {"detector": "cup"},
+            "Disposable paper cup": {"detector": "cup"},
+            "Unlabeled litter": {"excluded": True},
+            "Other plastic": {"excluded": True},
+            "Other plastic wrapper": {"detector": "plastic_wrapper"}
+        }
+    }
 
 _taxonomy = _load_taxonomy(TAXONOMY_PATH)
 
@@ -138,9 +221,19 @@ CONFIG: dict = {
     "warmup_momentum": 0.8,
     "warmup_bias_lr": 0.1,
 
-    # Augmentation
+    # Augmentation (Mobile Camera Tuned)
     "close_mosaic": 15,
     "dropout": 0.1,
+    "degrees": 10.0,
+    "translate": 0.1,
+    "scale": 0.5,
+    "shear": 2.0,
+    "perspective": 0.0005,
+    "flipud": 0.2,
+    "fliplr": 0.5,
+    "mosaic": 1.0,
+    "mixup": 0.15,
+    "copy_paste": 0.1,
 
     # System
     "device": 0,
@@ -713,6 +806,16 @@ results = model.train(
     seed=CONFIG["seed"],
     cos_lr=True,
     dropout=CONFIG["dropout"],
+    degrees=CONFIG["degrees"],
+    translate=CONFIG["translate"],
+    scale=CONFIG["scale"],
+    shear=CONFIG["shear"],
+    perspective=CONFIG["perspective"],
+    flipud=CONFIG["flipud"],
+    fliplr=CONFIG["fliplr"],
+    mosaic=CONFIG["mosaic"],
+    mixup=CONFIG["mixup"],
+    copy_paste=CONFIG["copy_paste"],
 )
 
 print("\nTraining complete!")

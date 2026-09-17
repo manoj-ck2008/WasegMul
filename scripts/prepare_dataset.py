@@ -39,6 +39,9 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 import yaml
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -75,6 +78,20 @@ def _load_taxonomy(path: Path) -> tuple[list[str], dict[str, int]]:
 YOLO_CLASSES, TACO_TO_YOLO = _load_taxonomy(TAXONOMY_PATH)
 NUM_YOLO_CLASSES = len(YOLO_CLASSES)
 
+
+
+def download_kaggle_dataset(dataset_slug: str, target_dir: Path) -> Path:
+    """Download and extract a dataset from Kaggle via Kaggle CLI."""
+    target_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Downloading '{dataset_slug}' from Kaggle to {target_dir}...")
+    import subprocess
+    cmd = [
+        sys.executable, "-c",
+        "import kaggle.cli, sys; sys.argv=['kaggle'] + sys.argv[1:]; kaggle.cli.main()",
+        "datasets", "download", "-d", dataset_slug, "-p", str(target_dir), "--unzip"
+    ]
+    subprocess.check_call(cmd)
+    return target_dir
 
 
 def load_manifest() -> dict:
@@ -415,7 +432,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Pipeline:
-  Raw datasets → License check → Merge → Dedup → Normalize → Quality filter → YOLO Dataset
+  Raw datasets -> License check -> Merge -> Dedup -> Normalize -> Quality filter -> YOLO Dataset
 
 Examples:
   python scripts/prepare_dataset.py --kaggle-mode
@@ -437,12 +454,19 @@ Examples:
     parser.add_argument("--kaggle-mode", action="store_true")
     parser.add_argument("--train-ratio", type=float, default=0.8)
     parser.add_argument("--val-ratio", type=float, default=0.1)
+    parser.add_argument("--download-kaggle", type=str,
+                        help="Kaggle dataset slug to download directly (e.g. kneroma/tacotrashdataset or manojkari/taco-dataset1)")
     parser.add_argument("--no-verify", action="store_true",
                         help="Skip license verification")
     args = parser.parse_args()
 
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.download_kaggle:
+        dl_dir = Path("./datasets/downloaded") / args.download_kaggle.replace("/", "_")
+        download_kaggle_dataset(args.download_kaggle, dl_dir)
+        args.taco_dir = str(dl_dir)
 
     print("=" * 60)
     print("WasegMul: Dataset Preparation Pipeline")

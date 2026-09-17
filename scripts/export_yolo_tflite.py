@@ -20,6 +20,9 @@ import shutil
 import tempfile
 from pathlib import Path
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "app" / "src" / "main" / "assets"
 MODEL_FILENAME = "yolov8n.tflite"
 IS_WINDOWS = platform.system() == "Windows"
