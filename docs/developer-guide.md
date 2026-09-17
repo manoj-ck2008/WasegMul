@@ -1,187 +1,205 @@
-# Developer Guide
+# WasegMul Developer Guide & Engineering Handbook
 
-## Prerequisites
+A comprehensive manual for engineering, building, testing, and extending the WasegMul waste classification platform.
 
+---
+
+## 1. System Requirements & Setup
+
+### 1.1 Prerequisites
 - **Android Studio**: Ladybug (2024.2.1) or later
-- **JDK**: 21
-- **Android SDK**: 35
-- **Physical Device**: Recommended for camera features (emulator camera works but is slower)
+- **JDK**: 21 (configured in Android Studio under Settings → Build, Execution, Deployment → Build Tools → Gradle)
+- **Android SDK**: API 35 platform tools (minimum supported SDK: API 29 / Android 10)
+- **Python**: 3.8+ (Python 3.10+ recommended for dataset preparation and YOLO training)
+- **Hardware**: Physical Android device with camera recommended for CameraX and YOLO verification
 
-## Building the Project
+### 1.2 Repository Setup
 
 ```bash
-# Clone the repository
+# Clone the repository with submodules if any
 git clone https://github.com/manoj-ck2008/WasegMul.git
 cd WasegMul
 
-# Build debug APK
-./gradlew assembleDebug
-
-# Install on connected device
-./gradlew installDebug
-
-# Run unit tests
-./gradlew testDebugUnitTest
-
-# Run lint checks
-./gradlew lint
-```
-
-## Project Configuration
-
-### Version Management
-
-App version is defined in `gradle.properties`:
-
-```properties
-VERSION_NAME=1.1.0
-VERSION_CODE=2
-```
-
-This is the single source of truth. Do not modify `version.properties` (deprecated).
-
-### Release Signing
-
-For release builds, create `keystore.properties` in the project root:
-
-```properties
-storeFile=path/to/your.keystore
-storePassword=your_store_password
-keyAlias=your_key_alias
-keyPassword=your_key_password
-```
-
-**Never commit this file to version control.**
-
-### Build Types
-
-- **Debug**: `.debug` suffix on applicationId, debuggable
-- **Release**: R8 minification, resource shrinking, requires signing config
-
-## TFLite Models
-
-The app bundles three TFLite models in `app/src/main/assets/`:
-
-| Model | Size | Purpose |
-|-------|------|---------|
-| `category_model_finetuned.tflite` | 16.57 MB | 4-class category classification |
-| `subclass_model_finetuned.tflite` | 16.59 MB | 30-class subclass classification |
-| `yolov8n.tflite` | 12.25 MB | YOLOv8n object detection |
-
-### Updating Models
-
-1. Replace the `.tflite` file in `app/src/main/assets/`
-2. Update corresponding `_classes.txt` label file if classes changed
-3. Update ProGuard rules if new classes are added
-4. Test on a mid-range device for performance
-
-### Exporting YOLO to TFLite
-
-```bash
-pip install ultralytics onnx2tf
-python scripts/export_yolo_tflite.py
-```
-
-## Debugging
-
-### Common Build Issues
-
-**"RELEASE BUILD BLOCKED: No keystore.properties found"**
-- Create `keystore.properties` or build debug variant
-
-**"Could not resolve all dependencies"**
-- Check internet connection
-- Try `./gradlew clean` and rebuild
-
-**Camera not working on emulator**
-- Use a physical device for camera features
-- Or enable camera in emulator settings
-
-### Log Analysis
-
-The app uses Android's logging system. Filter by tag:
-
-- `ModelManager` - ML initialization
-- `YoloDetector` - YOLO detection
-- `ClassificationViewModel` - Classification pipeline
-- `HomeViewModel` - History operations
-
-### Memory Profiling
-
-Use Android Studio Profiler to monitor:
-- Bitmap memory during classification
-- TFLite model loading
-- Room database operations
-
-## Testing
-
-### Unit Tests
-
-Located in `app/src/test/`. Currently placeholder tests only.
-
-```bash
+# Validate build environment and run unit tests
 ./gradlew testDebugUnitTest
 ```
 
-### Instrumented Tests
+---
 
-Located in `app/src/androidTest/`. Currently placeholder tests only.
+## 2. Project Architecture & Codebase Layout
 
-```bash
-./gradlew connectedDebugAndroidTest
+```
+WasegMul/
+├── app/                                 # Android application module
+│   ├── src/main/java/com/agrelius/wasegmul/
+│   │   ├── data/                        # Room Database, DAO, Entity models, TypeConverters
+│   │   ├── ml/                          # TFLite ModelManager, YoloDetector, Preprocessing
+│   │   │   ├── classifiers/             # TfliteClassifier base, Category & Subclass classifiers
+│   │   │   └── preprocessing/           # ImagePreprocessor, Normalization, Hardware bitmaps
+│   │   ├── navigation/                  # AppNavigation, Route definitions
+│   │   ├── repository/                  # WasteRepository interface & DefaultWasteRepository
+│   │   ├── ui/                          # Jetpack Compose presentation layer
+│   │   │   ├── classify/                # Scanner interface, viewmodel, animations
+│   │   │   ├── components/              # Reusable design system: GlassCard, HeroCard, etc.
+│   │   │   ├── guide/                   # Eco Encyclopedia and disposal guide
+│   │   │   ├── history/                 # History logs, filters, CSV export
+│   │   │   ├── home/                    # Dashboard, quick actions, impact metrics
+│   │   │   ├── result/                  # Analysis report, feedback, share intent
+│   │   │   ├── settings/                # Preferences, Material You toggle, legal dialog
+│   │   │   ├── splash/                  # Animated neural logo splash
+│   │   │   ├── theme/                   # Material 3 Theme, Typography, GlassColors
+│   │   │   └── yolo/                    # Real-time YOLO detection overlay & ROI tap-to-classify
+│   │   ├── utils/                       # SettingsManager (DataStore), EcoThoughts quotes
+│   │   └── viewmodel/                   # HomeViewModel and shared state
+│   ├── src/main/assets/                 # Bundled TFLite models and label files
+│   ├── src/test/java/                   # Unit test suite (Repository, EcoImpact, Arbitrator)
+│   └── schemas/                         # Room SQLite exported database schemas
+├── shared/                              # Kotlin Multiplatform (KMP) shared library
+│   └── src/commonMain/kotlin/com/agrelius/wasegmul/
+│       ├── CommonModels.kt              # PredictionResult, WasteRecord, WasteMetadata
+│       ├── EcoImpactCalculator.kt       # Carbon, water, energy, and tree metrics
+│       ├── MLArbitrator.kt              # Decision state machine and Shannon entropy
+│       ├── MessageGenerator.kt          # Dynamic contextual user guidance
+│       ├── PredictionCodec.kt           # Prediction serialization codec
+│       ├── WasteKnowledgeBase.kt        # Disposal protocols and reference sources
+│       ├── WasteMapping.kt              # Subclass to category taxonomy mapping
+│       └── IOSBridge.kt                 # Swift-compatible flat array interop bridge
+├── iosApp/                              # iOS application shell consuming KMP framework
+├── scripts/                             # Python tooling and training scripts
+│   ├── prepare_dataset.py               # Multi-source dataset merge, dedup, and split
+│   ├── train_waste_yolo.py              # Local YOLO11n fine-tuning
+│   ├── kaggle_train.py                  # Kaggle GPU training pipeline
+│   ├── export_waste_model_tflite.py     # PyTorch to ONNX to TFLite converter
+│   └── export_yolo_tflite.py            # Baseline YOLOv8n exporter
+├── docs/                                # Technical documentation, ADRs, and guides
+├── taxonomy.yaml                        # Single source of truth for waste categories
+└── datasets_manifest.yaml               # Dataset registry with licenses and attributions
 ```
 
-### Manual Testing Checklist
+---
 
-1. Launch app → Splash animation plays
-2. Home screen loads with stats
-3. Camera permission request appears
-4. Capture image → Classification runs
-5. Result screen shows prediction and insights
-6. History tab shows past classifications
-7. Settings → Theme toggle works
-8. YOLO screen shows live detection
-9. Feedback buttons work on result screen
-10. Data purge clears all history
+## 3. Build & Release Engineering
 
-## Code Quality
+### 3.1 Version Configuration
 
-### Lint
-
-```bash
-./gradlew lint
+Version configuration is declared in `gradle.properties`:
+```properties
+VERSION_NAME=2.0.0
+VERSION_CODE=3
 ```
 
-### Code Style
+### 3.2 Production Release Signing
 
-Follow [Kotlin coding conventions](https://kotlinlang.org/docs/coding-conventions.html):
+To create a signed release APK or Android App Bundle (AAB):
+1. Create `keystore.properties` in the project root:
+   ```properties
+   storeFile=/absolute/path/to/upload-keystore.jks
+   storePassword=your_keystore_password
+   keyAlias=your_key_alias
+   keyPassword=your_key_password
+   ```
+2. Run the release build:
+   ```bash
+   ./gradlew assembleRelease
+   ```
+   The build script incorporates ProGuard and R8 rules defined in `app/proguard-rules.pro` to keep reflection-sensitive TFLite classes and Room entities intact.
 
-- Use `camelCase` for functions/properties
-- Use `PascalCase` for classes/objects
-- Add KDoc for public APIs
-- Keep functions focused and concise
+---
 
-### Recommended Tools
+## 4. Testing & Verification
 
-- **Detekt**: Static analysis for Kotlin (not yet configured)
-- **ktlint**: Code formatting (not yet configured)
-- **LeakCanary**: Memory leak detection (debug builds only)
+### 4.1 Automated Unit Tests
 
-## Architecture Patterns
+WasegMul maintains strict test-driven discipline. All unit tests execute without emulators:
 
-- **MVVM**: ViewModels manage UI state
-- **Repository Pattern**: WasteRepository as data source
-- **Sealed Classes**: For type-safe state representation
-- **Coroutines + Flow**: Asynchronous operations
-- **Dependency Injection**: Manual via Application class
+```bash
+# Execute the full unit test suite
+./gradlew testDebugUnitTest
+```
 
-## Performance Optimization
+### 4.2 Core Test Suites
 
-- Models use Play Services TFLite (reduces APK size)
-- Image preprocessing is thread-safe
-- Database queries are paginated (limit 500 records)
-- Compose recomposition is minimized with stable types
+| Test Suite | Location | Scope |
+|:---|:---|:---|
+| `WasteRepositoryTest` | `app/src/test/...` | Room repository CRUD, single record deletion, and category re-derivation |
+| `EcoImpactTest` | `app/src/test/...` | Carbon avoidance, water savings, energy (kWh), and user correction exclusions |
+| `MLArbitratorTest` | `app/src/test/...` | Consistent predictions, high-entropy fallback, and subclass priority overrides |
+| `MappersTest` | `app/src/test/...` | Entity to domain model bidirectional conversions and timestamp safety |
+| `MessageGeneratorTest` | `app/src/test/...` | Humanized label formatting and contextual message selection |
+| `PredictionCodecTest` | `app/src/test/...` | String serialization, deserialization, and corrupted payload resilience |
+| `WasteKnowledgeBaseTest`| `app/src/test/...` | Case-insensitive lookups, peripheral guidance, and URL source citations |
+| `WasteMappingTest` | `app/src/test/...` | Canonical 30 subclasses check, category lookups, and extended YOLO mapping |
 
-## Contributing
+---
 
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for contribution guidelines.
+## 5. Machine Learning Pipeline Architecture
+
+### 5.1 Bundled Model Specifications
+
+| Model Asset | Format | Input Shape | Purpose |
+|:---|:---|:---|:---|
+| `category_model_finetuned.tflite` | TFLite FP32 | `[1, 224, 224, 3]` | 4-class broad category classifier |
+| `subclass_model_finetuned.tflite` | TFLite FP32 | `[1, 224, 224, 3]` | 30-class fine material classifier |
+| `yolov8n.tflite` / `waste_yolo11n.tflite` | TFLite FP32/INT8 | `[1, 640, 640, 3]` | Real-time multi-object localizer |
+
+### 5.2 Zero-Allocation YOLO Pipeline
+
+The real-time camera analyzer in `YoloDetector.kt` avoids creating objects on every frame:
+- Input tensors are written directly to a single preallocated direct `ByteBuffer`.
+- Output tensors are parsed in-place using stride arithmetic (`parseDetections`) without creating intermediate 2.8 MB transposed arrays.
+- Bitmask non-maximum suppression (`nmsPerClass`) marks suppressed boxes in-place using a boolean array.
+
+---
+
+## 6. Database Migrations
+
+Room database migrations are strictly declared in `WasteDatabase.kt` and tracked in `app/schemas/`:
+
+```kotlin
+// Example: Applying migration 8 to 9
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_waste_history_category ON waste_history (category)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_waste_history_subclass ON waste_history (subclass)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_waste_history_feedback ON waste_history (feedback)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_waste_history_timestamp ON waste_history (timestamp)")
+    }
+}
+```
+
+When changing the schema:
+1. Increment `version` in `@Database(version = N, ...)`.
+2. Provide a new migration object in `ALL_MIGRATIONS`.
+3. Re-run `./gradlew testDebugUnitTest` to auto-export the new JSON schema in `app/schemas/`.
+
+---
+
+## 7. UI/UX Design System & Jetpack Compose Previews
+
+### 7.1 Dynamic Themes
+WasegMul supports 3 curated themes plus Android 12+ Material You Dynamic Color:
+- **Dark Mode**: Emerald neon accents with deep charcoal surfaces.
+- **Light Mode**: Clean eco-white with forest green primary highlights.
+- **Colour Mode**: Earthy olive tones designed for natural contrast.
+- **Dynamic Color**: Enabled via `SettingsScreen`, matching device wallpaper tones using `dynamicLightColorScheme` and `dynamicDarkColorScheme`.
+
+### 7.2 Compose Previews
+All components and screens include `@Preview` composables wrapped in `WasegMulTheme`:
+- `GlassCardPreview` (`GlassCard.kt`)
+- `HeroCardPreview` (`HeroCard.kt`)
+- `InsightCardPreview` (`InsightCard.kt`)
+- `ConfidenceBadgePreview` (`ConfidenceBadge.kt`)
+- `AppLogoPreview` (`AppLogo.kt`)
+- `GuideScreenPreview` (`GuideScreen.kt`)
+- `SettingsScreenPreview` (`SettingsScreen.kt`)
+- `HistoryCardPreview` & `EmptyHistoryStatePreview` (`HistoryScreen.kt`)
+- `DetectionOverlayPreview` (`YoloScreen.kt`)
+
+---
+
+## 8. Contributing Standards
+
+1. Follow the domain terminology defined in `CONTEXT.md`.
+2. Maintain zero test regressions: `./gradlew testDebugUnitTest` must pass on every commit.
+3. Record significant architectural decisions under `docs/adr/`.
+4. Avoid em-dashes in commit messages and documentation prose.

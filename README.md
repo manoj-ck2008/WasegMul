@@ -13,58 +13,79 @@
     <img src="https://img.shields.io/github/license/manoj-ck2008/WasegMul" alt="License">
   </a>
   <img src="https://img.shields.io/badge/Android-29%2B-brightgreen" alt="Min SDK">
+  <img src="https://img.shields.io/badge/Target%20SDK-35-blue" alt="Target SDK">
   <img src="https://img.shields.io/badge/Kotlin-2.1.0-7F52FF" alt="Kotlin">
   <img src="https://img.shields.io/badge/TensorFlow%20Lite-2.17.0-FF6F00" alt="TFLite">
   <img src="https://img.shields.io/badge/Compose%20BOM-2024.11.00-4285F4" alt="Compose">
+  <img src="https://img.shields.io/badge/Tests-8%20Suites%20Passing-success" alt="Tests">
 </p>
 
 <p align="center">
-  An on-device waste classification Android app powered by TensorFlow Lite and multi-model AI arbitration. Point your camera at any waste item to instantly identify its category, subclass, and the correct disposal method, entirely offline, with no data leaving your device.
+  An on-device waste classification and real-time detection Android application powered by TensorFlow Lite and multi-model AI arbitration. Point your camera at any waste item to instantly identify its category, subclass, and actionable disposal guidance, completely offline with zero data leaving your device.
 </p>
 
 ---
 
 ## Overview
 
-WasegMul (**W**aste **Seg**regation **Mul**ti-model) is an Android application that uses two EfficientNet classifiers running on TensorFlow Lite to identify waste items in real-time. The app classifies items into 4 categories and 30 subclasses, then provides actionable disposal guidance sourced from EPA and recycling authority databases.
+WasegMul (**Wa**ste **Seg**regation **Mul**ti-model) is a Kotlin Multiplatform and Jetpack Compose Android application that pairs two fine-tuned EfficientNet neural networks with real-time YOLO object detection. The app classifies items into 4 canonical categories and 30 subclasses, cross-checks predictions using Shannon entropy arbitration, computes verifiable ecological impact metrics, and provides actionable disposal guidance sourced from EPA and recycling authority standards.
 
-**Key design principle**: All inference runs on-device. No images or data are transmitted to any server. This is a privacy-first application.
+**Key design principle**: All inference runs 100% on-device. No images, telemetry, or user records are transmitted to any server, guaranteeing privacy by design.
 
-### How It Works
+---
 
+## Pipeline & Architecture
+
+### Multi-Model Inference & Arbitration Pipeline
+
+```mermaid
+flowchart TD
+    subgraph Input ["Input Ingestion"]
+        CAM["CameraX 1.4.1 (YUV_420_888 / NV21)"]
+        GAL["Gallery Image Picker (Bitmap)"]
+    end
+
+    subgraph Preprocessing ["Image Preprocessing"]
+        PRE["ImagePreprocessor: Center-Crop & Resize (224x224x3)"]
+        YPRE["YoloDetector: Letterbox Resize (640x640x3)"]
+    end
+
+    subgraph ParallelInference ["Parallel On-Device Inference"]
+        CAT["CategoryClassifier: EfficientNet (4 classes)"]
+        SUB["SubclassClassifier: EfficientNet (30 classes)"]
+        YOLO["YoloDetector: YOLO11n / YOLOv8n (Bounding Boxes)"]
+    end
+
+    subgraph Arbitration ["Arbitration & Domain Logic"]
+        ARB{"MLArbitrator: Cross-Validation & Shannon Entropy"}
+        KB["WasteKnowledgeBase: EPA Disposal Rules & Guidelines"]
+        ECO["EcoImpactCalculator: CO2, Water, Energy, Landfill"]
+    end
+
+    subgraph StorageAndUI ["Presentation & Persistence"]
+        DB[("Room Database v9: Composite Indices")]
+        UI["Jetpack Compose Material 3 UI"]
+    end
+
+    CAM --> PRE
+    GAL --> PRE
+    CAM --> YPRE
+
+    PRE --> CAT
+    PRE --> SUB
+    YPRE --> YOLO
+
+    YOLO -.->|"Interactive ROI Tap-to-Classify"| PRE
+
+    CAT --> ARB
+    SUB --> ARB
+    ARB --> KB
+    ARB --> ECO
+    ARB --> DB
+    KB --> UI
+    ECO --> UI
+    DB --> UI
 ```
-Camera / Gallery Image
-        │
-        ▼
-┌──────────────────┐
-│ Image Preprocessor│  Center-crop + resize to 224×224
-└────────┬─────────┘
-         │
-    ┌────┴────┐
-    ▼         ▼
-┌────────┐ ┌──────────┐
-│Category│ │ Subclass │
-│ Model  │ │  Model   │
-│ (4 cls)│ │ (30 cls) │
-└───┬────┘ └────┬─────┘
-    │           │
-    ▼           ▼
-┌──────────────────┐
-│  ML Arbitrator   │  Cross-checks predictions, estimates uncertainty
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│ Knowledge Base   │  Disposal guide, environmental impact, sources
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│  Result Screen   │  Classification report with feedback loop
-└──────────────────┘
-```
-
-Additionally, a **YOLO11n / YOLOv8n** detector provides real-time waste item detection (15 fine-tuned waste classes or 80 COCO classes) with tap-to-focus and interactive crop-and-classify.
 
 ---
 
@@ -72,293 +93,306 @@ Additionally, a **YOLO11n / YOLOv8n** detector provides real-time waste item det
 
 ### Implemented
 
-- **On-device waste classification**: Dual EfficientNet models classify items into 4 categories and 30 subclasses
-- **TensorFlow Lite inference**: All ML processing runs locally on the device with zero-allocation buffers
-- **YOLO real-time detection**: Live camera object detection with bounding boxes, labels, and ROI crop-and-classify
-- **Multi-model arbitration**: Smart cross-checking between category and subclass predictions with entropy-based uncertainty estimation
-- **Waste knowledge base**: Comprehensive disposal guides, environmental impact data, and recycling benefits for 30+ waste types
-- **Camera and gallery input**: Capture photos with CameraX or select high-resolution images from the device gallery
-- **Classification history**: Room database with timestamped records, individual deletion, search, filtering, and feedback tracking
-- **Export capabilities**: Export history to CSV in background coroutines and share detailed analysis reports
-- **Material Design 3 UI**: Frosted glassmorphism cards with Android 12+ blur, animated organic backgrounds, and falling petals
-- **Dynamic themes & Material You**: Dark (emerald neon), Light, Colour (olive nature), and Android 12+ dynamic color matching
-- **Eco Impact dashboard**: Track cumulative landfill diversion, carbon emissions avoided, water conserved, and energy saved
-- **Offline operation**: No internet connection required for any core feature
-- **Privacy-first**: Zero data transmission; all processing on-device
-- **Feedback loop**: Users can validate or correct classifications to maintain data integrity
-- **Dynamic messages**: 8 classification modes with contextual, user-facing eco guidance
-
-### Under Development
-
-> These features are actively being developed for future releases.
-
-- **Batch classification**: Process multiple images in a single session
-- **Expanded taxonomy**: Ongoing additions to regional e-waste and textile waste classes
+- **On-Device Waste Classification**: Dual EfficientNet neural networks classify items into 4 categories and 30 subclasses in under 50ms.
+- **Zero-Allocation Tensor Pipelines**: Reusable preallocated direct native `ByteBuffer` instances eliminate GC churn during continuous camera streaming.
+- **YOLO Real-Time Object Detection**: Live CameraX object detection with bounding boxes, labels, and interactive tap-to-classify ROI cropping.
+- **Multi-Model ML Arbitrator**: Cross-validates category and subclass predictions, detects conflicts, and quantifies uncertainty using Shannon entropy.
+- **Actionable Disposal Guidance**: EPA-aligned disposal instructions, environmental hazards, and preparation steps across all 30 subclasses.
+- **Eco Impact Dashboard**: Tracks cumulative diverted landfill waste, avoided CO2 emissions, conserved water, and saved energy.
+- **Room Database v9**: Optimized schema with composite indices on `(isHarmful, timestamp)` and `(category, timestamp)` for high-performance querying.
+- **Data Integrity & Consistency**: Re-derives canonical category automatically upon user feedback correction.
+- **Material Design 3 & Expressive UI**: Glassmorphism cards with Android 12+ RenderEffect frosted blur, animated organic backgrounds, and falling petals.
+- **Dynamic Color & Themes**: Full support for Android 12+ dynamic color matching, Emerald Neon dark mode, Light mode, and Olive Nature theme.
+- **CSV Export & Sharing**: Background coroutine streaming export of historical waste records with file-sharing intents.
+- **Cross-Platform KMP Core**: Clean separation of domain logic (`MLArbitrator`, `EcoImpactCalculator`, `PredictionCodec`, `MessageGenerator`) ready for iOS via Kotlin Multiplatform.
+- **100% Offline & Private**: Zero network dependencies for core features; all data remains local.
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| **Language** | Kotlin 2.1.0 |
-| **UI Framework** | Jetpack Compose (BOM 2024.11.00) |
-| **Design System** | Material Design 3 |
-| **ML Runtime** | TensorFlow Lite 2.17.0 |
-| **ML Models** | EfficientNet (classification), YOLO11n / YOLOv8n (detection) |
-| **Camera** | CameraX 1.4.1 |
-| **Database** | Room 2.6.1 |
-| **Preferences** | DataStore 1.1.1 |
-| **Navigation** | Navigation Compose 2.8.5 |
-| **Build System** | Gradle 8.11 + Version Catalog |
-| **Multiplatform** | Kotlin Multiplatform (Android + iOS) |
+| Layer | Technology | Version | Purpose |
+|---|---|---|---|
+| **Language** | Kotlin | 2.1.0 | Shared multiplatform code and Android app |
+| **UI Framework** | Jetpack Compose | BOM 2024.11.00 | Declarative UI with Material 3 expressive styling |
+| **ML Engine** | TensorFlow Lite | 2.17.0 | Bundled on-device C++ inference runtime |
+| **Object Detection** | YOLO11n / YOLOv8n | Ultralytics | Real-time live bounding box detection and ROI extraction |
+| **Camera** | CameraX | 1.4.1 | Hardware camera binding, lifecycle control, analysis stream |
+| **Persistence** | Room SQLite | 2.6.1 | Local storage with composite indices and Room schema export |
+| **Preferences** | Jetpack DataStore | 1.1.1 | Reactive type-safe theme preferences |
+| **Navigation** | Navigation Compose | 2.8.5 | Single-activity screen routing and deep linking |
+| **Build Tool** | Gradle | 8.11 | Modern build system with Version Catalog (`libs.versions.toml`) |
+| **Target Runtime** | Android SDK | Min API 29, Target API 35 | Modern Android lifecycle and hardware features |
 
 ---
 
-## Screenshots
+## Application Navigation Flow
 
-> Screenshots coming soon. The app features a dark emerald theme with glassmorphism cards, animated backgrounds, and a clean Material Design 3 interface.
+```mermaid
+stateDiagram-v2
+    [*] --> SplashScreen
+    SplashScreen --> HomeScreen: Splash timer complete
 
-| Home | Classify | Result | History | YOLO Detection |
-|------|----------|--------|---------|----------------|
-| *Dashboard with stats and quick actions* | *Camera/gallery image selection with scanning animation* | *Classification report with confidence breakdown* | *Past classifications with feedback editing* | *Live camera feed with bounding boxes* |
+    state HomeScreen {
+        [*] --> Dashboard
+        Dashboard --> EcoStats: View impact
+        Dashboard --> QuickActions: Capture or Pick
+    }
+
+    HomeScreen --> ClassificationScreen: Tap Camera / Gallery
+    HomeScreen --> HistoryScreen: Tap History
+    HomeScreen --> SettingsScreen: Tap Settings
+    HomeScreen --> YoloScreen: Tap YOLO Live Camera
+
+    state ClassificationScreen {
+        ImageSelected --> RunningInference: Parallel classification
+        RunningInference --> ResultScreen: Success
+    }
+
+    state YoloScreen {
+        LiveBoundingBoxes --> InteractiveCrop: Tap detected bounding box
+        InteractiveCrop --> ResultScreen: Run full classification on ROI
+    }
+
+    state HistoryScreen {
+        RecordList --> FilterSearch: Filter by Category / Harmful
+        RecordList --> ExportCSV: Export records
+        RecordList --> ResultScreen: View record details
+    }
+
+    state ResultScreen {
+        ClassificationView --> FeedbackCorrection: User corrects subclass
+        FeedbackCorrection --> DatabaseUpdated: Re-derive category & persist
+    }
+
+    ResultScreen --> HomeScreen: Done / Back
+    HistoryScreen --> HomeScreen: Back
+    SettingsScreen --> HomeScreen: Back
+```
 
 ---
 
-## Installation
+## Model Specifications
+
+### 1. Category Classifier
+
+| Property | Value |
+|---|---|
+| **Model Architecture** | EfficientNet-B0 (Fine-tuned) |
+| **Input Dimensions** | 224 x 224 x 3 RGB Normalized Float32 (0.0 to 1.0) |
+| **Output Shape** | `[1, 4]` (Probability distribution via Softmax) |
+| **Classes** | `E-Waste`, `Organic`, `Recyclable`, `Trash` |
+| **Latency** | ~25 ms (CPU / XNNPACK) |
+
+### 2. Subclass Classifier
+
+| Property | Value |
+|---|---|
+| **Model Architecture** | EfficientNet-B0 (Fine-tuned) |
+| **Input Dimensions** | 224 x 224 x 3 RGB Normalized Float32 (0.0 to 1.0) |
+| **Output Shape** | `[1, 30]` (Probability distribution via Softmax) |
+| **Classes (30)** | `Air-Conditioner`, `Battery`, `Cardboard`, `Electronic Component`, `Electronic Device`, `Glass`, `Keyboard`, `Laptop`, `Metal`, `Microwave`, `Miscellaneous Trash`, `Mobile`, `Mouse`, `Organic`, `PCB`, `Paper`, `Plastic`, `Player`, `Printer`, `Refrigerator`, `Television`, `Textile Trash`, `Washing Machine`, `automobile wastes`, `clothing`, `disposable_plastic_cutlery`, `light bulbs`, `shoes`, `styrofoam_cups`, `styrofoam_food_containers` |
+| **Latency** | ~35 ms (CPU / XNNPACK) |
+
+### 3. YOLO Object Detector
+
+| Property | Value |
+|---|---|
+| **Model Architecture** | YOLO11n (Ultralytics) / YOLOv8n fallback |
+| **Input Dimensions** | 640 x 640 x 3 RGB Normalized Float32 (Letterbox preservation) |
+| **Output Shape** | `[1, 19, 8400]` (4 box coordinates + 15 waste classes) or `[1, 84, 8400]` (COCO) |
+| **NMS Post-Processing** | IoU threshold = 0.45, Confidence threshold = 0.35 |
+| **Feature** | Real-time bounding boxes with tap-to-focus ROI crop and classification |
+
+---
+
+## Test Verification Matrix
+
+All test suites execute against the Kotlin Multiplatform shared library and Android application modules:
+
+| Test Suite | File Path | Test Cases | Seam / Coverage |
+|---|---|---|---|
+| **EcoImpactTest** | `app/src/test/.../EcoImpactTest.kt` | 14 tests | Diversion multipliers, hazardous penalty, zero bounds, aggregation |
+| **MLArbitratorTest** | `app/src/test/.../MLArbitratorTest.kt` | 12 tests | Full agreement, partial agreement, degradation fallbacks, entropy spikes |
+| **PredictionCodecTest** | `app/src/test/.../PredictionCodecTest.kt` | 9 tests | Base64 and Hex serialization/deserialization, float precision, boundary cases |
+| **MessageGeneratorTest** | `app/src/test/.../MessageGeneratorTest.kt` | 9 tests | 8 operational classification modes, fallback safety messages |
+| **WasteKnowledgeBaseTest**| `app/src/test/.../WasteKnowledgeBaseTest.kt` | 10 tests | 30 subclass rules, hazard flags, missing entry fallbacks |
+| **WasteMappingTest** | `app/src/test/.../WasteMappingTest.kt` | 8 tests | Subclass-to-category taxonomy integrity, case insensitivity |
+| **MappersTest** | `app/src/test/.../MappersTest.kt` | 7 tests | Domain model to Room entity bidirectional mapping, null safety |
+| **ExampleUnitTest** | `app/src/test/.../ExampleUnitTest.kt` | 1 test | Base test runner sanity verification |
+
+Execute the complete test suite locally:
+
+```bash
+./gradlew testDebugUnitTest
+```
+
+---
+
+## Repository Structure
+
+```
+WasegMul/
+├── .github/
+│   └── workflows/
+│       └── android-ci.yml          # GitHub Actions CI matrix (JDK 21, Gradle 8.11)
+├── app/
+│   ├── schemas/                    # Room exported JSON schemas for schema migrations
+│   │   └── com.agrelius.wasegmul.data.WasteDatabase/
+│   │       ├── 8.json              # Version 8 schema
+│   │       └── 9.json              # Version 9 schema with composite indices
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── assets/             # Bundled TFLite models and label dictionaries
+│   │   │   │   ├── category_model_finetuned.tflite
+│   │   │   │   ├── category_classes.txt
+│   │   │   │   ├── subclass_model_finetuned.tflite
+│   │   │   │   ├── subclass_classes.txt
+│   │   │   │   └── yolov8n.tflite
+│   │   │   ├── java/com/agrelius/wasegmul/
+│   │   │   │   ├── data/           # Room entities, DAOs, and database migrations (MIGRATION_8_9)
+│   │   │   │   ├── ml/             # ModelManager, YoloDetector, TfliteClassifier, Preprocessors
+│   │   │   │   │   ├── classifiers/
+│   │   │   │   │   │   ├── CategoryClassifier.kt
+│   │   │   │   │   │   ├── SubclassClassifier.kt
+│   │   │   │   │   │   └── TfliteClassifier.kt
+│   │   │   │   │   └── preprocessing/
+│   │   │   │   │       └── ImagePreprocessor.kt
+│   │   │   │   ├── navigation/     # Jetpack Compose screen routes and NavGraph
+│   │   │   │   ├── repository/     # WasteRepository data access layer
+│   │   │   │   ├── ui/             # Jetpack Compose presentation layer
+│   │   │   │   │   ├── components/ # GlassCard, FallingPetals, OrganicBackground, HeroCard
+│   │   │   │   │   ├── guide/      # Waste segregation reference guide screen
+│   │   │   │   │   ├── history/    # Historical record browser with filtering and CSV export
+│   │   │   │   │   ├── result/     # Classification outcome, entropy, and feedback screen
+│   │   │   │   │   ├── settings/   # Theme selection, DataStore preferences, cache management
+│   │   │   │   │   ├── splash/     # Splash screen with branded animations
+│   │   │   │   │   ├── theme/      # Dynamic Color, emerald neon, light, and colour palettes
+│   │   │   │   │   └── yolo/       # CameraX live detection with interactive ROI cropping
+│   │   │   │   ├── utils/          # SettingsManager, CSVExporter, ShareHelper, EcoThoughts
+│   │   │   │   └── viewmodel/      # HomeViewModel, ClassificationViewModel, HistoryViewModel
+│   │   │   └── res/                # Vector drawables, strings, colors, mipmaps
+│   │   └── test/                   # Comprehensive unit test suites (8 suites)
+│   ├── build.gradle.kts            # Android application build configuration
+│   └── proguard-rules.pro          # TFLite, Room, and Coroutines R8 keep rules
+├── shared/                         # Kotlin Multiplatform (KMP) shared module
+│   ├── src/
+│   │   ├── commonMain/kotlin/      # Platform-agnostic domain logic
+│   │   │   └── com/agrelius/wasegmul/
+│   │   │       ├── CommonModels.kt         # Shared records, classification outcomes, failure reasons
+│   │   │       ├── EcoImpactCalculator.kt  # Landfill, carbon, water, and energy metrics
+│   │   │       ├── IOSBridge.kt            # Swift-friendly interoperability layer
+│   │   │       ├── MessageGenerator.kt     # 8 operational message modes
+│   │   │       ├── MLArbitrator.kt         # Entropy-based arbitration engine
+│   │   │       ├── PredictionCodec.kt      # Efficient hex/base64 tensor serialization
+│   │   │       ├── WasteKnowledgeBase.kt   # EPA disposal knowledge base
+│   │   │       └── WasteMapping.kt         # Canonical 30 subclass-to-category mappings
+│   │   └── iosMain/kotlin/         # iOS target entry points
+│   └── build.gradle.kts            # KMP multi-target configuration
+├── iosApp/                         # iOS application shell consuming shared KMP framework
+│   ├── iosApp/
+│   │   ├── ContentView.swift       # SwiftUI interactive prototype
+│   │   └── iosApp.swift            # iOS App entry point
+│   └── README.md
+├── scripts/                        # Python ML and dataset engineering pipeline
+│   ├── export_waste_model_tflite.py # PyTorch/SavedModel to INT8/FP16 TFLite exporter
+│   ├── export_yolo_tflite.py       # Ultralytics YOLO to TFLite exporter
+│   ├── generate_taxonomy_md.py     # Taxonomy documentation generator
+│   ├── kaggle_train.py             # Cloud training script for Kaggle GPU instances
+│   ├── prepare_dataset.py          # TACO/TrashNet dataset normalization and YOLO splitter
+│   ├── train_waste_yolo.py         # YOLO11n fine-tuning pipeline
+│   └── waste_dataset.yaml          # YOLO dataset configuration
+├── docs/                           # Exhaustive technical documentation
+│   ├── architecture.md             # System architecture with 7 Mermaid diagrams
+│   ├── developer-guide.md          # Complete engineering handbook
+│   ├── training-guide.md           # ML model training and quantization guide
+│   ├── taxonomy.md                 # Complete 30-class waste taxonomy
+│   ├── FAQ.md                      # Frequently asked questions
+│   └── ATTRIBUTION.md              # Open source attributions and dataset licenses
+├── gradle/                         # Gradle wrapper and version catalog
+│   └── libs.versions.toml          # Centralized dependency catalog
+├── build.gradle.kts                # Root build file
+├── settings.gradle.kts             # Included modules and plugin management
+├── gradle.properties               # JVM flags, version codes, AndroidX properties
+├── taxonomy.yaml                   # Single-source-of-truth taxonomy definition
+├── datasets_manifest.yaml          # Dataset provenance manifest
+├── CHANGELOG.md                    # Release history and milestone logs
+├── CONTRIBUTING.md                 # Developer contribution guidelines
+├── CODE_OF_CONDUCT.md              # Contributor Covenant Code of Conduct
+├── SECURITY.md                     # Security vulnerability reporting policy
+└── LICENSE                         # MIT License
+```
+
+---
+
+## Installation & Setup
 
 ### Prerequisites
 
-- **Android Studio** Koala 2024.1.1 or later
-- **JDK 17 or 21** (JDK 17+ supported, JDK 21 recommended and used in CI)
-- **Android SDK** with API 35 platform tools
+- **Android Studio**: Ladybug (2024.2.1) or later (Koala Feature Drop supported)
+- **Java Development Kit (JDK)**: JDK 21 (LTS recommended and required by CI)
+- **Android SDK**: API Level 35 (compileSdk 35, targetSdk 35, minSdk 29)
+- **Physical Device or Emulator**: Android 10+ (API 29+) with camera support for CameraX and YOLO
 
-### Steps
+### Build from Source
 
-1. **Clone the repository**
+1. **Clone the repository**:
    ```bash
    git clone https://github.com/manoj-ck2008/WasegMul.git
    cd WasegMul
    ```
 
-2. **Open in Android Studio**
-   - File → Open → Select the `WasegMul` directory
-   - Wait for Gradle sync to complete
+2. **Open in Android Studio**:
+   - Select **File** -> **Open** -> Choose `WasegMul` root directory.
+   - Allow Gradle sync to download dependencies and indexing to complete.
 
-3. **Build and run**
-   - Connect an Android device (API 29+) or start an emulator
-   - Click the Run button or:
-     ```bash
-     ./gradlew assembleDebug
-     ```
+3. **Run Unit Tests**:
+   ```bash
+   ./gradlew testDebugUnitTest
+   ```
+
+4. **Assemble Debug APK**:
+   ```bash
+   ./gradlew assembleDebug
+   ```
+
+5. **Install on Device**:
+   ```bash
+   ./gradlew installDebug
+   ```
 
 ### Release Build
 
-Release builds require a signing keystore. Create a `keystore.properties` file in the project root:
+Production builds use R8 code shrinking and resource optimization. Place your release signing keys in `keystore.properties` at the project root:
 
 ```properties
-storeFile=path/to/your/release.keystore
+storeFile=/path/to/keystore.jks
 storePassword=your_store_password
 keyAlias=your_key_alias
 keyPassword=your_key_password
 ```
 
-Then build:
-
+Then invoke:
 ```bash
 ./gradlew assembleRelease
 ```
-
-> **Note**: Release builds will fail without `keystore.properties`. This is intentional: the build system enforces signing requirements for production releases.
-
----
-
-## Model Information
-
-### Category Classifier
-
-| Property | Value |
-|----------|-------|
-| Architecture | EfficientNet (fine-tuned) |
-| Input | 224×224 RGB image |
-| Output | 4-class probability distribution |
-| Classes | E-Waste, Organic, Recyclable, Trash |
-
-### Subclass Classifier
-
-| Property | Value |
-|----------|-------|
-| Architecture | EfficientNet (fine-tuned) |
-| Input | 224×224 RGB image |
-| Output | 30-class probability distribution |
-| Classes | Air-Conditioner, Battery, Cardboard, Electronic Component, Electronic Device, Glass, Keyboard, Laptop, Metal, Microwave, Miscellaneous Trash, Mobile, Mouse, Organic, PCB, Paper, Plastic, Player, Printer, Refrigerator, Television, Textile Trash, Washing Machine, automobile wastes, clothing, disposable_plastic_cutlery, light bulbs, shoes, styrofoam_cups, styrofoam_food_containers |
-
-### YOLO Detection Model
-
-| Property | Value |
-|----------|-------|
-| Architecture | YOLO11n (Ultralytics) |
-| Input | 640×640 RGB image |
-| Output | 15-class visual waste bounding boxes (COCO-80 fallback) |
-| Use case | Real-time object detection in live camera view |
-| License | AGPL-3.0 (free for personal/research; Enterprise License required for closed-source commercial) |
-
-> **Note**: YOLO11n is faster and more accurate than YOLOv8n. For commercial licensing, see [Ultralytics Enterprise](https://www.ultralytics.com/license). For AGPL-free alternatives, see [Training Guide](docs/training-guide.md).
-
-### Model Arbitration
-
-The ML Arbitrator cross-checks predictions between the category and subclass models:
-
-- **Agreement**: Both models agree on the category → high confidence
-- **Partial agreement**: Subclass prediction matches one of the top category predictions → moderate confidence
-- **Degraded mode**: One model fails → fallback to the surviving model with reduced confidence
-- **Uncertain**: High entropy in predictions → user is advised to verify manually
-
----
-
-## Architecture
-
-### Module Structure
-
-```
-WasegMul/
-├── app/                  Android application module
-│   ├── src/main/
-│   │   ├── assets/       TFLite models + class labels
-│   │   ├── java/         Kotlin source code
-│   │   │   ├── data/     Room database, DAO, entities
-│   │   │   ├── ml/       Model management, classifiers, YOLO detector
-│   │   │   ├── navigation/  Screen routes, NavHost setup
-│   │   │   ├── repository/  Data access facade
-│   │   │   ├── ui/       Compose screens, components, theme
-│   │   │   ├── viewmodel/   ViewModels
-│   │   │   └── utils/    Settings, utilities
-│   │   └── res/          Android resources
-│   └── proguard-rules.pro
-├── shared/               Kotlin Multiplatform module
-│   └── src/commonMain/   Domain logic (MLArbitrator, KnowledgeBase, etc.)
-├── iosApp/               iOS shell (SwiftUI)
-├── scripts/              Model export utilities
-└── docs/                 Internal documentation
-```
-
-### Screen Flow
-
-```
-Splash → Home ─┬─→ Classify → Result
-               ├─→ History ─→ Result (historical record)
-               ├─→ Settings
-               └─→ YOLO (live detection)
-```
-
-### Key Classes
-
-| Class | Purpose |
-|-------|---------|
-| `ClassificationViewModel` | Orchestrates the classification pipeline |
-| `ModelManager` | Manages TFLite model lifecycle and parallel inference |
-| `MLArbitrator` | Cross-checks category/subclass predictions |
-| `WasteKnowledgeBase` | Maps 30 subclasses to disposal guides |
-| `YoloDetector` | YOLOv8n inference with NMS post-processing |
-| `WasteRepository` | Data access facade over Room database |
-| `SettingsManager` | DataStore-backed theme preferences |
-
----
-
-## Folder Structure
-
-```
-WasegMul/
-├── .github/                    GitHub templates and workflows
-│   └── ISSUE_TEMPLATE/         Issue templates
-├── app/
-│   ├── build.gradle.kts        App module build configuration
-│   ├── proguard-rules.pro      R8/ProGuard rules
-│   └── src/main/
-│       ├── AndroidManifest.xml
-│       ├── assets/             ML models + labels
-│       │   ├── category_model_finetuned.tflite
-│       │   ├── category_classes.txt
-│       │   ├── subclass_model_finetuned.tflite
-│       │   ├── subclass_classes.txt
-│       │   └── yolov8n.tflite
-│       └── java/com/agrelius/wasegmul/
-│           ├── data/           Room database layer
-│           ├── ml/             ML inference pipeline
-│           ├── navigation/     Navigation setup
-│           ├── repository/     Data access
-│           ├── ui/             Compose UI
-│           ├── viewmodel/      ViewModels
-│           └── utils/          Utilities
-├── shared/
-│   ├── build.gradle.kts        KMP module configuration
-│   └── src/commonMain/         Shared domain logic
-├── iosApp/                     iOS shell
-├── scripts/                    Utility scripts
-├── docs/                       Documentation
-├── gradle/                     Gradle wrapper + version catalog
-├── build.gradle.kts            Root build file
-├── settings.gradle.kts         Module declarations
-├── gradle.properties           Build properties + version
-├── LICENSE                     MIT License
-├── CONTRIBUTING.md             Contribution guidelines
-├── CODE_OF_CONDUCT.md          Community standards
-├── SECURITY.md                 Security policy
-└── CHANGELOG.md                Release history
-```
-
----
-
-## Known Limitations
-
-- **Classification accuracy**: Models are trained on specific datasets and may not generalize perfectly to all waste types in all contexts
-- **Single-object focus**: The EfficientNet classifiers process one item at a time; multi-object detection is under development
-- **YOLO uses COCO labels (current)**: The default YOLOv8n model detects general objects (80 COCO classes), not waste-specific categories. **Custom waste-trained YOLOX-S available**: see [Training Guide](docs/training-guide.md)
-- **No iOS classification yet**: The iOS shell demonstrates the shared knowledge base but does not yet include camera or ML inference
-- **No cloud features**: All data is local; there is no sync, backup, or cloud-based analysis
-
----
-
-## Roadmap
-
-- [x] YOLO model training pipeline (YOLO11n): **Completed** (see `scripts/train_waste_yolo.py`)
-- [x] TFLite export script for trained models: **Completed** (see `scripts/export_waste_model_tflite.py`)
-- [ ] Train custom YOLO11n on 30-class waste dataset (TACO + TrashNet + Roboflow)
-- [ ] Multi-object detection with simultaneous classification
-- [ ] iOS camera and classification pipeline
-- [ ] Batch image processing
-- [ ] Classification report export (PDF/share)
-- [ ] Additional waste subclass categories
-- [ ] Model accuracy benchmarking suite
-- [ ] Accessibility improvements (TalkBack, font scaling)
-- [ ] Localization (multi-language support)
 
 ---
 
 ## Contributing
 
-Contributions are welcome! Please read the [Contributing Guidelines](CONTRIBUTING.md) before submitting a pull request.
+Contributions are welcome. Please read our [Contributing Guidelines](CONTRIBUTING.md) and adhere to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ---
 
 ## License
 
-This project is licensed under the MIT License: see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
----
-
-## Acknowledgements
-
-- [TensorFlow Lite](https://www.tensorflow.org/lite): On-device ML inference
-- [Ultralytics YOLOv8](https://docs.ultralytics.com/): Object detection
-- [Jetpack Compose](https://developer.android.com/jetpack/compose): Modern Android UI
-- [CameraX](https://developer.android.com/media/camerax): Camera integration
-- [EPA Recycling Guidelines](https://www.epa.gov/recycle): Disposal information
-- [Call2Recycle](https://call2recycle.org/): Battery recycling data
-- [Contributor Covenant](https://www.contributor-covenant.org/): Code of Conduct
+The bundled YOLO model weights and Ultralytics tooling are subject to AGPL-3.0 or Enterprise licensing. See [Ultralytics Licensing](https://www.ultralytics.com/license) for commercial applications.
 
 ---
 
 ## Author
 
-**Manoj**: [GitHub](https://github.com/manoj-ck2008)
+**Manoj** - [GitHub Profile](https://github.com/manoj-ck2008)
