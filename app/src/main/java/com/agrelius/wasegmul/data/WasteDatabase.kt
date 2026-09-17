@@ -15,12 +15,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  *  - v7: added `topPredictions` column. A real migration is provided so existing user
  *        history is preserved rather than wiped.
  *  - v8: added `timestamp` index for fast history queries.
+ *  - v9: added `category`, `subclass`, and `feedback` indices for fast filtering.
  *
- * NOTE: `fallbackToDestructiveMigration()` is kept ONLY as a last-resort safety net so a
- * future schema change never crashes the app on launch; every intentional schema change
- * MUST ship with an explicit [Migration] entry below.
+ * NOTE: `fallbackToDestructiveMigration()` IS enabled as a last-resort safety net so a
+ * future schema change or an old v1..v5 install never crashes on launch. Every intentional
+ * schema change MUST still ship with an explicit [Migration] entry below; destructive
+ * fallback only triggers when no migration path exists (documented wipe, not crash).
  */
-@Database(entities = [WasteRecord::class], version = 8, exportSchema = false)
+@Database(entities = [WasteRecord::class], version = 9, exportSchema = true)
 abstract class WasteDatabase : RoomDatabase() {
 
     abstract fun wasteDao(): WasteDao
@@ -43,6 +45,15 @@ abstract class WasteDatabase : RoomDatabase() {
             }
         }
 
+        /** v8 -> v9: add indices on category, subclass, and feedback for fast filtering. */
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_waste_history_category ON waste_history (category)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_waste_history_subclass ON waste_history (subclass)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_waste_history_feedback ON waste_history (feedback)")
+            }
+        }
+
         fun getDatabase(context: Context): WasteDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -50,7 +61,8 @@ abstract class WasteDatabase : RoomDatabase() {
                     WasteDatabase::class.java,
                     "wasegmul_industrial_v1.db"
                 )
-                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8)
+                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                    .fallbackToDestructiveMigration()
                     .build()
                     .also { INSTANCE = it }
             }

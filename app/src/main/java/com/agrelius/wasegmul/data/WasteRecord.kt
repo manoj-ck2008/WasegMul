@@ -1,6 +1,7 @@
 package com.agrelius.wasegmul.data
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
@@ -9,7 +10,15 @@ import androidx.room.PrimaryKey
  * [topPredictions] stores the encoded top-K subclass predictions so the ResultScreen can
  * render the same information when a record is reopened from history (see PredictionCodec).
  */
-@Entity(tableName = "waste_history")
+@Entity(
+    tableName = "waste_history",
+    indices = [
+        Index(value = ["timestamp"]),
+        Index(value = ["category"]),
+        Index(value = ["subclass"]),
+        Index(value = ["feedback"])
+    ]
+)
 data class WasteRecord(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val category: String,
