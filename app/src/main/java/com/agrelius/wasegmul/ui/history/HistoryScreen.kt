@@ -33,6 +33,7 @@ import com.agrelius.wasegmul.WasteMapping
 import android.content.Intent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.lazy.LazyRow
+import com.agrelius.wasegmul.ui.history.HistoryDashboard
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -155,6 +156,9 @@ fun HistoryScreen(
                         .padding(horizontal = 24.dp)
                 ) {
                     Spacer(modifier = Modifier.height(8.dp))
+
+                    HistoryDashboard(allHistory = allHistory)
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     // Search text field
                     OutlinedTextField(

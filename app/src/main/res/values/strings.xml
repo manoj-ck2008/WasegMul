@@ -186,5 +186,28 @@
     <string name="settings_licenses_button">Open Source Licenses &amp; Attribution</string>
     <string name="settings_licenses_title">Licenses &amp; Attribution</string>
     <string name="settings_close">Close</string>
+
+    <!-- History Dashboard -->
+    <string name="dashboard_total_scans">Total Scans</string>
+    <string name="dashboard_total_weight">Total Weight</string>
+    <string name="dashboard_co2_offset">CO\u2082 Prevented</string>
+    <string name="dashboard_category_distribution">Category Breakdown</string>
+
+    <!-- Gamification -->
+    <string name="gamification_level_up">LEVEL UP!</string>
+    <string name="gamification_xp_earned">+%1$d XP</string>
+    <string name="gamification_carbon_offset">CARBON OFFSET</string>
+    <string name="gamification_congrats">Thank you for protecting our planet!</string>
+
+    <!-- Bengaluru Disposal Locator & Civic Reporting -->
+    <string name="disposal_nearest_facilities">Nearest Disposal Facilities</string>
+    <string name="disposal_navigate">Navigate</string>
+    <string name="disposal_call">Call</string>
+    <string name="civic_report_title">Report Waste Issue in Bengaluru</string>
+    <string name="civic_report_desc">Notice garbage piled up or a waste blackspot? Report directly to civic authorities.</string>
+
+    <!-- Decay Time Display -->
+    <string name="decay_time_header">TIME TO DECOMPOSE</string>
+    <string name="decay_environmental_warning">Environmental Impact</string>
 </resources>
 

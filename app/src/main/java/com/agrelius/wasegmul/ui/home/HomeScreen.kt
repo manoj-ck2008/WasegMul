@@ -44,6 +44,8 @@ import com.agrelius.wasegmul.WasteRecord
 import com.agrelius.wasegmul.ui.components.*
 import com.agrelius.wasegmul.ui.theme.*
 import com.agrelius.wasegmul.viewmodel.HomeViewModel
+import com.agrelius.wasegmul.gamification.GamificationManager
+import com.agrelius.wasegmul.utils.SettingsManager
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlinx.coroutines.Dispatchers
@@ -61,6 +63,9 @@ fun HomeScreen(
     onNavigateToBarcode: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val app = context.applicationContext as? com.agrelius.wasegmul.WasegMulApp
+    val totalXp by app?.settingsManager?.totalXp?.collectAsState(initial = 0) ?: remember { mutableIntStateOf(0) }
+    val gamificationState = remember(totalXp) { GamificationManager.computeState(totalXp) }
     val recentHistory by viewModel.recentHistory.collectAsState()
     val allHistory by viewModel.allHistory.collectAsState()
     var showImpactDetail by remember { mutableStateOf(false) }
@@ -234,18 +239,12 @@ fun HomeScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                    GlassCard(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Column(modifier = Modifier.clickable {
-                            showImpactDetail = true
-                        }) {
-                            Icon(Icons.Default.Public, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(text = "${totalImpact.format(3)}kg", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
-                            Text(text = stringResource(R.string.home_carbon_offset), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary, letterSpacing = 1.sp)
-                        }
-                    }
+                    GamificationCard(
+                        state = gamificationState,
+                        totalCo2Kg = totalImpact,
+                        modifier = Modifier.weight(1f),
+                        onClick = { showImpactDetail = true }
+                    )
                     GlassCard(
                         modifier = Modifier.weight(1f)
                     ) {

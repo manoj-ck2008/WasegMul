@@ -29,6 +29,18 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.Image
 import android.content.Intent
+import android.Manifest
+import android.content.pm.PackageManager
+import android.location.Location
+import androidx.core.content.ContextCompat
+import com.agrelius.wasegmul.EcoImpactCalculator
+import com.agrelius.wasegmul.data.disposal.DisposalDatabase
+import com.agrelius.wasegmul.data.disposal.NearbyCenterMatch
+import com.agrelius.wasegmul.ui.result.CivicReportingBanner
+import com.agrelius.wasegmul.ui.result.DecayTimeSection
+import com.agrelius.wasegmul.ui.result.DisposalLocatorSection
+import com.agrelius.wasegmul.ui.result.ThankYouOverlay
+import com.google.android.gms.location.LocationServices
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,9 +57,38 @@ fun ResultScreen(
     val error by viewModel.error.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var showContent by remember { mutableStateOf(false) }
+
+    val isFreshScan by viewModel.isFreshScan.collectAsState()
+    val lastXpGain by viewModel.lastXpGain.collectAsState()
+    var showThankYou by remember(isFreshScan) { mutableStateOf(isFreshScan) }
+    var showLevelUp by remember(lastXpGain) { mutableStateOf(lastXpGain?.didLevelUp == true) }
+
+    val allCenters = remember(context) { DisposalDatabase.loadCenters(context) }
+    var nearbyCenters by remember { mutableStateOf<List<NearbyCenterMatch>>(emptyList()) }
+    var userLocation by remember { mutableStateOf<Location?>(null) }
     
     LaunchedEffect(Unit) {
         showContent = true
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+                fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                    if (location != null) {
+                        userLocation = location
+                    }
+                }
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
+    }
+
+    LaunchedEffect(result, userLocation, allCenters) {
+        val cat = result?.category ?: return@LaunchedEffect
+        val lat = userLocation?.latitude ?: 12.9716
+        val lng = userLocation?.longitude ?: 77.5946
+        nearbyCenters = DisposalDatabase.findNearest(allCenters, lat, lng, cat, limit = 3)
     }
 
     LaunchedEffect(error) {
@@ -59,9 +100,10 @@ fun ResultScreen(
         }
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { 
@@ -360,6 +402,23 @@ fun ResultScreen(
                                 icon = Icons.Default.Science
                             )
 
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            DisposalLocatorSection(
+                                centers = nearbyCenters,
+                                category = r.category
+                            )
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            CivicReportingBanner(
+                                category = r.category,
+                                subclass = r.subclass,
+                                userLat = userLocation?.latitude,
+                                userLon = userLocation?.longitude,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
                             // Top model predictions + storage metadata.
                             if (r.topPredictions.isNotEmpty()) {
                                 SectionTitle(text = stringResource(R.string.result_confidence_breakdown))
@@ -418,7 +477,11 @@ fun ResultScreen(
                                 }
                             )
 
-                            Spacer(modifier = Modifier.height(28.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            DecayTimeSection(subclass = r.subclass, category = r.category)
+
+                            Spacer(modifier = Modifier.height(16.dp))
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -475,12 +538,50 @@ fun ResultScreen(
                         } else {
                             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                         }
+                    } // ends Box inside else
+                } // ends if/else
+            } // ends Column
+        } // ends Box(innerPadding)
+    } // ends Scaffold
+    
+    if (showThankYou) {
+        lastXpGain?.let { gain ->
+            val impact = remember(record) {
+                record?.let { EcoImpactCalculator.calculate(listOf(it)) }
+            }
+            val co2Grams = if (gain.co2PreventedGrams > 0.0) {
+                gain.co2PreventedGrams
+            } else {
+                (impact?.co2PreventedKg ?: 0.0) * 1000.0
+            }
+            val waterMl = (impact?.waterSavedLiters ?: 0.0) * 1000.0
+
+            ThankYouOverlay(
+                xpEarned = gain.xpEarned,
+                co2PreventedGrams = co2Grams,
+                waterSavedMl = waterMl,
+                onDismiss = {
+                    showThankYou = false
+                    if (!gain.didLevelUp) {
+                        viewModel.consumeXpGain()
                     }
                 }
-            }
+            )
+        }
+    } else if (showLevelUp) {
+        lastXpGain?.let { gain ->
+            LevelUpOverlay(
+                newLevel = gain.newLevel,
+                xpEarned = gain.xpEarned,
+                onDismiss = {
+                    viewModel.consumeXpGain()
+                    showLevelUp = false
+                }
+            )
         }
     }
-}
+} // ends Box(fillMaxSize)
+} // ends ResultScreen
 
 @androidx.compose.ui.tooling.preview.Preview(name = "Result Loading Preview", showBackground = true, backgroundColor = 0xFF121212)
 @Composable

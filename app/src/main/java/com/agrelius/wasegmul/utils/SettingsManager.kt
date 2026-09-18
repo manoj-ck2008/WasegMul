@@ -28,6 +28,9 @@ class SettingsManager(context: Context) {
         private val DYNAMIC_COLOR_KEY = booleanPreferencesKey("dynamic_color")
         private val CONFIDENCE_THRESHOLD_KEY = floatPreferencesKey("confidence_threshold")
         private val HAPTICS_KEY = booleanPreferencesKey("haptics_enabled")
+        private val TOTAL_XP_KEY = intPreferencesKey("total_xp")
+        private val DAILY_SCAN_COUNT_KEY = intPreferencesKey("daily_scan_count")
+        private val LAST_SCAN_DATE_KEY = stringPreferencesKey("last_scan_date")
     }
 
     val themeMode: Flow<ThemeMode> = appContext.dataStore.data
@@ -58,5 +61,41 @@ class SettingsManager(context: Context) {
     suspend fun setDynamicColor(value: Boolean) { appContext.dataStore.edit { it[DYNAMIC_COLOR_KEY] = value } }
     suspend fun setConfidenceThreshold(value: Float) { appContext.dataStore.edit { it[CONFIDENCE_THRESHOLD_KEY] = value.coerceIn(0.1f, 0.95f) } }
     suspend fun setHapticsEnabled(value: Boolean) { appContext.dataStore.edit { it[HAPTICS_KEY] = value } }
+
+    val totalXp: Flow<Int> = appContext.dataStore.data
+        .catch { e ->
+            if (e is java.io.IOException) emit(emptyPreferences()) else throw e
+        }
+        .map { it[TOTAL_XP_KEY] ?: 0 }
+
+    val dailyScanCount: Flow<Int> = appContext.dataStore.data
+        .catch { e ->
+            if (e is java.io.IOException) emit(emptyPreferences()) else throw e
+        }
+        .map { prefs ->
+            val today = java.time.LocalDate.now().toString()
+            val lastDate = prefs[LAST_SCAN_DATE_KEY] ?: ""
+            if (lastDate == today) prefs[DAILY_SCAN_COUNT_KEY] ?: 0 else 0
+        }
+
+    suspend fun setTotalXp(xp: Int) {
+        appContext.dataStore.edit { it[TOTAL_XP_KEY] = xp }
+    }
+
+    suspend fun incrementDailyScanCount(): Int {
+        var currentCount = 0
+        appContext.dataStore.edit { prefs ->
+            val today = java.time.LocalDate.now().toString()
+            val lastDate = prefs[LAST_SCAN_DATE_KEY] ?: ""
+            currentCount = if (lastDate == today) {
+                (prefs[DAILY_SCAN_COUNT_KEY] ?: 0) + 1
+            } else {
+                1
+            }
+            prefs[LAST_SCAN_DATE_KEY] = today
+            prefs[DAILY_SCAN_COUNT_KEY] = currentCount
+        }
+        return currentCount
+    }
 }
 

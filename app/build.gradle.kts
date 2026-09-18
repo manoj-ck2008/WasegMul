@@ -150,6 +150,12 @@ dependencies {
     ksp(libs.room.compiler)
     implementation(libs.datastore.preferences)
 
+    // WorkManager (daily notifications)
+    implementation(libs.work.runtime.ktx)
+
+    // Location (disposal locator)
+    implementation(libs.play.services.location)
+
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

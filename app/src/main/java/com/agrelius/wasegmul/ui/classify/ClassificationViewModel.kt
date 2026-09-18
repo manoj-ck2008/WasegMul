@@ -17,14 +17,20 @@ import com.agrelius.wasegmul.WasteMapping
 import com.agrelius.wasegmul.WasteRecord
 import com.agrelius.wasegmul.ml.ModelManager
 import com.agrelius.wasegmul.repository.WasteRepository
+import com.agrelius.wasegmul.utils.SettingsManager
+import com.agrelius.wasegmul.gamification.GamificationManager
+import com.agrelius.wasegmul.gamification.XpGainResult
+import com.agrelius.wasegmul.EcoImpactCalculator
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 
 class ClassificationViewModel(
-    private val repository: WasteRepository
+    private val repository: WasteRepository,
+    private val settingsManager: SettingsManager
 ) : ViewModel() {
 
     private var modelManager: ModelManager? = null
@@ -34,6 +40,12 @@ class ClassificationViewModel(
 
     private val _classificationResult = MutableStateFlow<ClassificationResult?>(null)
     val classificationResult: StateFlow<ClassificationResult?> = _classificationResult
+
+    private val _lastXpGain = MutableStateFlow<XpGainResult?>(null)
+    val lastXpGain: StateFlow<XpGainResult?> = _lastXpGain
+
+    private val _isFreshScan = MutableStateFlow(false)
+    val isFreshScan: StateFlow<Boolean> = _isFreshScan
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
@@ -128,6 +140,27 @@ class ClassificationViewModel(
                         // for feedback/corrections. Navigating before insert loses data.
                         val id = repository.insert(record)
                         _currentRecord.value = record.copy(id = id)
+
+                        // Gamification: calculate XP earned from this scan
+                        try {
+                            val impact = EcoImpactCalculator.calculate(listOf(record))
+                            val co2Grams = impact.co2PreventedKg * 1000.0
+                            val dailyCount = settingsManager.incrementDailyScanCount()
+                            val currentXp = settingsManager.totalXp.first()
+                            val xpResult = GamificationManager.processNewScan(
+                                currentTotalXp = currentXp,
+                                category = result.category,
+                                confidence = result.confidence,
+                                co2PreventedGrams = co2Grams,
+                                dailyScanCount = dailyCount
+                            )
+                            settingsManager.setTotalXp(xpResult.newTotalXp)
+                            _lastXpGain.value = xpResult
+                        } catch (e: Exception) {
+                            Log.w(TAG, "XP calculation failed", e)
+                        }
+
+                        _isFreshScan.value = true
                         _navigateToResult.trySend(id)
                     }
                     is ClassificationOutcome.Failure -> {
@@ -213,6 +246,8 @@ class ClassificationViewModel(
             _currentRecord.value = null
             // Drop any large camera bitmap while viewing history to halve memory.
             _capturedBitmap.value = null
+            _isFreshScan.value = false
+            _lastXpGain.value = null
             try {
                 val record = repository.getRecordById(recordId)
                 if (record == null) {
@@ -259,13 +294,18 @@ class ClassificationViewModel(
         _capturedBitmap.value = null
     }
 
+    fun consumeXpGain() {
+        _lastXpGain.value = null
+    }
+
     class Factory(
-        private val repository: WasteRepository
+        private val repository: WasteRepository,
+        private val settingsManager: SettingsManager
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(ClassificationViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return ClassificationViewModel(repository) as T
+                return ClassificationViewModel(repository, settingsManager) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }
