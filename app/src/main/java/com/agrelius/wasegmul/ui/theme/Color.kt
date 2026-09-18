@@ -47,6 +47,10 @@ val DarkGlassHighlight = Color(0x0AFFFFFF)
 val LightGlassBorder = Color(0x33000000)
 val LightGlassSurface = Color(0x1A000000)
 
+// Colour-theme (Nature Vivid) glass: grass-tinted translucency on deep moss.
+val ColourGlassBorder = Color(0x3332CD32)
+val ColourGlassSurface = Color(0x1432CD32)
+
 // Semantic aliases
 val GlassBorder = DarkGlassBorder
 val GlassSurface = DarkGlassSurface

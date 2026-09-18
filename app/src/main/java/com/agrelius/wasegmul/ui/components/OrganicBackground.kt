@@ -140,7 +140,7 @@ fun OrganicBackground(animate: Boolean = true) {
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(
-                    EmeraldVibrant.copy(alpha = 0.07f),
+                    EmeraldVibrant.copy(alpha = 0.13f),
                     Color.Transparent
                 ),
                 center = blob1Offset,
@@ -153,7 +153,7 @@ fun OrganicBackground(animate: Boolean = true) {
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(
-                    SageGreen.copy(alpha = 0.05f),
+                    SageGreen.copy(alpha = 0.09f),
                     Color.Transparent
                 ),
                 center = blob2Offset,
@@ -166,7 +166,7 @@ fun OrganicBackground(animate: Boolean = true) {
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(
-                    EmeraldVibrant.copy(alpha = 0.04f),
+                    EmeraldVibrant.copy(alpha = 0.08f),
                     Color.Transparent
                 ),
                 center = blob3Offset,
@@ -183,7 +183,7 @@ fun OrganicBackground(animate: Boolean = true) {
             val x = fx * size.width
             val y = fy * size.height
             val scale = leafScales[i]
-            val color = leafColors[i % leafColors.size].copy(alpha = 0.05f)
+            val color = leafColors[i % leafColors.size].copy(alpha = 0.10f)
 
             val w = baseW * scale
             val h = baseH * scale

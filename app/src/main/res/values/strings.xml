@@ -35,6 +35,9 @@
     <string name="home_impact_title">Impact Analysis</string>
     <string name="home_impact_description">Weight-indexed material recovery data. Each gram represents direct landfill diversion.</string>
     <string name="home_cumulative_recovery">Cumulative Recovery</string>
+    <string name="home_level_badge">Level %1$d</string>
+    <string name="home_xp_to_next">%1$d XP to %2$s</string>
+    <string name="home_max_level">Max level</string>
     <string name="app_version_info">V %1$s \u2022 agrelius industrial AI</string>
 
     <!-- Classify Screen -->

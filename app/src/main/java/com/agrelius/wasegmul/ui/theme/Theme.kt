@@ -46,12 +46,16 @@ private val DarkColorScheme = darkColorScheme(
     onSurface = TextPrimary,
     surfaceVariant = DarkSurfaceVariantGreen,
     onSurfaceVariant = TextSecondary,
+    surfaceTint = EmeraldVibrant,
     error = LowConfidence,
     onError = Color.White,
+    errorContainer = Color(0xFF5C1512),
+    onErrorContainer = Color(0xFFFFDAD6),
     outline = DarkGlassBorder,
     outlineVariant = DarkGlassBorder.copy(alpha = 0.3f),
     inverseSurface = TextPrimary,
-    inverseOnSurface = DarkBackground
+    inverseOnSurface = DarkBackground,
+    inversePrimary = ForestGreen
 )
 
 private val LightColorScheme = lightColorScheme(
@@ -73,41 +77,63 @@ private val LightColorScheme = lightColorScheme(
     onSurface = LightText,
     surfaceVariant = Color(0xFFE8EDE9),
     onSurfaceVariant = Color(0xFF414942),
+    surfaceTint = Color(0xFF1B8A4A),
     error = ErrorRed,
     onError = Color.White,
+    errorContainer = Color(0xFFFFDAD6),
+    onErrorContainer = Color(0xFF410002),
     outline = Color(0xFFC0C9C2),
     outlineVariant = Color(0xFFDFE5E0),
     inverseSurface = LightText,
-    inverseOnSurface = LightBackground
+    inverseOnSurface = LightBackground,
+    inversePrimary = Color(0xFFA8E6C3)
 )
 
 private val ColourColorScheme = darkColorScheme(
+    // Nature Vivid: grass primary / sky secondary / olive tertiary on deep
+    // moss surfaces. Every slot is set explicitly so nothing falls back to
+    // the default purple and text roles stay readable in both... (dark-only
+    // theme: onPrimary is near-black for the luminous grass green).
     primary = GrassGreenLustrous,
-    onPrimary = Color.Black,
-    primaryContainer = Color(0xFF2E4A2A),
-    onPrimaryContainer = Color(0xFFE8F0D8),
+    onPrimary = Color(0xFF0A140A),
+    primaryContainer = Color(0xFF1E4D1E),
+    onPrimaryContainer = Color(0xFFDFF2D8),
     secondary = SkyBlueDeep,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFF33475B),
+    secondaryContainer = Color(0xFF12394F),
     onSecondaryContainer = Color(0xFFDCE9F5),
     tertiary = OliveLight,
     onTertiary = Color(0xFF1A2410),
     tertiaryContainer = Color(0xFF4A5230),
     onTertiaryContainer = Color(0xFFF0F2DF),
-    surface = OliveDark,
-    onSurface = Color.White,
-    surfaceVariant = Color(0xFF3A4028),
-    onSurfaceVariant = Color(0xFFCFC8B0),
-    background = MossSecondary,
-    onBackground = Color.White,
+    background = Color(0xFF0E150C),
+    onBackground = Color(0xFFEDF4E4),
+    surface = Color(0xFF14210F),
+    onSurface = Color(0xFFEDF4E4),
+    surfaceVariant = Color(0xFF22301A),
+    onSurfaceVariant = Color(0xFFC9D2B8),
+    surfaceTint = GrassGreenLustrous,
     error = Color(0xFFFFB4AB),
     onError = Color(0xFF690005),
-    outline = Color(0xFF8A8F6E),
-    outlineVariant = Color(0xFF4A4F38),
-    inverseSurface = EarthBrown,
-    inverseOnSurface = Color.White,
+    errorContainer = Color(0xFF93000A),
+    onErrorContainer = Color(0xFFFFDAD6),
+    outline = Color(0xFF7A8F5A),
+    outlineVariant = Color(0xFF2C3A24),
+    inverseSurface = Color(0xFFEDF4E4),
+    inverseOnSurface = Color(0xFF14210F),
+    inversePrimary = Color(0xFF1E5B1E),
     scrim = Color.Black
 )
+
+/**
+ * Swatch triple (primary / secondary / tertiary) per theme for the Settings
+ * theme picker. Single source so the picker can never drift from the scheme.
+ */
+fun appThemeSwatches(mode: AppThemeMode): List<Color> = when (mode) {
+    AppThemeMode.DARK -> listOf(EmeraldVibrant, SageGreen, ForestGreen)
+    AppThemeMode.LIGHT -> listOf(Color(0xFF1B8A4A), Color(0xFF4E6353), Color(0xFF3E6348))
+    AppThemeMode.COLOUR -> listOf(GrassGreenLustrous, SkyBlueDeep, OliveLight)
+}
 
 @Composable
 fun WasegMulTheme(
@@ -133,7 +159,7 @@ fun WasegMulTheme(
     val glassColors = when(themeMode) {
         AppThemeMode.DARK -> GlassColors(DarkGlassSurface, DarkGlassBorder)
         AppThemeMode.LIGHT -> GlassColors(LightGlassSurface, LightGlassBorder)
-        AppThemeMode.COLOUR -> GlassColors(DarkGlassSurface, DarkGlassBorder)
+        AppThemeMode.COLOUR -> GlassColors(ColourGlassSurface, ColourGlassBorder)
     }
 
     val view = LocalView.current

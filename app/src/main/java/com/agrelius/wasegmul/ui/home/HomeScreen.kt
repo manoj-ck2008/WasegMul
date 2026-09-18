@@ -231,8 +231,13 @@ fun HomeScreen(
                 )
                 .padding(innerPadding)
         ) {
+            // Layering: decorative layers first (above the base gradient, below
+            // content) so they are actually visible. FallingPetals honors the
+            // power-save / reduced-motion gates internally and renders nothing
+            // when decoration is disabled.
             OrganicBackground(animate = !reduceMotion)
             BackgroundGlows()
+            FallingPetals(enabled = true)
 
             if (showPermissionRationale) {
                 AlertDialog(
@@ -318,7 +323,7 @@ fun HomeScreen(
                     enter = fadeIn(tween(800)) + slideInVertically(tween(800, easing = FastOutSlowInEasing)) { 30 }
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        AppLogo(size = 150.dp)
+                        AppLogo(size = 150.dp, animate = !reduceMotion)
                         Spacer(modifier = Modifier.height(28.dp))
                         Text(
                             text = "WasegMul",
@@ -342,24 +347,38 @@ fun HomeScreen(
                     visible = section2Visible,
                     enter = fadeIn(tween(700)) + slideInVertically(tween(700, easing = FastOutSlowInEasing)) { 30 }
                 ) {
+                    // Uniform stats grid: equal widths (weight) AND equal heights
+                    // (intrinsic min + fillMaxHeight), identical 24dp radius /
+                    // 20dp padding / 8dp elevation from GlassCard defaults.
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Min),
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                     GamificationCard(
                         state = gamificationState,
                         totalCo2Kg = totalImpact,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
                         onClick = { showImpactDetail = true }
                     )
                     GlassCard(
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
                     ) {
-                        Column(modifier = Modifier.clickable(
-                            role = Role.Button,
-                            onClickLabel = stringResource(R.string.home_cd_scans),
-                            onClick = { onNavigateToHistory() }
-                        )) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .clickable(
+                                    role = Role.Button,
+                                    onClickLabel = stringResource(R.string.home_cd_scans),
+                                    onClick = { onNavigateToHistory() }
+                                ),
+                            verticalArrangement = Arrangement.Center
+                        ) {
                             Icon(Icons.Default.Dataset, contentDescription = stringResource(R.string.home_cd_scans), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(text = totalScanCount.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
@@ -485,12 +504,14 @@ fun HomeScreen(
                     enter = fadeIn(tween(700)) + slideInVertically(tween(700, easing = FastOutSlowInEasing)) { 30 }
                 ) {
                     Column(modifier = Modifier.fillMaxWidth()) {
+                    // Primary CTA: saturated primary gradient + onPrimary text +
+                    // content-derived border (see GradientActionButton) so it
+                    // reads in dark / light / colour themes alike.
                     GradientActionButton(
                         text = stringResource(R.string.home_launch_scanner),
                         icon = Icons.Default.CameraAlt,
                         iconContentDescription = stringResource(R.string.home_cd_camera),
-                        onClick = { requestCamera() },
-                        containerColor = MaterialTheme.colorScheme.tertiary
+                        onClick = { requestCamera() }
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -523,27 +544,16 @@ fun HomeScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    Button(
+                    // Second primary action: same high-contrast treatment as
+                    // Launch Scanner (gradient + border + onPrimary text), in
+                    // the secondary hue so the two CTAs stay distinguishable.
+                    GradientActionButton(
+                        text = stringResource(R.string.home_import_device),
+                        icon = Icons.Default.Collections,
+                        iconContentDescription = stringResource(R.string.home_import_device),
                         onClick = { galleryLauncher.launch("image/*") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(64.dp)
-                            .shadow(12.dp, RoundedCornerShape(16.dp)),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        ),
-                        border = BorderStroke(1.dp, LocalGlassColors.current.border)
-                    ) {
-                        Icon(Icons.Default.Collections, contentDescription = stringResource(R.string.home_import_device), tint = MaterialTheme.colorScheme.secondary)
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = stringResource(R.string.home_import_device),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                        containerColor = MaterialTheme.colorScheme.secondary
+                    )
 
                     Spacer(modifier = Modifier.height(40.dp))
 
@@ -744,7 +754,7 @@ fun ImpactDetailDialog(onDismiss: () -> Unit, history: List<WasteRecord>) {
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_acknowledge), color = MaterialTheme.colorScheme.tertiary) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_acknowledge), color = MaterialTheme.colorScheme.primary) }
         },
         containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(28.dp)

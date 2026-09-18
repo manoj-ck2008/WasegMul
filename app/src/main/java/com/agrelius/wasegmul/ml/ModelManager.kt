@@ -84,6 +84,12 @@ class ModelManager(private val context: Context) {
                 // and rethrow so the caller's Job actually cancels.
                 cleanup()
                 throw e
+            } catch (e: OutOfMemoryError) {
+                // A corrupt/oversized mmap must surface as a retryable init error,
+                // never as a silent process kill with no error UI.
+                Log.e(TAG, "Out of memory while initialising classifiers", e)
+                cleanup()
+                throw ModelInitException("Not enough memory to load ML models", e)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to initialise classifiers", e)
                 cleanup()
@@ -129,6 +135,13 @@ class ModelManager(private val context: Context) {
                     com.agrelius.wasegmul.ml.preprocessing.ImagePreprocessor.preprocess(bitmap)
                 } catch (e: CancellationException) {
                     throw e
+                } catch (e: OutOfMemoryError) {
+                    Log.e(TAG, "Shared preprocessing OOM", e)
+                    return@withLock ClassificationOutcome.Failure(
+                        FailureReason.UNKNOWN,
+                        "That photo is too large to process on this device. Try a smaller image.",
+                        e
+                    )
                 } catch (e: Exception) {
                     Log.e(TAG, "Shared preprocessing failed", e)
                     return@withLock ClassificationOutcome.Failure(
@@ -138,29 +151,50 @@ class ModelManager(private val context: Context) {
                     )
                 }
 
-                coroutineScope {
-                    val catJob = async {
-                        try {
-                            if (catClassifier != null) catClassifier.classifyTensor(sharedInput) to null
-                            else null to "Category classifier not available (closed)"
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Category classifier threw", e)
-                            null to (e.message ?: "Category classifier error")
+                try {
+                    coroutineScope {
+                        val catJob = async {
+                            try {
+                                if (catClassifier != null) catClassifier.classifyTensor(sharedInput) to null
+                                else null to "Category classifier not available (closed)"
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: OutOfMemoryError) {
+                                Log.e(TAG, "Category classifier OOM", e)
+                                null to "Category classifier ran out of memory"
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Category classifier threw", e)
+                                null to (e.message ?: "Category classifier error")
+                            }
                         }
-                    }
-                    val subJob = async {
-                        try {
-                            if (subClassifier != null) subClassifier.classifyTensor(sharedInput) to null
-                            else null to "Subclass classifier not available (closed)"
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Subclass classifier threw", e)
-                            null to (e.message ?: "Subclass classifier error")
+                        val subJob = async {
+                            try {
+                                if (subClassifier != null) subClassifier.classifyTensor(sharedInput) to null
+                                else null to "Subclass classifier not available (closed)"
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: OutOfMemoryError) {
+                                Log.e(TAG, "Subclass classifier OOM", e)
+                                null to "Subclass classifier ran out of memory"
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Subclass classifier threw", e)
+                                null to (e.message ?: "Subclass classifier error")
+                            }
                         }
+                        val (catRes, catErr) = catJob.await()
+                        val (subRes, subErr) = subJob.await()
+                        catResult = catRes; catError = catErr
+                        subResult = subRes; subError = subErr
                     }
-                    val (catRes, catErr) = catJob.await()
-                    val (subRes, subErr) = subJob.await()
-                    catResult = catRes; catError = catErr
-                    subResult = subRes; subError = subErr
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: OutOfMemoryError) {
+                    Log.e(TAG, "Inference OOM", e)
+                    return@withLock ClassificationOutcome.Failure(
+                        FailureReason.UNKNOWN,
+                        "That photo is too large to process on this device. Try a smaller image.",
+                        e
+                    )
                 }
 
                 // Both failed -> total failure. (Dead branches removed: reaching here

@@ -1,5 +1,6 @@
 package com.agrelius.wasegmul
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -15,8 +16,25 @@ import com.agrelius.wasegmul.navigation.AppNavigation
 import com.agrelius.wasegmul.ui.theme.AppThemeMode
 import com.agrelius.wasegmul.ui.theme.WasegMulTheme
 import com.agrelius.wasegmul.utils.ThemeMode
+import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : ComponentActivity() {
+    /**
+     * Warm deep-link events. The activity is `singleTask`, so a `wasegmul://…`
+     * link fired while the app is alive arrives via [onNewIntent], not onCreate —
+     * without this the NavHost (which only consumes the launch intent) would
+     * ignore it and appear to do nothing.
+     */
+    private val deepLinkEvents = MutableStateFlow<Intent?>(null)
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.action == Intent.ACTION_VIEW && intent.data != null) {
+            deepLinkEvents.value = intent
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -40,7 +58,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppNavigation()
+                    AppNavigation(deepLinkEvents = deepLinkEvents)
                 }
             }
         }

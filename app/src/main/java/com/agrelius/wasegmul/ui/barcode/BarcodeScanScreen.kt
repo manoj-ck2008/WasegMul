@@ -459,6 +459,11 @@ private fun CameraPreviewWithBarcodeScanner(
     var camera by remember { mutableStateOf<Camera?>(null) }
     var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
     var focusPoint by remember { mutableStateOf<Offset?>(null) }
+    // Camera-bind failures must surface as UI, never as an uncaught throw on
+    // the main executor (abrupt "app keeps stopping" crash).
+    var cameraError by remember { mutableStateOf<String?>(null) }
+    // Bump to re-run the PreviewView factory (full rebind) on Retry.
+    var cameraKey by remember { mutableStateOf(0) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -512,6 +517,7 @@ private fun CameraPreviewWithBarcodeScanner(
                 }
             }
     ) {
+        androidx.compose.runtime.key(cameraKey) {
         AndroidView(
             factory = { ctx ->
                 PreviewView(ctx).apply {
@@ -524,7 +530,16 @@ private fun CameraPreviewWithBarcodeScanner(
 
                     val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
                     cameraProviderFuture.addListener({
-                        val cp = cameraProviderFuture.get()
+                        // get() throws outside the bind try below (missing camera /
+                        // SecurityException): catch it here so a provider failure
+                        // shows the error panel instead of crashing the process.
+                        val cp = try {
+                            cameraProviderFuture.get()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Camera provider failed: ${e.message}")
+                            cameraError = "Camera unavailable on this device. You can still enter the code manually."
+                            return@addListener
+                        }
                         cameraProvider = cp
 
                         val preview = Preview.Builder().build().also {
@@ -549,6 +564,8 @@ private fun CameraPreviewWithBarcodeScanner(
                                     if (result != null) {
                                         viewModel.onBarcodeDetected(result.rawValue, result.frameBitmap)
                                     }
+                                } catch (e: OutOfMemoryError) {
+                                    Log.w(TAG, "Barcode frame too large; frame dropped")
                                 } catch (e: Exception) {
                                     Log.w(TAG, "Barcode scan failed: ${e.message}")
                                 } finally {
@@ -567,15 +584,41 @@ private fun CameraPreviewWithBarcodeScanner(
                                 imageAnalysis
                             )
                             camera = boundCamera
+                            cameraError = null
                             onFlashSupported(boundCamera.cameraInfo.hasFlashUnit())
                         } catch (e: Exception) {
                             Log.e(TAG, "Camera bind failed: ${e.message}")
+                            cameraError = "Camera unavailable on this device. You can still enter the code manually."
                         }
                     }, ContextCompat.getMainExecutor(ctx))
                 }
             },
             modifier = Modifier.fillMaxSize()
         )
+        }
+
+        cameraError?.let { message ->
+            androidx.compose.foundation.layout.Column(
+                modifier = Modifier
+                    .align(androidx.compose.ui.Alignment.Center)
+                    .padding(32.dp),
+                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(onClick = {
+                    cameraError = null
+                    cameraKey++
+                }) {
+                    Text(stringResource(R.string.common_retry))
+                }
+            }
+        }
 
         focusPoint?.let { pt ->
             FocusIndicatorRing(center = pt)

@@ -1,9 +1,11 @@
 package com.agrelius.wasegmul.ui.settings
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -14,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -31,6 +34,8 @@ import kotlin.math.roundToInt
 import android.os.Build
 import androidx.compose.ui.tooling.preview.Preview
 import com.agrelius.wasegmul.ui.theme.WasegMulTheme
+import com.agrelius.wasegmul.ui.theme.AppThemeMode
+import com.agrelius.wasegmul.ui.theme.appThemeSwatches
 
 @Composable
 fun SettingsScreen(
@@ -187,6 +192,29 @@ fun SettingsContent(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
+                            // Systematic swatches (primary / secondary / tertiary)
+                            // from the single appThemeSwatches source, so the
+                            // picker preview can never drift from the scheme.
+                            // SYSTEM follows the OS; no fixed swatch to show.
+                            val swatchMode = when (mode) {
+                                ThemeMode.DARK -> AppThemeMode.DARK
+                                ThemeMode.LIGHT -> AppThemeMode.LIGHT
+                                ThemeMode.COLOUR -> AppThemeMode.COLOUR
+                                else -> null
+                            }
+                            if (swatchMode != null) {
+                                Spacer(modifier = Modifier.weight(1f))
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    appThemeSwatches(swatchMode).forEach { swatch ->
+                                        Box(
+                                            modifier = Modifier
+                                                .size(16.dp)
+                                                .clip(CircleShape)
+                                                .background(swatch)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
 

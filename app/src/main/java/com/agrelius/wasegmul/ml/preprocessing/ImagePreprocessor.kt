@@ -56,6 +56,18 @@ object ImagePreprocessor {
         require(!bitmap.isRecycled) { "Bitmap is recycled" }
         require(bitmap.width > 0 && bitmap.height > 0) { "Bitmap has zero dimensions" }
 
+        try {
+            return preprocessInternal(bitmap, rotationDegrees)
+        } catch (e: OutOfMemoryError) {
+            // Convert the kill into a catchable failure: ModelManager maps this
+            // to ClassificationOutcome.Failure with a "too large" message.
+            throw IllegalStateException(
+                "Image too large to preprocess; try a smaller photo.", e
+            )
+        }
+    }
+
+    private fun preprocessInternal(bitmap: Bitmap, rotationDegrees: Int): TensorImage {
         // HARDWARE bitmaps cannot be read by software renderers/native ops. copy() is a
         // platform-nullable type: null-guard it instead of NPE-crashing (§3.33).
         val softwareBitmap = if (bitmap.config == Bitmap.Config.HARDWARE) {

@@ -246,11 +246,17 @@ fun YoloScreen(
                             detections.firstOrNull { detectionKey(it) == key }
                         } ?: detections.maxByOrNull { it.confidence }
                         if (captureRequested.compareAndSet(true, false)) {
-                            val finalBitmap = if (targetAtCapture != null) {
+                            val raw = if (targetAtCapture != null) {
                                 cropRoi(bitmap, targetAtCapture.boundingBox)
                             } else {
                                 bitmap.copy(Bitmap.Config.ARGB_8888, true)
                             }
+                            // Bound the handoff: a full 12 MP frame is ~48 MB and
+                            // killed the process in setBitmap before the VM's own
+                            // 1024 bound could engage. Downscale here, recycle the
+                            // oversized intermediate (never the CameraX-owned frame).
+                            val finalBitmap = downscaleForHandoff(raw)
+                            if (finalBitmap !== raw) raw.recycle()
                             mainHandler.post { onCaptureAndClassify(finalBitmap) }
                         }
                         // Ownership stays with CameraX pipeline; YoloDetector copies
@@ -289,6 +295,13 @@ fun YoloScreen(
                         )
                     }
                 } else if (detections.isNotEmpty()) {
+                    // Per-detection guidance cards: Category chip (single
+                    // CategoryColors map) + disposal action + one-line
+                    // handling tip from WasteKnowledgeBase. Remembered per
+                    // emission so composition does no per-frame lookups.
+                    val guidanceCards = remember(detections) {
+                        detections.take(3).map { det -> det to guidanceForDetection(det.label) }
+                    }
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomStart)
@@ -309,14 +322,41 @@ fun YoloScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(4.dp))
-                            detections.take(3).forEach { det ->
+                            guidanceCards.forEach { (det, guidance) ->
                                 val isSel = detectionKey(det) == selectedKey
+                                val chipColor = categoryColor(guidance.category)
                                 Text(
                                     "${if (isSel) "★ " else ""}${humanizeLabel(det.label)} ${(det.confidence * 100).toInt()}%",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                                     fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
                                 )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(top = 2.dp)
+                                ) {
+                                    Text(
+                                        text = guidance.category,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = chipColor,
+                                        modifier = Modifier
+                                            .background(
+                                                chipColor.copy(alpha = 0.18f),
+                                                RoundedCornerShape(6.dp)
+                                            )
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "${guidance.disposalAction} • ${guidance.tip}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 2,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
                             }
                             if (detections.size > 3) {
                                 Text(
@@ -330,6 +370,9 @@ fun YoloScreen(
                 }
 
                 if (selectedDetection != null) {
+                    val selectedGuidance = remember(selectedDetection) {
+                        selectedDetection?.let { guidanceForDetection(it.label) }
+                    }
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
@@ -338,16 +381,27 @@ fun YoloScreen(
                             .padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                stringResource(
-                                    R.string.yolo_target_format,
-                                    humanizeLabel(selectedDetection?.label.orEmpty()),
-                                    ((selectedDetection?.confidence ?: 0f) * 100).toInt()
-                                ),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Column(modifier = Modifier.weight(1f, fill = false)) {
+                                Text(
+                                    stringResource(
+                                        R.string.yolo_target_format,
+                                        humanizeLabel(selectedDetection?.label.orEmpty()),
+                                        ((selectedDetection?.confidence ?: 0f) * 100).toInt()
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (selectedGuidance != null) {
+                                    Text(
+                                        text = "${selectedGuidance.category} • ${selectedGuidance.disposalAction} • ${selectedGuidance.tip}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
                             Spacer(modifier = Modifier.width(6.dp))
                             // 48dp minimum dismiss target (was 16dp).
                             IconButton(
@@ -586,6 +640,33 @@ private fun cropRoi(src: Bitmap, box: RectF, padFrac: Float = 0.08f): Bitmap {
         Bitmap.createBitmap(src, l, t, r - l, b - t)
     } catch (e: Exception) {
         src.copy(Bitmap.Config.ARGB_8888, true)
+    }
+}
+
+/**
+ * Bounds a capture-handoff bitmap to [maxLongEdge] (default 1024) preserving
+ * aspect ratio. Returns [src] unchanged when already small enough; otherwise
+ * returns a new scaled bitmap (caller recycles [src] if it owns it).
+ *
+ * Mirrors `ClassificationViewModel.downscaleTargetSize()` — the VM keeps its own
+ * bound as defense-in-depth, but shrinking here avoids ever handing a ~48 MB
+ * frame across the boundary in the first place.
+ */
+private fun downscaleForHandoff(src: Bitmap, maxLongEdge: Int = 1024): Bitmap {
+    val longEdge = maxOf(src.width, src.height)
+    if (longEdge <= maxLongEdge || src.isRecycled) return src
+    val scale = maxLongEdge.toFloat() / longEdge.toFloat()
+    return try {
+        Bitmap.createScaledBitmap(
+            src,
+            (src.width * scale).toInt().coerceAtLeast(1),
+            (src.height * scale).toInt().coerceAtLeast(1),
+            true
+        )
+    } catch (e: OutOfMemoryError) {
+        src // better an oversized handoff (VM bounds it) than a kill here
+    } catch (e: Exception) {
+        src
     }
 }
 

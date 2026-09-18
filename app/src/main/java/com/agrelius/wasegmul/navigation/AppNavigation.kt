@@ -1,5 +1,6 @@
 package com.agrelius.wasegmul.navigation
 
+import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
@@ -11,6 +12,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
+import kotlinx.coroutines.flow.StateFlow
 import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.ui.barcode.BarcodeScanScreen
 import com.agrelius.wasegmul.ui.barcode.BarcodeScanViewModel
@@ -26,8 +28,16 @@ import com.agrelius.wasegmul.ui.guide.GuideScreen
 import com.agrelius.wasegmul.viewmodel.HomeViewModel
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(deepLinkEvents: StateFlow<Intent?>? = null) {
     val navController = rememberNavController()
+    // Warm deep links: singleTask delivers them to onNewIntent while the graph
+    // is alive; the NavHost only consumes the cold-start intent, so forward
+    // subsequent ones explicitly (no-op when null).
+    LaunchedEffect(deepLinkEvents) {
+        deepLinkEvents?.collect { intent ->
+            if (intent != null) navController.handleDeepLink(intent)
+        }
+    }
     val context = LocalContext.current
     val app = context.applicationContext as? com.agrelius.wasegmul.WasegMulApp
     if (app == null) {

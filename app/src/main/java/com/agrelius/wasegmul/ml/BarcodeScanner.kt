@@ -132,6 +132,10 @@ class BarcodeScanner : Closeable {
                 } else {
                     upright
                 }
+            } catch (e: OutOfMemoryError) {
+                // Full-res frame too large: drop the visual fallback, keep the barcode.
+                Log.w(TAG, "Frame bitmap OOM; continuing without visual fallback")
+                null
             } catch (e: Exception) {
                 null
             }
@@ -146,6 +150,9 @@ class BarcodeScanner : Closeable {
             )
         } catch (e: CancellationException) {
             throw e
+        } catch (e: OutOfMemoryError) {
+            Log.w(TAG, "Barcode scan OOM; frame dropped")
+            null
         } catch (e: Exception) {
             Log.w(TAG, "Barcode scan processing error: ${e.message}")
             null

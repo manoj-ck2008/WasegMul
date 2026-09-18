@@ -20,6 +20,8 @@ import com.agrelius.wasegmul.repository.BarcodeRepository
 import com.agrelius.wasegmul.repository.BarcodeResolutionResult
 import com.agrelius.wasegmul.repository.WasteRepository
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -96,6 +98,11 @@ class BarcodeScanViewModel(
     private var lastAwardedSubclass: String? = null
     private var lastAwardedAtMs: Long? = null
 
+    // In-flight Tier-1/3 resolve: cancelled by resumeScanning (Cancel /
+    // scan-another) so a stale 20 s OFF cascade cannot resurrect a dead state
+    // — or crash the process with an uncaught throw after the screen moved on.
+    private var resolveJob: Job? = null
+
     /**
      * Handles detection of a barcode symbol from the camera frame analysis pipeline.
      *
@@ -107,32 +114,36 @@ class BarcodeScanViewModel(
      */
     fun onBarcodeDetected(barcode: String, frameBitmap: Bitmap? = null) {
         if (_uiState.value !is BarcodeScanState.Scanning) {
+            recycleFrameBitmap(frameBitmap)
             return
         }
 
         val trimmed = barcode.trim()
         if (!isValidBarcode(trimmed)) {
+            recycleFrameBitmap(frameBitmap)
             return
         }
 
         _uiState.value = BarcodeScanState.Resolving(trimmed)
-        viewModelScope.launch {
-            val result = barcodeRepository.resolve(trimmed)
-            if (result is BarcodeResolutionResult.Found) {
-                val components = parseComponents(result.product)
-                _uiState.value = BarcodeScanState.Resolved(
-                    product = result.product,
-                    components = components,
-                    source = result.source
-                )
-                return@launch
-            }
+        resolveJob?.cancel()
+        resolveJob = viewModelScope.launch {
+            try {
+                val result = barcodeRepository.resolve(trimmed)
+                if (result is BarcodeResolutionResult.Found) {
+                    val components = parseComponents(result.product)
+                    _uiState.value = BarcodeScanState.Resolved(
+                        product = result.product,
+                        components = components,
+                        source = result.source
+                    )
+                    return@launch
+                }
 
-            // Tier 4: Automatic Visual ML Fallback using camera frame
-            if (frameBitmap != null && modelManager != null) {
-                try {
-                    modelManager.ensureInitialized()
-                    val outcome = modelManager.classify(frameBitmap)
+                // Tier 4: Automatic Visual ML Fallback using camera frame
+                if (frameBitmap != null && !frameBitmap.isRecycled && modelManager != null) {
+                    try {
+                        modelManager.ensureInitialized()
+                        val outcome = modelManager.classify(frameBitmap)
                     if (outcome is ClassificationOutcome.Success) {
                         val arbitrated = MLArbitrator.arbitrate(outcome.prediction)
                         val category = normalizeCategoryLabel(arbitrated.category)
@@ -169,6 +180,12 @@ class BarcodeScanViewModel(
                         )
                         return@launch
                     }
+                } catch (e: CancellationException) {
+                    // Cancel (scan-another / back) must stay silent: never let a
+                    // torn-down Tier-4 overwrite the fresh Scanning state.
+                    throw e
+                } catch (e: OutOfMemoryError) {
+                    android.util.Log.w("BarcodeScanViewModel", "Visual ML fallback OOM; frame dropped")
                 } catch (e: Exception) {
                     android.util.Log.w("BarcodeScanViewModel", "Visual ML fallback failed: ${e.message}")
                 }
@@ -178,6 +195,26 @@ class BarcodeScanViewModel(
                 _uiState.value = BarcodeScanState.Error(result.message)
             } else {
                 _uiState.value = BarcodeScanState.NotFound(trimmed)
+            }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: OutOfMemoryError) {
+                android.util.Log.e("BarcodeScanViewModel", "Barcode resolve ran out of memory", e)
+                _uiState.value = BarcodeScanState.Error(
+                    "That frame was too large to process. Please try again."
+                )
+            } catch (e: Exception) {
+                // An uncaught throw here used to escape viewModelScope and crash
+                // the process ("app keeps stopping"). Surface it instead.
+                android.util.Log.e("BarcodeScanViewModel", "Barcode resolve failed", e)
+                _uiState.value = BarcodeScanState.Error(
+                    "Couldn't look up that code. Please try again."
+                )
+            } finally {
+                // Tier-4 ownership: the frame bitmap is consumed here and never
+                // retained by Resolved state — recycle it so repeat scans cannot
+                // accumulate full-res frames into an OOM kill.
+                recycleFrameBitmap(frameBitmap)
             }
         }
     }
@@ -281,7 +318,8 @@ class BarcodeScanViewModel(
         persistCache: Boolean = true
     ) {
         viewModelScope.launch {
-            val name = productName.ifBlank { "Scanned Item ($barcode)" }
+            try {
+                val name = productName.ifBlank { "Scanned Item ($barcode)" }
             // Canonical per-subclass estimate (WasteMapping, grams) — never the old
             // coarse buckets (E-Waste 1500 g / Metal 250 g / else 50 g) that
             // fabricated CO2/water/energy figures. confirmAndSave derives Eco/XP
@@ -307,11 +345,28 @@ class BarcodeScanViewModel(
                     withContext(Dispatchers.IO) {
                         barcodeRepository.saveUserIdentifiedProduct(product)
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     // Non-fatal if cache write fails
                 }
             }
             confirmAndSave(product)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: OutOfMemoryError) {
+                android.util.Log.e("BarcodeScanViewModel", "quickClassify ran out of memory", e)
+                _uiState.value = BarcodeScanState.Error(
+                    "Couldn't save that item: out of memory. Please try again."
+                )
+            } catch (e: Exception) {
+                // An uncaught throw here used to escape viewModelScope and crash
+                // the process on Confirm. Surface it instead.
+                android.util.Log.e("BarcodeScanViewModel", "quickClassifyAndSave failed", e)
+                _uiState.value = BarcodeScanState.Error(
+                    "Couldn't save that item. Please try again."
+                )
+            }
         }
     }
 
@@ -322,7 +377,21 @@ class BarcodeScanViewModel(
      */
     fun saveAndNavigate(product: BarcodeProduct) {
         viewModelScope.launch {
-            confirmAndSave(product)
+            try {
+                confirmAndSave(product)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: OutOfMemoryError) {
+                android.util.Log.e("BarcodeScanViewModel", "saveAndNavigate ran out of memory", e)
+                _uiState.value = BarcodeScanState.Error(
+                    "Couldn't save that item: out of memory. Please try again."
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("BarcodeScanViewModel", "saveAndNavigate failed", e)
+                _uiState.value = BarcodeScanState.Error(
+                    "Couldn't save that item. Please try again."
+                )
+            }
         }
     }
 
@@ -330,8 +399,21 @@ class BarcodeScanViewModel(
      * Resets the UI state back to active scanning and clears the scanner debounce cooldown.
      */
     fun resumeScanning() {
+        // Cancel the in-flight resolve first: without this a stale OFF cascade
+        // overwrites the fresh Scanning state (or throws after the screen moved on).
+        resolveJob?.cancel()
+        resolveJob = null
         _uiState.value = BarcodeScanState.Scanning
         barcodeScanner.resetCooldown()
+    }
+
+    /**
+     * Best-effort recycle of a Tier-4 frame bitmap (ownership transfers from the
+     * scanner on every detection). Never throws: called on early-return paths.
+     */
+    private fun recycleFrameBitmap(bitmap: Bitmap?) {
+        if (bitmap == null || bitmap.isRecycled) return
+        runCatching { bitmap.recycle() }
     }
 
     /**

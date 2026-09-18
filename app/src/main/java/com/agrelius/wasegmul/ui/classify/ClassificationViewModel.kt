@@ -23,6 +23,7 @@ import com.agrelius.wasegmul.gamification.GamificationManager
 import com.agrelius.wasegmul.gamification.XpGainResult
 import com.agrelius.wasegmul.EcoImpactCalculator
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -95,6 +96,8 @@ class ClassificationViewModel(
             try {
                 modelManager?.ensureInitialized()
                 _modelInitError.value = null
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Model pre-warm failed", e)
                 _modelInitError.value =
@@ -109,6 +112,8 @@ class ClassificationViewModel(
             try {
                 modelManager?.ensureInitialized()
                 _modelInitError.value = null
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Model retry failed", e)
                 _modelInitError.value =
@@ -125,7 +130,34 @@ class ClassificationViewModel(
         classifyJob?.cancel()
         classifyJob = null
         _isLoading.value = false
-        _capturedBitmap.value = bitmap
+        if (bitmap.isRecycled) {
+            _error.value = "Image was released. Please reselect the photo."
+            return
+        }
+        // Silent-kill guard: full-resolution camera frames (up to ~48MB) must be
+        // bounded before retention — an unbounded bitmap OOMs inference with no
+        // error UI (process kill). Oversized images are downscaled; an
+        // unscalable image surfaces an error instead of killing the process.
+        val bounded = try {
+            val (targetW, targetH) = downscaleTargetSize(bitmap.width, bitmap.height)
+            if (targetW == bitmap.width && targetH == bitmap.height) {
+                bitmap
+            } else {
+                val scaled = Bitmap.createScaledBitmap(bitmap, targetW, targetH, true)
+                // Ownership transferred to this VM: free the oversized source now.
+                runCatching { if (scaled !== bitmap && !bitmap.isRecycled) bitmap.recycle() }
+                scaled
+            }
+        } catch (e: OutOfMemoryError) {
+            Log.e(TAG, "Bitmap too large to retain", e)
+            _error.value = "That photo is too large to process. Please pick a smaller image."
+            return
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to retain bitmap", e)
+            _error.value = "Couldn't load that image. Please try another photo."
+            return
+        }
+        _capturedBitmap.value = bounded
         _classificationResult.value = null
         _error.value = null
         _currentRecord.value = null
@@ -283,6 +315,13 @@ class ClassificationViewModel(
             } catch (e: ModelInitException) {
                 Log.e(TAG, "Model initialisation failed", e)
                 _error.value = "Unable to load the AI models. Restart the app or check available storage."
+            } catch (e: CancellationException) {
+                // Structured-concurrency contract: Cancel (button / system back)
+                // must stay silent — never surface a ghost "unexpected error".
+                throw e
+            } catch (e: OutOfMemoryError) {
+                Log.e(TAG, "Out of memory during classification", e)
+                _error.value = "That photo is too large to process on this device. Try a smaller image."
             } catch (e: Exception) {
                 Log.e(TAG, "Unexpected error during classification", e)
                 _error.value = "An unexpected error occurred. Please try again."
@@ -438,5 +477,27 @@ class ClassificationViewModel(
 
     companion object {
         private const val TAG = "ClassificationVM"
+
+        /**
+         * Upper bound for any retained camera/gallery bitmap (long edge, px).
+         * Matches the gallery decode target (`decodeSampledBitmap(…, 1024, 1024)`)
+         * so YOLO full-frame handoffs converge to the same residency instead of
+         * OOM-killing inference with no error UI.
+         */
+        const val MAX_BITMAP_DIMENSION = 1024
+
+        /**
+         * Pure size math for the silent-kill guard (unit-testable without a
+         * Bitmap): identity when inside the bound, aspect-preserving shrink to
+         * [MAX_BITMAP_DIMENSION] otherwise. Dimensions are coerced to >= 1.
+         */
+        fun downscaleTargetSize(srcW: Int, srcH: Int): Pair<Int, Int> {
+            val w = srcW.coerceAtLeast(1)
+            val h = srcH.coerceAtLeast(1)
+            val longest = maxOf(w, h)
+            if (longest <= MAX_BITMAP_DIMENSION) return w to h
+            val scale = MAX_BITMAP_DIMENSION.toFloat() / longest
+            return (w * scale).toInt().coerceAtLeast(1) to (h * scale).toInt().coerceAtLeast(1)
+        }
     }
 }

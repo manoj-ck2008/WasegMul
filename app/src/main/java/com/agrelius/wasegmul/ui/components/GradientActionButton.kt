@@ -1,6 +1,7 @@
 package com.agrelius.wasegmul.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -17,6 +18,11 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
+/**
+ * High-contrast primary action: saturated gradient fill + a content-derived
+ * border so the button reads on every theme (dark / light / colour), with
+ * [contentColor] defaulting to `onPrimary`.
+ */
 @Composable
 fun GradientActionButton(
     text: String,
@@ -26,6 +32,7 @@ fun GradientActionButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     containerColor: Color = MaterialTheme.colorScheme.primary,
+    contentColor: Color = MaterialTheme.colorScheme.onPrimary,
     hapticsEnabled: Boolean = true
 ) {
     val haptic = LocalHapticFeedback.current
@@ -66,10 +73,11 @@ fun GradientActionButton(
         shape = RoundedCornerShape(16.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = Color.Transparent,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
+            contentColor = contentColor,
             disabledContainerColor = Color.Transparent,
-            disabledContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.38f)
+            disabledContentColor = contentColor.copy(alpha = 0.38f)
         ),
+        border = BorderStroke(1.dp, contentColor.copy(alpha = 0.45f)),
         contentPadding = PaddingValues(0.dp)
     ) {
         Box(
@@ -86,7 +94,7 @@ fun GradientActionButton(
                         // Meaningful action icons need a description; fall
                         // back to the button text when none is provided.
                         contentDescription = iconContentDescription ?: text,
-                        tint = MaterialTheme.colorScheme.onPrimary,
+                        tint = contentColor,
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
@@ -94,7 +102,7 @@ fun GradientActionButton(
                 Text(
                     text = text,
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onPrimary,
+                    color = contentColor,
                     fontWeight = FontWeight.Bold
                 )
             }
