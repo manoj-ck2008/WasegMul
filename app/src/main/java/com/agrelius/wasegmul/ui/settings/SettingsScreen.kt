@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.res.stringResource
@@ -78,6 +79,7 @@ fun SettingsContent(
     var showLicensesDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
@@ -271,6 +273,50 @@ fun SettingsContent(
                 Text(stringResource(R.string.settings_licenses_button))
             }
 
+            Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                stringResource(R.string.settings_off_attribution_title),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Open Food Facts",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.settings_off_attribution_body),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = {
+                            try {
+                                uriHandler.openUri("https://world.openfoodfacts.org")
+                            } catch (e: Exception) {
+                                android.util.Log.e("SettingsScreen", "Failed to open Open Food Facts URL", e)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(stringResource(R.string.settings_off_visit_button))
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(64.dp))
 
             Text(
@@ -356,7 +402,17 @@ fun SettingsContent(
                             fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                         )
                         Text(
-                            "Ultralytics YOLOv8 is licensed under AGPL-3.0.\nComplete source code and notices are available in the project repository under NOTICE and docs/ATTRIBUTION.md.",
+                            "Ultralytics YOLOv8 is licensed under AGPL-3.0.\nComplete source code and notices are available in the project repository under NOTICE and docs/ATTRIBUTION.md.\n",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+
+                        Text(
+                            "Open Food Facts",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                        )
+                        Text(
+                            "Product packaging data provided by Open Food Facts.\nLicensed under the Open Database License (ODbL) v1.0.\nhttps://world.openfoodfacts.org",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }

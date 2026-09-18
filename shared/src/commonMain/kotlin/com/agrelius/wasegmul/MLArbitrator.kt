@@ -49,6 +49,129 @@ object MLArbitrator {
         }
     }
 
+    /**
+     * Arbitrates between visual ML prediction evidence and barcode lookup evidence.
+     *
+     * Barcode evidence provides high-reliability ground truth. When visual evidence
+     * is absent or degraded, barcode evidence is used directly. When both are available,
+     * agreement produces a high-confidence consensus result, while disagreement causes
+     * the barcode ground truth to override the visual model.
+     *
+     * @param prediction Visual ML model prediction result, or null if camera inference failed or was skipped.
+     * @param barcode Barcode product and packaging evidence.
+     * @return Final arbitrated [PredictionResult].
+     */
+    fun arbitrateWithBarcode(
+        prediction: PredictionResult?,
+        barcode: BarcodeEvidence
+    ): PredictionResult {
+        val hasVisualEvidence = prediction != null &&
+            (prediction.topCategories.isNotEmpty() || prediction.topSubcategories.isNotEmpty())
+
+        if (!hasVisualEvidence) {
+            val confidence = if (barcode.isComplete) 0.98f else 0.80f
+            val mode = if (barcode.isComplete) {
+                ClassificationMode.BARCODE_GROUND_TRUTH
+            } else {
+                ClassificationMode.BARCODE_PARTIAL
+            }
+            val message = MessageGenerator.generateBarcode(
+                productName = barcode.productName,
+                category = barcode.category,
+                subclass = barcode.subclass,
+                mode = mode
+            )
+            return PredictionResult(
+                category = barcode.category,
+                categoryConfidence = confidence,
+                subcategory = barcode.subclass,
+                subcategoryConfidence = confidence,
+                topSubcategories = listOf(barcode.subclass to confidence),
+                topCategories = listOf(barcode.category to confidence),
+                classificationMessage = message
+            )
+        }
+
+        // Visual model output is present
+        val visualCategory = resolveVisualCategory(prediction!!)
+        val agrees = visualCategory.isNotBlank() && visualCategory.equals(barcode.category.trim(), ignoreCase = true)
+
+        return if (agrees) {
+            val mode = ClassificationMode.BARCODE_VISUAL_CONSENSUS
+            val confidence = 0.99f
+            val message = MessageGenerator.generateBarcode(
+                productName = barcode.productName,
+                category = barcode.category,
+                subclass = barcode.subclass,
+                mode = mode
+            )
+            val mergedCategories = mergeTopList(barcode.category, confidence, prediction.topCategories)
+            val mergedSubcategories = mergeTopList(barcode.subclass, confidence, prediction.topSubcategories)
+            PredictionResult(
+                category = barcode.category,
+                categoryConfidence = confidence,
+                subcategory = barcode.subclass,
+                subcategoryConfidence = confidence,
+                topSubcategories = mergedSubcategories,
+                topCategories = mergedCategories,
+                classificationMessage = message
+            )
+        } else {
+            val mode = ClassificationMode.BARCODE_GROUND_TRUTH
+            val confidence = 0.95f
+            val message = MessageGenerator.generateBarcode(
+                productName = barcode.productName,
+                category = barcode.category,
+                subclass = barcode.subclass,
+                mode = mode
+            )
+            PredictionResult(
+                category = barcode.category,
+                categoryConfidence = confidence,
+                subcategory = barcode.subclass,
+                subcategoryConfidence = confidence,
+                topSubcategories = listOf(barcode.subclass to confidence),
+                topCategories = listOf(barcode.category to confidence),
+                classificationMessage = message
+            )
+        }
+    }
+
+    private fun resolveVisualCategory(prediction: PredictionResult): String {
+        val cat = prediction.category.trim()
+        if (cat.isNotBlank() && !cat.equals(WasteMapping.UNKNOWN, ignoreCase = true) && !cat.equals(WasteMapping.UNCERTAIN, ignoreCase = true)) {
+            return cat
+        }
+        val topCat = prediction.topCategories.firstOrNull()?.first?.trim()
+        if (!topCat.isNullOrBlank() && !topCat.equals(WasteMapping.UNKNOWN, ignoreCase = true) && !topCat.equals(WasteMapping.UNCERTAIN, ignoreCase = true)) {
+            return topCat
+        }
+        val sub = prediction.subcategory.trim()
+        if (sub.isNotBlank() && !sub.equals(WasteMapping.UNKNOWN, ignoreCase = true) && !sub.equals(WasteMapping.UNCERTAIN, ignoreCase = true)) {
+            val mapped = WasteMapping.getCategory(sub)
+            if (mapped != WasteMapping.UNKNOWN && mapped != WasteMapping.UNCERTAIN) {
+                return mapped
+            }
+        }
+        val topSub = prediction.topSubcategories.firstOrNull()?.first?.trim()
+        if (!topSub.isNullOrBlank()) {
+            val mapped = WasteMapping.getCategory(topSub)
+            if (mapped != WasteMapping.UNKNOWN && mapped != WasteMapping.UNCERTAIN) {
+                return mapped
+            }
+        }
+        return cat
+    }
+
+    private fun mergeTopList(
+        primaryLabel: String,
+        primaryConfidence: Float,
+        existingList: List<Pair<String, Float>>
+    ): List<Pair<String, Float>> {
+        val remaining = existingList.filterNot { it.first.equals(primaryLabel, ignoreCase = true) }
+        return listOf(primaryLabel to primaryConfidence) + remaining
+    }
+
     // ── Full pipeline (both models available) ─────────────────────────────────
 
     private fun arbitrateFull(prediction: PredictionResult): PredictionResult {

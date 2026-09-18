@@ -13,4 +13,5 @@ sealed class Screen(val route: String) {
     data object Settings : Screen("settings")
     data object Yolo : Screen("yolo")
     data object Guide : Screen("guide")
+    data object BarcodeScan : Screen("barcode_scan")
 }

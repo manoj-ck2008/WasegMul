@@ -202,6 +202,60 @@ object MessageGenerator {
         }
     )
 
+    // Case 8: Barcode ground truth (high confidence barcode identification)
+    private val barcodeGroundTruth = listOf(
+        { product: String, sub: String, cat: String ->
+            "Product identified via barcode: $product. " +
+                "Packaging material: $sub ($cat). This is a verified identification " +
+                "from the product database, providing near-certain classification."
+        },
+        { product: String, sub: String, cat: String ->
+            "Barcode scan confirmed: $product. The packaging is $sub, classified as $cat. " +
+                "Barcode-based identification bypasses visual ambiguity for deterministic results."
+        },
+        { product: String, sub: String, cat: String ->
+            "Scanned barcode matches $product in our product database. " +
+                "Packaging verified as $sub ($cat). This ground-truth identification " +
+                "provides the highest reliability."
+        },
+        { product: String, sub: String, cat: String ->
+            "Barcode lookup successful: $product. Material identified as $sub ($cat) " +
+                "from manufacturer packaging data. No visual guesswork required."
+        }
+    )
+
+    // Case 9: Barcode partial data
+    private val barcodePartial = listOf(
+        { product: String, sub: String, cat: String ->
+            "Barcode identified this as $product, but packaging details are incomplete. " +
+                "Best available classification: $sub ($cat). Confidence is moderate."
+        },
+        { product: String, sub: String, cat: String ->
+            "Product matched via barcode: $product. Packaging data is partial, " +
+                "so the classification of $sub ($cat) has been cross-validated with visual analysis."
+        },
+        { product: String, sub: String, cat: String ->
+            "Barcode scan found $product with limited packaging metadata. " +
+                "Classification: $sub ($cat), derived from available material tags."
+        }
+    )
+
+    // Case 10: Barcode + visual consensus
+    private val barcodeVisualConsensus = listOf(
+        { product: String, sub: String, cat: String ->
+            "Dual verification: barcode identifies $product, and our visual neural model " +
+                "independently confirms $sub ($cat). Cross-modal agreement: highest confidence."
+        },
+        { product: String, sub: String, cat: String ->
+            "Both barcode lookup ($product) and visual classification agree on $sub ($cat). " +
+                "When barcode and camera models align, the result is exceptionally reliable."
+        },
+        { product: String, sub: String, cat: String ->
+            "Barcode scan ($product) and neural vision analysis both point to $sub ($cat). " +
+                "Multi-modal consensus achieved. Classification reliability: very high."
+        }
+    )
+
     // ── Public API ───────────────────────────────────────────────────────────
 
     fun generate(
@@ -239,6 +293,38 @@ object MessageGenerator {
                 rng.nextFrom(bothUncertain)()
             ClassificationMode.UNMAPPED_SUBCLASS ->
                 rng.nextFrom(unmappedSubclass)(hSub)
+            ClassificationMode.BARCODE_GROUND_TRUTH,
+            ClassificationMode.BARCODE_PARTIAL,
+            ClassificationMode.BARCODE_VISUAL_CONSENSUS ->
+                generateBarcode("", category, subcategory, mode)
+        }
+    }
+
+    fun generateBarcode(
+        productName: String,
+        category: String,
+        subclass: String,
+        mode: ClassificationMode
+    ): String {
+        val hSub = humanizeLabel(subclass)
+        val hCat = category.trim()
+        val hProduct = productName.takeIf { it.isNotBlank() } ?: "Unknown Product"
+        return when (mode) {
+            ClassificationMode.BARCODE_GROUND_TRUTH ->
+                rng.nextFrom(barcodeGroundTruth)(hProduct, hSub, hCat)
+            ClassificationMode.BARCODE_PARTIAL ->
+                rng.nextFrom(barcodePartial)(hProduct, hSub, hCat)
+            ClassificationMode.BARCODE_VISUAL_CONSENSUS ->
+                rng.nextFrom(barcodeVisualConsensus)(hProduct, hSub, hCat)
+            else -> generate(
+                category = category,
+                subcategory = subclass,
+                catConfidence = 0.95f,
+                subConfidence = 0.95f,
+                topSubcategories = emptyList(),
+                topCategories = emptyList(),
+                mode = mode
+            )
         }
     }
 
@@ -278,5 +364,11 @@ enum class ClassificationMode {
     /** Both models returned low confidence. */
     BOTH_UNCERTAIN,
     /** Subclass label not in mapping database. */
-    UNMAPPED_SUBCLASS
+    UNMAPPED_SUBCLASS,
+    /** Barcode identified product with complete packaging data (ground truth). */
+    BARCODE_GROUND_TRUTH,
+    /** Barcode identified product but packaging data is incomplete/legacy. */
+    BARCODE_PARTIAL,
+    /** Barcode and visual models agree on classification. */
+    BARCODE_VISUAL_CONSENSUS
 }

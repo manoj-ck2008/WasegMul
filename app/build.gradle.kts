@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 // Version from gradle.properties (single source of truth).
@@ -135,6 +136,13 @@ dependencies {
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
+
+    // ML Kit Barcode Scanning (on-device, offline-capable)
+    implementation(libs.mlkit.barcode.scanning)
+
+    // Network (Open Food Facts API via shared KMP Ktor client)
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.kotlinx.serialization.json)
 
     // Room
     implementation(libs.room.runtime)

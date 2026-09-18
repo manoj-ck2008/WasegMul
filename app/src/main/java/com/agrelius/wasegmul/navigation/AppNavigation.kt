@@ -9,6 +9,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.agrelius.wasegmul.ui.barcode.BarcodeScanScreen
+import com.agrelius.wasegmul.ui.barcode.BarcodeScanViewModel
 import com.agrelius.wasegmul.ui.classify.ClassificationViewModel
 import com.agrelius.wasegmul.ui.classify.ClassifyScreen
 import com.agrelius.wasegmul.ui.history.HistoryScreen
@@ -70,6 +72,9 @@ fun AppNavigation() {
                 },
                 onNavigateToGuide = {
                     navController.navigate(Screen.Guide.route) { launchSingleTop = true }
+                },
+                onNavigateToBarcode = {
+                    navController.navigate(Screen.BarcodeScan.route) { launchSingleTop = true }
                 }
             )
         }
@@ -146,6 +151,26 @@ fun AppNavigation() {
         composable(Screen.Guide.route) {
             GuideScreen(
                 onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.BarcodeScan.route) {
+            val barcodeViewModel: BarcodeScanViewModel = viewModel(
+                factory = BarcodeScanViewModel.Factory(
+                    barcodeRepository = app.barcodeRepository,
+                    wasteRepository = app.repository,
+                    modelManager = app.modelManager
+                )
+            )
+            BarcodeScanScreen(
+                viewModel = barcodeViewModel,
+                onBack = { navController.popBackStack() },
+                onNavigateToResult = { recordId ->
+                    navController.navigate(Screen.Result.createRoute(recordId)) { launchSingleTop = true }
+                },
+                onFallbackToCamera = {
+                    navController.navigate(Screen.Yolo.route) { launchSingleTop = true }
+                }
             )
         }
     }

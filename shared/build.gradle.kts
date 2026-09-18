@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.library)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 kotlin {
@@ -21,7 +22,11 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
-                // Shared logic dependencies
+                // Network (Open Food Facts API)
+                implementation(libs.ktor.client.core)
+                implementation(libs.ktor.client.content.negotiation)
+                implementation(libs.ktor.serialization.kotlinx.json)
+                implementation(libs.kotlinx.serialization.json)
             }
         }
         val commonTest by getting {
@@ -31,11 +36,14 @@ kotlin {
         }
         val androidMain by getting {
             dependencies {
-                // Android-specific logic
+                implementation(libs.ktor.client.okhttp)
             }
         }
         val iosMain by creating {
             dependsOn(commonMain)
+            dependencies {
+                implementation(libs.ktor.client.darwin)
+            }
         }
         val iosArm64Main by getting {
             dependsOn(iosMain)

@@ -220,6 +220,20 @@ class ClassificationViewModel(
                     return@launch
                 }
                 val info = WasteKnowledgeBase.getInfo(record.category, record.subclass)
+                val isBarcode = record.featureVector?.startsWith("barcode:") == true
+                val classificationMsg = if (isBarcode) {
+                    val raw = record.featureVector?.removePrefix("barcode:") ?: ""
+                    val parts = raw.split("|", limit = 2)
+                    val code = parts.getOrNull(0) ?: ""
+                    val prodName = parts.getOrNull(1)?.takeIf { it.isNotBlank() }
+                    if (prodName != null) {
+                        "Product verified via barcode: $prodName ($code). Packaging classification: ${record.subclass} (${record.category})."
+                    } else {
+                        "Product verified via barcode ($code). Ground-truth packaging classification: ${record.subclass} (${record.category})."
+                    }
+                } else {
+                    "Historical record: originally classified as ${record.subclass} (${record.category})."
+                }
                 _classificationResult.value = ClassificationResult(
                     category = record.category,
                     subclass = record.subclass,
@@ -229,7 +243,7 @@ class ClassificationViewModel(
                     environmentalImpact = info.environmentalImpact,
                     recyclingBenefits = info.recyclingBenefits,
                     sources = info.sources,
-                    classificationMessage = "Historical record: originally classified as ${record.subclass} (${record.category})."
+                    classificationMessage = classificationMsg
                 )
                 _currentRecord.value = record
             } catch (e: Exception) {

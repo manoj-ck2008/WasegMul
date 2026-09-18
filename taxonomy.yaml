@@ -329,3 +329,361 @@ detection_to_subclass:
   plastic_container: [16, 25, 28, 29]  # Plastic, disposable_plastic_cutlery, styrofoam
   plastic_wrapper: [16]           # Plastic
   textile: [21, 24, 27]           # Textile Trash, clothing, shoes
+
+# ─── Barcode Packaging Materials Mapping ───────────────────────────────────────
+# Mapping of Open Food Facts (OFF) material taxonomy identifiers to WasegMul
+# domain Categories and Subclasses.
+# Synchronized with PackagingWasteMapper in shared KMP module.
+
+barcode_materials:
+  materials:
+    # Plastics and Polymers (Resin Identification Codes 1-7)
+    en:pet-1:
+      category: Recyclable
+      subclass: Plastic
+      description: "Polyethylene terephthalate (RIC 1) / beverage bottles and clear thermoformed trays"
+    en:pet:
+      category: Recyclable
+      subclass: Plastic
+      description: "Polyethylene terephthalate (RIC 1) / general PET packaging"
+    en:pete:
+      category: Recyclable
+      subclass: Plastic
+      description: "Polyethylene terephthalate (RIC 1) / alternative abbreviation"
+    en:rpet:
+      category: Recyclable
+      subclass: Plastic
+      description: "Recycled polyethylene terephthalate / post-consumer resin"
+    en:hdpe-2:
+      category: Recyclable
+      subclass: Plastic
+      description: "High-density polyethylene (RIC 2) / milk jugs, shampoo bottles, detergent containers"
+    en:hdpe:
+      category: Recyclable
+      subclass: Plastic
+      description: "High-density polyethylene (RIC 2) / general HDPE packaging"
+    en:pe-hd:
+      category: Recyclable
+      subclass: Plastic
+      description: "High-density polyethylene / DIN ISO standard code"
+    en:pvc-3:
+      category: Trash
+      subclass: Plastic
+      description: "Polyvinyl chloride (RIC 3) / non-recyclable in standard kerbside waste streams"
+    en:pvc:
+      category: Trash
+      subclass: Plastic
+      description: "Polyvinyl chloride (RIC 3) / blister packs and cling films"
+    en:ldpe-4:
+      category: Recyclable
+      subclass: Plastic
+      description: "Low-density polyethylene (RIC 4) / squeezy bottles, carrier bags, flexible films"
+    en:ldpe:
+      category: Recyclable
+      subclass: Plastic
+      description: "Low-density polyethylene (RIC 4) / general LDPE film"
+    en:pe-ld:
+      category: Recyclable
+      subclass: Plastic
+      description: "Low-density polyethylene / DIN ISO standard code"
+    en:pp-5:
+      category: Recyclable
+      subclass: Plastic
+      description: "Polypropylene (RIC 5) / bottle caps, margarine tubs, yogurt pots"
+    en:pp:
+      category: Recyclable
+      subclass: Plastic
+      description: "Polypropylene (RIC 5) / general PP containers and closures"
+    en:ps-6:
+      category: Trash
+      subclass: Plastic
+      description: "Polystyrene (RIC 6) / rigid polystyrene cutlery and cups"
+    en:ps:
+      category: Trash
+      subclass: Plastic
+      description: "Polystyrene (RIC 6) / disposable tableware and food tubs"
+    en:expanded-polystyrene:
+      category: Trash
+      subclass: Plastic
+      description: "Expanded polystyrene (EPS) / foam packaging and protective clamshells"
+    en:eps:
+      category: Trash
+      subclass: Plastic
+      description: "Expanded polystyrene / Styrofoam foam trays"
+    en:other-plastics-7:
+      category: Trash
+      subclass: Plastic
+      description: "Other plastics (RIC 7) / mixed or composite unseparated polymers"
+    en:other-plastic-7:
+      category: Trash
+      subclass: Plastic
+      description: "Other plastics (RIC 7) / variant taxonomy tag"
+    en:o-7:
+      category: Trash
+      subclass: Plastic
+      description: "Other plastics (RIC 7) / standard abbreviation"
+    en:plastic:
+      category: Recyclable
+      subclass: Plastic
+      description: "Generic plastic packaging / default kerbside collection"
+    en:bioplastic:
+      category: Organic
+      subclass: Organic
+      description: "Bio-based or compostable polymer / certified industrially compostable"
+    en:pla:
+      category: Organic
+      subclass: Organic
+      description: "Polylactic acid / biodegradable plant-derived polymer"
+    en:biodegradable-plastic:
+      category: Organic
+      subclass: Organic
+      description: "Biodegradable plastic / organic waste composting stream"
+
+    # Glass
+    en:glass:
+      category: Recyclable
+      subclass: Glass
+      description: "Generic container glass / bottles and jars"
+    en:clear-glass:
+      category: Recyclable
+      subclass: Glass
+      description: "Flint / clear container glass"
+    en:green-glass:
+      category: Recyclable
+      subclass: Glass
+      description: "Green beverage glass / wine and beer bottles"
+    en:brown-glass:
+      category: Recyclable
+      subclass: Glass
+      description: "Amber / brown beverage glass / beer and medicine bottles"
+    en:amber-glass:
+      category: Recyclable
+      subclass: Glass
+      description: "Amber glass / UV-protective containers"
+    en:coloured-glass:
+      category: Recyclable
+      subclass: Glass
+      description: "Coloured container glass / mixed glass recycling stream"
+    en:colorless-glass:
+      category: Recyclable
+      subclass: Glass
+      description: "Colorless glass / culinary and beverage jars"
+
+    # Metals
+    en:aluminium:
+      category: Recyclable
+      subclass: Metal
+      description: "Aluminium / beverage cans, aerosol cans, foil containers"
+    en:aluminum:
+      category: Recyclable
+      subclass: Metal
+      description: "Aluminum (US spelling) / cans and metal closures"
+    en:alu:
+      category: Recyclable
+      subclass: Metal
+      description: "Aluminium / standard abbreviation"
+    en:steel:
+      category: Recyclable
+      subclass: Metal
+      description: "Steel / food cans and crown caps"
+    en:tin:
+      category: Recyclable
+      subclass: Metal
+      description: "Tin / tin-plated steel food cans"
+    en:tinplate:
+      category: Recyclable
+      subclass: Metal
+      description: "Tinplate / preserved food containers"
+    en:tin-plate:
+      category: Recyclable
+      subclass: Metal
+      description: "Tinplate / hyphenated variant"
+    en:metal:
+      category: Recyclable
+      subclass: Metal
+      description: "Generic metal packaging / recyclable metal collection"
+    en:iron:
+      category: Recyclable
+      subclass: Metal
+      description: "Ferrous metal packaging / magnetic sorting"
+
+    # Paper and Cardboard
+    en:paper:
+      category: Recyclable
+      subclass: Paper
+      description: "Paper packaging / bags, sleeves, leaflets"
+    en:cardboard:
+      category: Recyclable
+      subclass: Cardboard
+      description: "Rigid cardboard / shipping cartons and cereal boxes"
+    en:corrugated-cardboard:
+      category: Recyclable
+      subclass: Cardboard
+      description: "Corrugated cardboard / multi-ply shipping containers"
+    en:kraft-paper:
+      category: Recyclable
+      subclass: Paper
+      description: "Kraft paper / unbleached heavy-duty grocery bags"
+    en:paperboard:
+      category: Recyclable
+      subclass: Cardboard
+      description: "Paperboard / folding cartons and beverage multipacks"
+    en:carton:
+      category: Recyclable
+      subclass: Cardboard
+      description: "Cartonboard / food boxes"
+
+    # Composites and Multilayer
+    en:tetra-pak:
+      category: Recyclable
+      subclass: Cardboard
+      description: "Tetra Pak aseptic beverage cartons / specialized carton recycling stream"
+    en:tetrapak:
+      category: Recyclable
+      subclass: Cardboard
+      description: "Tetra Pak / non-hyphenated variant"
+    en:composite-material:
+      category: Trash
+      subclass: Miscellaneous Trash
+      description: "Composite multi-material packaging / non-separable kerbside trash"
+    en:composite:
+      category: Trash
+      subclass: Miscellaneous Trash
+      description: "Composite packaging / residual waste"
+    en:c-pap:
+      category: Trash
+      subclass: Miscellaneous Trash
+      description: "Paper composite / non-recyclable multi-material laminate"
+    en:multilayer:
+      category: Trash
+      subclass: Plastic
+      description: "Multilayer plastic laminate / foil-lined snack pouches"
+
+    # Natural and Organic Materials
+    en:wood:
+      category: Organic
+      subclass: Organic
+      description: "Natural wood packaging / fruit crates and toothpicks"
+    en:cork:
+      category: Organic
+      subclass: Organic
+      description: "Natural cork stoppers / organic or specialized cork drop-off"
+    en:bamboo:
+      category: Organic
+      subclass: Organic
+      description: "Natural bamboo / biodegradable compostable tableware"
+    en:cotton:
+      category: Trash
+      subclass: Textile Trash
+      description: "Natural cotton fabric or twine / textile waste stream"
+    en:jute:
+      category: Organic
+      subclass: Organic
+      description: "Natural jute burlap / organic compostable fiber"
+    en:ceramic:
+      category: Trash
+      subclass: Miscellaneous Trash
+      description: "Ceramic pots and stoneware / non-recyclable inert trash"
+
+  shapes_fallback:
+    # Heuristic fallback mappings when explicit material tag is absent
+    en:bottle:
+      category: Recyclable
+      subclass: Plastic
+    en:can:
+      category: Recyclable
+      subclass: Metal
+    en:box:
+      category: Recyclable
+      subclass: Cardboard
+    en:jar:
+      category: Recyclable
+      subclass: Glass
+    en:carton:
+      category: Recyclable
+      subclass: Cardboard
+    en:tub:
+      category: Recyclable
+      subclass: Plastic
+    en:pot:
+      category: Recyclable
+      subclass: Plastic
+    en:tray:
+      category: Recyclable
+      subclass: Plastic
+    en:bag:
+      category: Recyclable
+      subclass: Plastic
+    en:pouch:
+      category: Trash
+      subclass: Plastic
+    en:wrapper:
+      category: Trash
+      subclass: Plastic
+    en:film:
+      category: Trash
+      subclass: Plastic
+    en:sachet:
+      category: Trash
+      subclass: Miscellaneous Trash
+    en:packet:
+      category: Trash
+      subclass: Miscellaneous Trash
+    en:cup:
+      category: Trash
+      subclass: Plastic
+    en:lid:
+      category: Recyclable
+      subclass: Plastic
+    en:cap:
+      category: Recyclable
+      subclass: Plastic
+    en:cork:
+      category: Organic
+      subclass: Organic
+    en:stopper:
+      category: Organic
+      subclass: Organic
+    en:aerosol:
+      category: Recyclable
+      subclass: Metal
+    en:tin:
+      category: Recyclable
+      subclass: Metal
+    en:envelope:
+      category: Recyclable
+      subclass: Paper
+    en:sheet:
+      category: Recyclable
+      subclass: Paper
+    en:clamshell:
+      category: Recyclable
+      subclass: Plastic
+    en:blister-pack:
+      category: Trash
+      subclass: Miscellaneous Trash
+    en:tube:
+      category: Trash
+      subclass: Plastic
+    en:punnet:
+      category: Recyclable
+      subclass: Plastic
+    en:barrel:
+      category: Recyclable
+      subclass: Metal
+    en:drum:
+      category: Recyclable
+      subclass: Metal
+    en:keg:
+      category: Recyclable
+      subclass: Metal
+    en:flagon:
+      category: Recyclable
+      subclass: Glass
+    en:vial:
+      category: Recyclable
+      subclass: Glass
+    en:ampoule:
+      category: Recyclable
+      subclass: Glass
+

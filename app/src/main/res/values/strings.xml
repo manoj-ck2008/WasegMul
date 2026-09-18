@@ -9,6 +9,7 @@
     <string name="home_yolo_subtitle">Launch live multi-object tracking</string>
     <string name="home_description">Industrial material analysis powered by EfficientNet architecture. Identify material signatures with precise chemical confidence.</string>
     <string name="home_launch_scanner">Launch Scanner</string>
+    <string name="home_scan_barcode">Scan Product Barcode</string>
     <string name="home_import_device">Import from Device</string>
     <string name="home_latest_activity">LATEST ACTIVITY</string>
     <string name="home_impact_title">Impact Analysis</string>
@@ -80,6 +81,9 @@
     <string name="settings_purge_message">All local classification logs and impact metrics will be permanently erased from this device.</string>
     <string name="settings_execute_purge">Execute Purge</string>
     <string name="settings_purged_snackbar">Neural history purged</string>
+    <string name="settings_off_attribution_title">PRODUCT DATA ATTRIBUTION</string>
+    <string name="settings_off_attribution_body">Product data provided by Open Food Facts (world.openfoodfacts.org), licensed under ODbL.</string>
+    <string name="settings_off_visit_button">Visit Open Food Facts</string>
     <string name="settings_version">V %1$s \u2022 agrelius neural os</string>
 
     <!-- Feedback Section -->

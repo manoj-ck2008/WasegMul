@@ -69,9 +69,11 @@ fun HistoryScreen(
                 else -> record.category.equals(selectedCategory, ignoreCase = true)
             }
             val matchesSearch = if (searchQuery.isBlank()) true else {
-                record.subclass.contains(searchQuery, ignoreCase = true) ||
-                record.category.contains(searchQuery, ignoreCase = true) ||
-                (record.correctedSubclass?.contains(searchQuery, ignoreCase = true) == true)
+                val sq = searchQuery.trim()
+                record.subclass.contains(sq, ignoreCase = true) ||
+                record.category.contains(sq, ignoreCase = true) ||
+                (record.correctedSubclass?.contains(sq, ignoreCase = true) == true) ||
+                (record.featureVector?.contains(sq, ignoreCase = true) == true)
             }
             matchesCategory && matchesSearch
         }
@@ -347,16 +349,63 @@ fun HistoryCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
+                val isBarcode = record.featureVector?.startsWith("barcode:") == true
+                val barcodeMeta = if (isBarcode) record.featureVector?.removePrefix("barcode:") else null
+                val barcodeParts = barcodeMeta?.split("|", limit = 2)
+                val barcodeCode = barcodeParts?.getOrNull(0)
+                val productName = barcodeParts?.getOrNull(1)?.takeIf { it.isNotBlank() }
+
+                if (isBarcode) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 2.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QrCodeScanner,
+                            contentDescription = null,
+                            modifier = Modifier.size(13.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = barcodeCode ?: "Barcode",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
                 Text(
-                    text = if (record.feedback == "incorrect" && record.correctedSubclass != null)
-                        "${record.subclass} ➔ ${record.correctedSubclass}"
-                        else record.subclass,
+                    text = when {
+                        productName != null -> productName
+                        record.feedback == "incorrect" && record.correctedSubclass != null ->
+                            "${record.subclass} ➔ ${record.correctedSubclass}"
+                        else -> record.subclass
+                    },
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(text = record.timestamp.toRelativeTime(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+
+                if (productName != null) {
+                    Text(
+                        text = if (record.feedback == "incorrect" && record.correctedSubclass != null)
+                            "${record.subclass} ➔ ${record.correctedSubclass}"
+                        else record.subclass,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Text(
+                    text = record.timestamp.toRelativeTime(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
             }
             
             Row(verticalAlignment = Alignment.CenterVertically) {

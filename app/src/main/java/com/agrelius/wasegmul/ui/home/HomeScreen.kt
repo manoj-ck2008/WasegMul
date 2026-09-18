@@ -57,7 +57,8 @@ fun HomeScreen(
     onNavigateToHistory: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToYolo: () -> Unit = {},
-    onNavigateToGuide: () -> Unit = {}
+    onNavigateToGuide: () -> Unit = {},
+    onNavigateToBarcode: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val recentHistory by viewModel.recentHistory.collectAsState()
@@ -379,6 +380,34 @@ fun HomeScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    FilledTonalButton(
+                        onClick = onNavigateToBarcode,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(64.dp)
+                            .shadow(8.dp, RoundedCornerShape(16.dp)),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f),
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        ),
+                        border = BorderStroke(1.dp, LocalGlassColors.current.border)
+                    ) {
+                        Icon(
+                            Icons.Default.QrCodeScanner,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = stringResource(R.string.home_scan_barcode),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
                     Button(
                         onClick = { galleryLauncher.launch("image/*") },
                         modifier = Modifier
@@ -415,11 +444,17 @@ fun HomeScreen(
                                 modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
                             )
                             recentHistory.take(3).forEach { record ->
+                                val isBarcodeScan = record.featureVector?.startsWith("barcode:") == true
+                                val barcodeMeta = if (isBarcodeScan) record.featureVector?.removePrefix("barcode:") else null
+                                val barcodeParts = barcodeMeta?.split("|", limit = 2)
+                                val productName = barcodeParts?.getOrNull(1)?.takeIf { it.isNotBlank() }
+                                val displayName = productName ?: record.subclass
                                 RecentItem(
-                                    name = record.subclass,
+                                    name = displayName,
                                     time = record.timestamp.toRelativeTime(),
                                     type = record.category,
-                                    feedback = record.feedback
+                                    feedback = record.feedback,
+                                    isBarcode = isBarcodeScan
                                 )
                             }
                         }
@@ -643,7 +678,13 @@ fun Long.toIso8601(): String {
 fun String.csvEscape(): String = "\"${replace("\"", "\"\"")}\""
 
 @Composable
-fun RecentItem(name: String, time: String, type: String, feedback: String?) {
+fun RecentItem(
+    name: String,
+    time: String,
+    type: String,
+    feedback: String?,
+    isBarcode: Boolean = false
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -655,8 +696,26 @@ fun RecentItem(name: String, time: String, type: String, feedback: String?) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column {
-            Text(text = name, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isBarcode) {
+                    Icon(
+                        imageVector = Icons.Default.QrCodeScanner,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(text = time, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (feedback != null) {
@@ -670,6 +729,7 @@ fun RecentItem(name: String, time: String, type: String, feedback: String?) {
                 }
             }
         }
+        Spacer(modifier = Modifier.width(8.dp))
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))

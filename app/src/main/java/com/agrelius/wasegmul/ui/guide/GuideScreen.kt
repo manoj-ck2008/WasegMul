@@ -54,7 +54,7 @@ fun GuideScreen(
     val categories = listOf("All", "Recyclable", "Organic", "E-Waste", "Trash", "Hazardous")
 
     val allGuideItems = remember {
-        WasteMapping.MAPPING.map { (subclass, meta) ->
+        (WasteMapping.MAPPING + WasteMapping.EXTENDED_MAPPING).map { (subclass, meta) ->
             val info = WasteKnowledgeBase.getInfo(meta.category, subclass)
             GuideItem(
                 subclass = subclass,
@@ -77,10 +77,11 @@ fun GuideScreen(
                 else -> item.category.equals(selectedCategory, ignoreCase = true)
             }
             val matchesSearch = if (searchQuery.isBlank()) true else {
-                item.subclass.contains(searchQuery, ignoreCase = true) ||
-                item.category.contains(searchQuery, ignoreCase = true) ||
-                item.disposalGuide.contains(searchQuery, ignoreCase = true) ||
-                item.environmentalImpact.contains(searchQuery, ignoreCase = true)
+                val sq = searchQuery.trim()
+                item.subclass.contains(sq, ignoreCase = true) ||
+                item.category.contains(sq, ignoreCase = true) ||
+                item.disposalGuide.contains(sq, ignoreCase = true) ||
+                item.environmentalImpact.contains(sq, ignoreCase = true)
             }
             matchesCategory && matchesSearch
         }

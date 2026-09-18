@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.stringResource
 import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.WasteMapping
@@ -78,10 +79,26 @@ fun ResultScreen(
                 },
                 actions = {
                     result?.let { r ->
-                        val shareSubject = stringResource(R.string.result_share_subject, r.subclass, r.category)
+                        val isBarcode = record?.featureVector?.startsWith("barcode:") == true
+                        val barcodeMeta = if (isBarcode) record?.featureVector?.removePrefix("barcode:") else null
+                        val barcodeParts = barcodeMeta?.split("|", limit = 2)
+                        val barcodeCode = barcodeParts?.getOrNull(0)
+                        val productName = barcodeParts?.getOrNull(1)?.takeIf { it.isNotBlank() }
+
+                        val shareSubject = if (productName != null) {
+                            "$productName - ${r.subclass} (${r.category})"
+                        } else {
+                            stringResource(R.string.result_share_subject, r.subclass, r.category)
+                        }
                         val shareText = buildString {
                             appendLine("🌿 WasegMul Waste Analysis Report")
                             appendLine("═══════════════════════════════")
+                            if (productName != null) {
+                                appendLine("Product: $productName")
+                                if (!barcodeCode.isNullOrBlank()) {
+                                    appendLine("Barcode: $barcodeCode")
+                                }
+                            }
                             appendLine("Item: ${r.subclass}")
                             appendLine("Category: ${r.category}")
                             appendLine("Confidence: ${(r.confidence.coerceIn(0f, 1f) * 100f).roundToInt()}%")
@@ -177,20 +194,66 @@ fun ResultScreen(
                                     Column(modifier = Modifier.weight(1f)) {
                                         val isUncertain = r.category == WasteMapping.UNCERTAIN ||
                                             r.category == WasteMapping.UNKNOWN
-                                        Text(
-                                            text = r.subclass,
-                                            style = MaterialTheme.typography.displaySmall,
-                                            fontWeight = FontWeight.Black,
-                                            color = if (isUncertain) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                                            letterSpacing = 1.sp
-                                        )
-                                        Text(
-                                            text = if (isUncertain) stringResource(R.string.result_low_confidence_match) else r.category.uppercase(),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = if (isUncertain) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                                            fontWeight = FontWeight.Bold,
-                                            letterSpacing = 2.sp
-                                        )
+                                        val isBarcode = record?.featureVector?.startsWith("barcode:") == true
+                                        val barcodeMeta = if (isBarcode) record?.featureVector?.removePrefix("barcode:") else null
+                                        val barcodeParts = barcodeMeta?.split("|", limit = 2)
+                                        val barcodeCode = barcodeParts?.getOrNull(0)
+                                        val productName = barcodeParts?.getOrNull(1)?.takeIf { it.isNotBlank() }
+
+                                        if (isBarcode) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(bottom = 4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.QrCodeScanner,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(14.dp),
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = barcodeCode ?: "BARCODE",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+
+                                        if (productName != null) {
+                                            Text(
+                                                text = productName,
+                                                style = MaterialTheme.typography.headlineSmall,
+                                                fontWeight = FontWeight.Black,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = "${r.subclass.uppercase()} (${r.category.uppercase()})",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                fontWeight = FontWeight.Bold,
+                                                letterSpacing = 1.5.sp
+                                            )
+                                        } else {
+                                            Text(
+                                                text = r.subclass,
+                                                style = MaterialTheme.typography.displaySmall,
+                                                fontWeight = FontWeight.Black,
+                                                color = if (isUncertain) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                                                letterSpacing = 1.sp
+                                            )
+                                            Text(
+                                                text = if (isUncertain) stringResource(R.string.result_low_confidence_match) else r.category.uppercase(),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (isUncertain) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                                fontWeight = FontWeight.Bold,
+                                                letterSpacing = 2.sp
+                                            )
+                                        }
                                     }
                                     ConfidenceBadge(confidence = r.confidence)
                                 }

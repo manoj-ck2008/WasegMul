@@ -33,3 +33,16 @@ _Avoid_: GreenScore, EcoPoints, CarbonReduction
 **Knowledge Base**:
 The repository (`WasteKnowledgeBase`) providing disposal instructions, environmental context, and recycling guidelines per waste class.
 _Avoid_: DisposalWiki, GuidanceStore, RuleEngine
+
+**Barcode Product**:
+A consumer product identified by its GS1 GTIN/EAN-13/UPC barcode, carrying packaging component metadata from Open Food Facts or local cache.
+_Avoid_: ScannedItem, BarcodeEntry, ProductRow
+
+**Packaging Component**:
+A distinct physical container element (e.g., bottle body, screw cap, foil seal, paper label) with its own material composition and disposal directive.
+_Avoid_: PackagingPart, ContainerPiece
+
+**Barcode Resolution**:
+The 4-tier lookup process (pre-loaded DB -> local cache -> online OFF API -> visual ML fallback) resolving a barcode to packaging classification.
+_Avoid_: BarcodeSearch, CodeLookup
+

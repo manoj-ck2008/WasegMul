@@ -1,6 +1,6 @@
 # WasegMul Waste Taxonomy
 
-Generated: 2026-07-24 08:59  
+Generated: 2026-09-17 21:57  
 Source: `taxonomy.yaml` (single source of truth)
 
 ---
@@ -8,9 +8,9 @@ Source: `taxonomy.yaml` (single source of truth)
 ## Overview
 
 ```
-TACO (52 raw classes)
+TACO (53 raw classes)
   ├── Excluded: 3 ambiguous categories
-  └── Mapped:   49 categories
+  └── Mapped:   50 categories
 
 YOLO (15 visual detector classes)
   └── Each class groups objects that LOOK similar
@@ -84,7 +84,7 @@ After YOLO crops a detection, EfficientNet classifies into these subclasses.
 
 ---
 
-## TACO → YOLO Mapping (49 categories)
+## TACO → YOLO Mapping (50 categories)
 
 Every TACO category is mapped individually based on visual appearance.
 Source: http://tacodataset.org/taxonomy
@@ -176,7 +176,7 @@ Source: http://tacodataset.org/taxonomy
 |---------------|--------|
 | Single-use carrier bag | Plastic shopping bag with handles |
 
-### `plastic_container` (11 categories)
+### `plastic_container` (12 categories)
 
 | TACO Category | Reason |
 |---------------|--------|
@@ -186,7 +186,8 @@ Source: http://tacodataset.org/taxonomy
 | Other plastic | Miscellaneous rigid plastic fragments |
 | Other plastic container | Generic rigid plastic vessels |
 | Plastic bottle cap | Small plastic disc |
-| Plastic glooves | Rigid transparent plastic hand covering |
+| Plastic glooves | Rigid transparent plastic hand covering (original TACO typo) |
+| Plastic gloves | Rigid transparent plastic hand covering |
 | Plastic utensils | Forks, spoons, knives |
 | Spread tub | Margarine/yoghurt tub |
 | Squeezable tube | Toothpaste/glue tube |

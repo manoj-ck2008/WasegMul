@@ -45,4 +45,65 @@ class MessageGeneratorTest {
         assertTrue("Message should contain humanized label", msg.contains("Disposable Plastic Cutlery"))
         assertFalse("Message should not contain raw snake_case label", msg.contains("disposable_plastic_cutlery"))
     }
+
+    @Test
+    fun testGenerateBarcode_groundTruth() {
+        val msg = MessageGenerator.generateBarcode(
+            productName = "Organic Milk Bottle",
+            category = "Recyclable",
+            subclass = "plastic",
+            mode = ClassificationMode.BARCODE_GROUND_TRUTH
+        )
+        assertTrue("Should mention product name", msg.contains("Organic Milk Bottle"))
+        assertTrue("Should mention humanized subclass", msg.contains("Plastic"))
+        assertTrue("Should mention category", msg.contains("Recyclable"))
+    }
+
+    @Test
+    fun testGenerateBarcode_partial() {
+        val msg = MessageGenerator.generateBarcode(
+            productName = "Granola Bar",
+            category = "Trash",
+            subclass = "plastic",
+            mode = ClassificationMode.BARCODE_PARTIAL
+        )
+        assertTrue("Should mention product name", msg.contains("Granola Bar"))
+        assertTrue("Should mention humanized subclass", msg.contains("Plastic"))
+        assertTrue("Should mention category", msg.contains("Trash"))
+    }
+
+    @Test
+    fun testGenerateBarcode_visualConsensus() {
+        val msg = MessageGenerator.generateBarcode(
+            productName = "Soda Can",
+            category = "Recyclable",
+            subclass = "metal",
+            mode = ClassificationMode.BARCODE_VISUAL_CONSENSUS
+        )
+        assertTrue("Should mention product name", msg.contains("Soda Can"))
+        assertTrue("Should mention humanized subclass", msg.contains("Metal"))
+        assertTrue("Should mention category", msg.contains("Recyclable"))
+    }
+
+    @Test
+    fun testGenerateBarcode_blankProductNameDefaultsToUnknown() {
+        val msg = MessageGenerator.generateBarcode(
+            productName = "",
+            category = "Recyclable",
+            subclass = "cardboard",
+            mode = ClassificationMode.BARCODE_GROUND_TRUTH
+        )
+        assertTrue("Should default to 'Unknown Product'", msg.contains("Unknown Product"))
+    }
+
+    @Test
+    fun testGenerateBarcode_fallbackToGenerateForNonBarcodeModes() {
+        val msg = MessageGenerator.generateBarcode(
+            productName = "Soda Can",
+            category = "Recyclable",
+            subclass = "metal",
+            mode = ClassificationMode.BOTH_AGREE
+        )
+        assertTrue("Should generate agree message", msg.contains("Metal") && msg.contains("Recyclable"))
+    }
 }

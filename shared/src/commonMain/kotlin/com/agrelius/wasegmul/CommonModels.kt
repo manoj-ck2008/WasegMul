@@ -52,6 +52,16 @@ data class PredictionResult(
     }
 }
 
+/**
+ * Product packaging evidence obtained from barcode lookup.
+ */
+data class BarcodeEvidence(
+    val productName: String,
+    val category: String,
+    val subclass: String,
+    val isComplete: Boolean = true
+)
+
 /** UI-facing classification payload (post-arbitration + knowledge-base lookup). */
 data class ClassificationResult(
     val category: String,

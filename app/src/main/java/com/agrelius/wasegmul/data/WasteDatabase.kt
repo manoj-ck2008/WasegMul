@@ -16,16 +16,22 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  *        history is preserved rather than wiped.
  *  - v8: added `timestamp` index for fast history queries.
  *  - v9: added `category`, `subclass`, and `feedback` indices for fast filtering.
+ *  - v10: added `barcode_products` table and indices for barcode packaging cache.
  *
  * NOTE: `fallbackToDestructiveMigration()` IS enabled as a last-resort safety net so a
  * future schema change or an old v1..v5 install never crashes on launch. Every intentional
  * schema change MUST still ship with an explicit [Migration] entry below; destructive
  * fallback only triggers when no migration path exists (documented wipe, not crash).
  */
-@Database(entities = [WasteRecord::class], version = 9, exportSchema = true)
+@Database(
+    entities = [WasteRecord::class, BarcodeProduct::class],
+    version = 10,
+    exportSchema = true
+)
 abstract class WasteDatabase : RoomDatabase() {
 
     abstract fun wasteDao(): WasteDao
+    abstract fun barcodeProductDao(): BarcodeProductDao
 
     companion object {
         @Volatile
@@ -54,6 +60,33 @@ abstract class WasteDatabase : RoomDatabase() {
             }
         }
 
+        /** v9 -> v10: add barcode_products table and indices for barcode caching. */
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS barcode_products (
+                        barcode TEXT NOT NULL PRIMARY KEY,
+                        productName TEXT,
+                        brand TEXT,
+                        category TEXT NOT NULL,
+                        subclass TEXT NOT NULL,
+                        materials TEXT,
+                        componentsJson TEXT,
+                        weightGrams REAL,
+                        ecoscore TEXT,
+                        source TEXT NOT NULL,
+                        packagingsComplete INTEGER NOT NULL DEFAULT 0,
+                        lastAccessed INTEGER NOT NULL DEFAULT 0,
+                        cachedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_barcode_products_category ON barcode_products (category)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_barcode_products_lastAccessed ON barcode_products (lastAccessed)")
+            }
+        }
+
         fun getDatabase(context: Context): WasteDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -61,7 +94,7 @@ abstract class WasteDatabase : RoomDatabase() {
                     WasteDatabase::class.java,
                     "wasegmul_industrial_v1.db"
                 )
-                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                     .fallbackToDestructiveMigration()
                     .build()
                     .also { INSTANCE = it }
