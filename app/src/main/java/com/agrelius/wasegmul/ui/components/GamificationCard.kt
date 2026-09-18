@@ -13,11 +13,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.gamification.EcoLevel
 import com.agrelius.wasegmul.gamification.GamificationState
 
@@ -37,7 +39,11 @@ fun GamificationCard(
     GlassCard(
         modifier = modifier
             .fillMaxWidth()
-            .clickable { onClick() }
+            .clickable(
+                role = Role.Button,
+                onClickLabel = stringResource(R.string.home_impact_title),
+                onClick = onClick
+            )
     ) {
         Row(
             modifier = Modifier
@@ -59,7 +65,7 @@ fun GamificationCard(
                     text = state.currentLevel.name,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -71,16 +77,20 @@ fun GamificationCard(
                         .height(8.dp)
                         .clip(RoundedCornerShape(4.dp)),
                     color = MaterialTheme.colorScheme.primary,
-                    trackColor = Color.White.copy(alpha = 0.2f)
+                    trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f)
                 )
                 
                 Spacer(modifier = Modifier.height(4.dp))
                 
                 val nextLevelXp = state.nextLevel?.xpRequired ?: state.currentLevel.xpRequired
                 Text(
-                    text = "${state.currentXp} / $nextLevelXp XP",
+                    text = stringResource(
+                        R.string.gamification_xp_progress,
+                        state.currentXp,
+                        nextLevelXp
+                    ),
                     fontSize = 12.sp,
-                    color = Color.White.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
@@ -90,16 +100,16 @@ fun GamificationCard(
                 horizontalAlignment = Alignment.End
             ) {
                 Text(
-                    text = String.format("%.3fkg", totalCo2Kg),
+                    text = stringResource(R.string.gamification_co2_fmt, totalCo2Kg),
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
-                    color = Color(0xFF00FF94) // Emerald
+                    color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "CARBON OFFSET",
+                    text = stringResource(R.string.gamification_carbon_offset),
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color.White.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

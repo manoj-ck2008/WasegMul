@@ -18,11 +18,25 @@ class HomeViewModel(private val repository: WasteRepository) : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    // Distinguishes "Room has not emitted yet" (show skeleton) from
+    // "loaded and truly empty" (show scan-first CTA). Fixes false-empty flash.
+    private val _historyLoaded = MutableStateFlow(false)
+    val historyLoaded: StateFlow<Boolean> = _historyLoaded.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            repository.allHistory.collect { _historyLoaded.value = true }
+        }
+    }
+
     val recentHistory: StateFlow<List<WasteRecord>> = repository.recentHistory
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val allHistory: StateFlow<List<WasteRecord>> = repository.allHistory
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val totalCount: StateFlow<Int> = repository.totalCount
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     fun clearHistory(onComplete: (() -> Unit)? = null) {
         viewModelScope.launch {
@@ -59,10 +73,10 @@ class HomeViewModel(private val repository: WasteRepository) : ViewModel() {
         }
     }
 
-    fun updateCorrection(recordId: Long, correction: String) {
+    fun updateCorrection(recordId: Long, correctedSubclass: String) {
         viewModelScope.launch {
             try {
-                repository.updateCorrectionWithCategory(recordId, correction)
+                repository.updateCorrectionWithCategory(recordId, correctedSubclass)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to update correction", e)
                 _error.value = "Failed to update correction"

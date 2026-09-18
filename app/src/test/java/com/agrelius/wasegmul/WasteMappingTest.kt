@@ -81,4 +81,22 @@ class WasteMappingTest {
         assertEquals(0.05, WasteMapping.getWeight("NonExistentItem123"), 0.001)
         assertFalse(WasteMapping.isHazardous("NonExistentItem123"))
     }
+
+    @Test
+    fun testLiIonDevices_flaggedHazardous() {
+        listOf("Mobile", "Laptop", "Player", "Electronic Device", "cell phone").forEach { label ->
+            assertTrue("$label must be hazardous (Li-ion fire risk)", WasteMapping.isHazardous(label))
+        }
+        assertFalse("Washing Machine has no cell/capacitor/refrigerant", WasteMapping.isHazardous("Washing Machine"))
+    }
+
+    @Test
+    fun testCurbsideTruth_filmDrinkwareTextilesAreTrash() {
+        assertEquals("Trash", WasteMapping.getCategory("plastic_bag"))
+        assertEquals("Trash", WasteMapping.getCategory("wine glass"))
+        assertEquals("Trash", WasteMapping.getCategory("clothing"))
+        assertEquals("Trash", WasteMapping.getCategory("textile"))
+        assertTrue(WasteMapping.isKnownCategory("Residual"))
+        assertFalse(WasteMapping.isKnownCategory("FooBar"))
+    }
 }

@@ -35,11 +35,25 @@ class SettingsViewModel(
     }
 
     fun setConfidenceThreshold(value: Float) {
-        viewModelScope.launch { settingsManager.setConfidenceThreshold(value) }
+        // Clamp to the supported slider range; the slider also coerces, this is
+        // the ViewModel-side guarantee (no per-pixel DataStore hammering: the
+        // UI only calls this from onValueChangeFinished).
+        viewModelScope.launch {
+            settingsManager.setConfidenceThreshold(value.coerceIn(0.20f, 0.90f))
+        }
     }
 
     fun setHapticsEnabled(value: Boolean) {
         viewModelScope.launch { settingsManager.setHapticsEnabled(value) }
+    }
+
+    fun resetToDefaults() {
+        viewModelScope.launch {
+            settingsManager.setThemeMode(ThemeMode.DARK)
+            settingsManager.setDynamicColor(false)
+            settingsManager.setConfidenceThreshold(0.50f)
+            settingsManager.setHapticsEnabled(true)
+        }
     }
 
 

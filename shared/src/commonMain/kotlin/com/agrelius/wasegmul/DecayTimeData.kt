@@ -1,5 +1,27 @@
 package com.agrelius.wasegmul
 
+/**
+ * Decomposition timelines per waste subclass.
+ *
+ * ## Provenance (estimates, not lab measurements)
+ * Ranges below are literature-based planning estimates compiled from widely-cited public
+ * sources — US EPA Advancing Sustainable Materials Management, UNEP single-use-plastics
+ * reporting, Ocean Conservancy marine-debris figures, International Aluminium Institute
+ * (aluminium persistence/recycling), Glass Packaging Institute (container glass), Truth
+ * Initiative / Keep America Beautiful (cigarette butts ~10–12 years). Landfill conditions
+ * (anaerobic, dark, compressed) slow most decay versus open environments, so ranges skew
+ * conservative. Present [DecayTimeInfo.displayText] verbatim; never interpolate raw year
+ * counts into "0 YEARS"-style animations for sub-year items (use displayText throughout).
+ *
+ * ## Severity scale (persistence × toxicity, 0–3)
+ * - 0 = benign and short-lived (weeks–months; landfill methane only).
+ * - 1 = long-lived but chemically inert bulk (glass, plain metal mass).
+ * - 2 = persistent AND shedding micro-pollutants / dyes / moderately toxic leachate.
+ * - 3 = acutely toxic (heavy metals, refrigerants, toner, nicotine) and/or effectively
+ *   permanent synthetics. Glass is deliberately sev-1 despite 1M-year persistence: it is
+ *   inert bulk, not poison — persistence and toxicity are separate axes and the scale
+ *   records their product, not either alone.
+ */
 object DecayTimeData {
 
     data class DecayTimeInfo(
@@ -17,8 +39,8 @@ object DecayTimeData {
             "Improper disposal releases CFCs and HFCs that directly deplete the ozone layer. Heavy metals and compressor oils can severely contaminate local soil and groundwater over centuries.", 3
         ),
         "Battery" to DecayTimeInfo(
-            "Battery", 100.0, 100.0, "100+ years",
-            "Batteries continuously leach toxic heavy metals like lead, cadmium, and mercury into the soil. These toxins eventually reach the groundwater, causing severe and long-lasting ecological damage.", 3
+            "Battery", 100.0, 1000.0, "100 to 1,000+ years (metals persist indefinitely)",
+            "Batteries continuously leach toxic heavy metals like lead, cadmium, and mercury into the soil. The metal casings and electrodes persist effectively indefinitely. These toxins eventually reach the groundwater, causing severe and long-lasting ecological damage.", 3
         ),
         "Cardboard" to DecayTimeInfo(
             "Cardboard", 0.16, 0.16, "2 months",
@@ -46,7 +68,7 @@ object DecayTimeData {
         ),
         "Metal" to DecayTimeInfo(
             "Metal", 100.0, 500.0, "100 to 500 years",
-            "Metals gradually undergo oxidation, creating rust runoff that alters local soil chemistry. Certain alloys also contain toxic trace metals that pose a threat to plant and animal life.", 2
+            "Structural and mixed metals gradually undergo oxidation, creating rust runoff that alters local soil chemistry. Certain alloys also contain toxic trace metals that pose a threat to plant and animal life. Thin cans decay faster — see the dedicated 'can' entry (80 to 200 years).", 2
         ),
         "Microwave" to DecayTimeInfo(
             "Microwave", 100.0, 1000.0, "100 to 1,000+ years",
@@ -78,7 +100,7 @@ object DecayTimeData {
         ),
         "Plastic" to DecayTimeInfo(
             "Plastic", 100.0, 1000.0, "100 to 1,000+ years",
-            "Plastics never truly biodegrade; they only fragment into dangerous microplastics. These particles devastate marine ecosystems, enter food chains, and persist for centuries.", 3
+            "Rigid plastics never truly biodegrade; they only fragment into dangerous microplastics. These particles devastate marine ecosystems, enter food chains, and persist for centuries. Thin film is faster but still hazardous — see 'plastic_bag' (10 to 20 years) and 'plastic_wrapper'.", 3
         ),
         "Player" to DecayTimeInfo(
             "Player", 100.0, 1000.0, "100 to 1,000+ years",
@@ -105,8 +127,8 @@ object DecayTimeData {
             "Large appliances like washing machines leach motor oils and heavy metals into the earth. Their bulk takes centuries to rust away, leaving behind a permanent toxic footprint.", 3
         ),
         "automobile wastes" to DecayTimeInfo(
-            "automobile wastes", 200.0, 2000.0, "200 to 2,000+ years",
-            "Automotive waste introduces complex chemical hazards like motor oil, brake fluid, and synthetic rubber. These highly toxic substances decimate local soil fertility and poison water sources.", 3
+            "automobile wastes", 50.0, 80.0, "50 to 80+ years",
+            "The typical unit is tyre-equivalent rubber/steel waste (see WasteMapping): tyres photodegrade over many decades while leaching zinc, oils and micro-rubber. Whole-vehicle hulks persist far longer, but fluids, batteries and tyres follow dedicated hazardous streams — never landfill them mixed.", 3
         ),
         "clothing" to DecayTimeInfo(
             "clothing", 0.5, 100.0, "6 months to 100+ years",
@@ -125,12 +147,77 @@ object DecayTimeData {
             "Modern shoes are complex assemblies of rubber soles, synthetic uppers, and chemical glues. They resist decay while slowly releasing a cocktail of synthetic compounds.", 2
         ),
         "styrofoam_cups" to DecayTimeInfo(
-            "styrofoam_cups", 50.0, 50.0, "50+ years",
+            "styrofoam_cups", 500.0, 1000.0, "500+ years",
             "Polystyrene foam is an ecological disaster that never fully biodegrades. It continuously fragments, spreading lightweight toxic particles across vast distances via wind and water.", 3
         ),
         "styrofoam_food_containers" to DecayTimeInfo(
-            "styrofoam_food_containers", 50.0, 50.0, "50+ years",
+            "styrofoam_food_containers", 500.0, 1000.0, "500+ years",
             "These containers are practically unrecyclable due to food contamination. They endure in landfills for centuries, releasing styrene chemicals and persistent microplastics.", 3
+        ),
+        // ── YOLO / EXTENDED shapes (previously fell back to vague category buckets) ──
+        "cigarette" to DecayTimeInfo(
+            "cigarette", 10.0, 12.0, "10 to 12 years",
+            "Cellulose-acetate filters do NOT biodegrade on cigarette timescales: they fragment into microplastics while leaching nicotine, arsenic and heavy metals into stormwater. Among the most-littered items worldwide.", 2
+        ),
+        "bottle" to DecayTimeInfo(
+            "bottle", 450.0, 450.0, "Around 450 years",
+            "A PET drink bottle persists on the order of four centuries in landfill or marine conditions (UNEP/Ocean Conservancy figures). Glass bottles are effectively permanent — see 'Glass'.", 3
+        ),
+        "can" to DecayTimeInfo(
+            "can", 80.0, 200.0, "80 to 200 years",
+            "An aluminium/steel can oxidises far faster than structural metal but still spans human lifetimes in landfill; recycled in weeks when actually recycled.", 1
+        ),
+        "plastic_bag" to DecayTimeInfo(
+            "plastic_bag", 10.0, 20.0, "10 to 20 years",
+            "Thin film photodegrades faster than rigid plastic but shreds into wind-borne microplastics and is a leading marine-entanglement hazard. Never curbside-recycled — store drop-off only.", 2
+        ),
+        "plastic_wrapper" to DecayTimeInfo(
+            "plastic_wrapper", 10.0, 30.0, "10 to 30 years",
+            "Multi-layer film fragments like bags and carries food contamination that blocks recycling; treat as persistent litter with the same marine hazard profile as plastic bags.", 2
+        ),
+        "plastic_container" to DecayTimeInfo(
+            "plastic_container", 100.0, 500.0, "100 to 500 years",
+            "Rigid food and product containers fragment into microplastics over centuries; tubs and pots share the 'Plastic' persistence profile at smaller unit mass.", 3
+        ),
+        "cup" to DecayTimeInfo(
+            "cup", 20.0, 30.0, "20 to 30 years",
+            "A 'paper' cup is paper bonded to a polyethylene moisture barrier: the paper rots, the plastic liner persists for decades. Sleeves and lids follow their own streams.", 1
+        ),
+        "textile" to DecayTimeInfo(
+            "textile", 0.5, 100.0, "6 months to 100+ years",
+            "Natural fibres rot within months; polyester-blend scraps shed microfibres for a century. Same profile as 'clothing' at scrap-swatch unit mass.", 2
+        ),
+        "cell phone" to DecayTimeInfo(
+            "cell phone", 100.0, 1000.0, "100 to 1,000+ years",
+            "Same concentrated hazard as 'Mobile': lithium cell plus dense heavy metals and rare earths in a small, corrosion-prone package.", 3
+        ),
+        "electronic" to DecayTimeInfo(
+            "electronic", 100.0, 1000.0, "100 to 1,000+ years",
+            "Generic small electronics share the 'Electronic Device' profile: mixed boards and plastics leaching metals for centuries.", 3
+        ),
+        "wine glass" to DecayTimeInfo(
+            "wine glass", 1000000.0, 1000000.0, "1 million+ years",
+            "Soda-lime drinkware is as permanent as container glass (see 'Glass') — and worse in practice, because it contaminates container-glass recycling when binned wrongly.", 1
+        ),
+        "glass_container" to DecayTimeInfo(
+            "glass_container", 1000000.0, 1000000.0, "1 million+ years",
+            "Container glass is chemically inert and effectively permanent — the argument FOR recycling it, not landfilling it.", 1
+        ),
+        "book" to DecayTimeInfo(
+            "book", 0.1, 0.5, "1 month to 6 months",
+            "Paper pages rot in weeks; glue binding and covers stretch the tail to months. Keep dry and recycle instead — wet/mouldy books are trash.", 0
+        ),
+        "banana" to DecayTimeInfo(
+            "banana", 0.02, 0.16, "1 week to 2 months",
+            "Peels compost in weeks but generate methane in anaerobic landfill — same 'Organic' profile. Compost or use the organics bin.", 0
+        ),
+        "apple" to DecayTimeInfo(
+            "apple", 0.02, 0.16, "1 week to 2 months",
+            "Cores compost in weeks but generate methane in anaerobic landfill — same 'Organic' profile. Compost or use the organics bin.", 0
+        ),
+        "food_waste" to DecayTimeInfo(
+            "food_waste", 0.02, 0.16, "1 week to 2 months",
+            "Food scraps compost in weeks but are a top landfill-methane source when binned. Compost or use the organics bin.", 0
         )
     )
 
@@ -138,6 +225,10 @@ object DecayTimeData {
         "E-Waste" to DecayTimeInfo(
             "Generic E-Waste", 100.0, 1000.0, "100 to 1,000+ years",
             "Electronic waste contains heavy metals and toxic chemicals that endure for centuries. These components severely contaminate soil and groundwater if not properly recycled.", 3
+        ),
+        "Hazardous" to DecayTimeInfo(
+            "Generic Hazardous", 100.0, 1000.0, "100 to 1,000+ years (toxics persist indefinitely)",
+            "Hazardous waste is defined by toxicity, not just persistence: assume indefinite soil and groundwater hazard until a specialist stream confirms otherwise.", 3
         ),
         "Organic" to DecayTimeInfo(
             "Generic Organic", 0.05, 0.5, "A few weeks to months",
@@ -150,24 +241,51 @@ object DecayTimeData {
         "Trash" to DecayTimeInfo(
             "Generic Trash", 50.0, 1000.0, "Decades to centuries",
             "General mixed trash contains persistent synthetic materials that resist natural breakdown. They steadily leak micro-pollutants into the local ecosystem.", 2
+        ),
+        // CONTEXT.md name for Trash: identical fallback so Residual callers never miss.
+        "Residual" to DecayTimeInfo(
+            "Generic Trash", 50.0, 1000.0, "Decades to centuries",
+            "General mixed (residual) trash contains persistent synthetic materials that resist natural breakdown. They steadily leak micro-pollutants into the local ecosystem.", 2
+        ),
+        "Uncertain" to DecayTimeInfo(
+            "Unknown Waste", 50.0, 500.0, "Decades to centuries",
+            "We could not identify this item: assume persistent synthetics until verified. Check the disposal guide before binning.", 2
+        ),
+        "Unknown" to DecayTimeInfo(
+            "Unknown Waste", 50.0, 500.0, "Decades to centuries",
+            "Unidentified waste materials often contain synthetic compounds that do not break down easily. They pose a lasting, unknown threat to natural habitats.", 2
         )
     )
 
+    /**
+     * Inputs are trimmed before lookup (consistent with [WasteMapping]); case-insensitive
+     * for subclass, case-insensitive with [WasteMapping.RESIDUAL] support for category.
+     */
     fun getDecayInfo(subclass: String, category: String): DecayTimeInfo {
-        return subclassLookup[subclass] 
-            ?: subclassLookup.entries.find { it.key.equals(subclass, ignoreCase = true) }?.value
-            ?: categoryFallbacks[category]
-            ?: categoryFallbacks.entries.find { it.key.equals(category, ignoreCase = true) }?.value
+        val cleanSub = subclass.trim()
+        val cleanCat = category.trim()
+        return subclassLookup[cleanSub]
+            ?: subclassLookup.entries.find { it.key.equals(cleanSub, ignoreCase = true) }?.value
+            ?: categoryFallbacks[cleanCat]
+            ?: categoryFallbacks.entries.find { it.key.equals(cleanCat, ignoreCase = true) }?.value
             ?: DecayTimeInfo(
                 "Unknown Waste", 50.0, 500.0, "Decades to centuries",
                 "Unidentified waste materials often contain synthetic compounds that do not break down easily. They pose a lasting, unknown threat to natural habitats.", 2
             )
     }
 
+    /**
+     * Human-scale comparison for a decomposition horizon in years.
+     * Anchors (with basis): a season ≈ 0.25 y (astronomical quarter-year); a demographic
+     * generation ≈ 25 y (UN World Population Prospects convention, 25–30 y). Earlier
+     * buckets ("<1 y → single season", "<50 y → generation") were wrong by factors of
+     * ~4 and ~2 respectively — fixed here. Render [DecayTimeInfo.displayText], never raw
+     * year math, in animated UI.
+     */
     fun getComparison(minYears: Double): String {
         return when {
-            minYears < 1.0 -> "Less than a single season"
-            minYears < 50.0 -> "Longer than a generation"
+            minYears < 0.25 -> "Less than a single season"
+            minYears < 25.0 -> "Within a single generation"
             minYears < 100.0 -> "Your grandchildren would still see it"
             minYears < 500.0 -> "Outlasts every building standing today"
             minYears < 1000.0 -> "Longer than most civilizations have existed"

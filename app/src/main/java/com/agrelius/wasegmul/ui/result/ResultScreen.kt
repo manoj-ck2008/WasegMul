@@ -1,5 +1,8 @@
 package com.agrelius.wasegmul.ui.result
 
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
@@ -11,6 +14,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -19,6 +23,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.WasteMapping
 import com.agrelius.wasegmul.ui.classify.ClassificationViewModel
@@ -31,6 +37,8 @@ import androidx.compose.foundation.Image
 import android.content.Intent
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.location.Location
 import androidx.core.content.ContextCompat
 import com.agrelius.wasegmul.EcoImpactCalculator
@@ -41,6 +49,10 @@ import com.agrelius.wasegmul.ui.result.DecayTimeSection
 import com.agrelius.wasegmul.ui.result.DisposalLocatorSection
 import com.agrelius.wasegmul.ui.result.ThankYouOverlay
 import com.google.android.gms.location.LocationServices
+import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,39 +60,118 @@ import kotlin.math.roundToInt
 fun ResultScreen(
     viewModel: ClassificationViewModel,
     onNavigateToHome: () -> Unit,
-    onBack: () -> Unit = {}
+    onBack: () -> Unit = {},
+    // True when navigated with no recordId (recordId == -1): render the
+    // error state instead of an indeterminate spinner.
+    invalidRecordId: Boolean = false
 ) {
     val context = LocalContext.current
+    val app = context.applicationContext as? com.agrelius.wasegmul.WasegMulApp
     val result by viewModel.classificationResult.collectAsState()
     val record by viewModel.currentRecord.collectAsState()
     val capturedBitmap by viewModel.capturedBitmap.collectAsState()
     val error by viewModel.error.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var showContent by remember { mutableStateOf(false) }
+    val reduceMotion = rememberReduceMotion()
+    val userThreshold by app?.settingsManager?.confidenceThreshold?.collectAsState(initial = 0.70f)
+        ?: remember { mutableStateOf(0.70f) }
+    val hapticsEnabled by app?.settingsManager?.hapticsEnabled?.collectAsState(initial = true)
+        ?: remember { mutableStateOf(true) }
 
     val isFreshScan by viewModel.isFreshScan.collectAsState()
     val lastXpGain by viewModel.lastXpGain.collectAsState()
-    var showThankYou by remember(isFreshScan) { mutableStateOf(isFreshScan) }
-    var showLevelUp by remember(lastXpGain) { mutableStateOf(lastXpGain?.didLevelUp == true) }
+    // Celebration gating (consume-once, rotation-safe): uncertain / unknown /
+    // zero-XP scans never celebrate. Dismissal is persisted per record id so
+    // rotation cannot replay overlays.
+    val isUncertainRecord = record?.let {
+        it.category == WasteMapping.UNCERTAIN || it.category == WasteMapping.UNKNOWN
+    } ?: (result?.category == WasteMapping.UNCERTAIN || result?.category == WasteMapping.UNKNOWN)
+    val xpEarned = lastXpGain?.xpEarned ?: 0
+    val canCelebrate = isFreshScan && !isUncertainRecord && xpEarned > 0
+    var thankYouDismissed by rememberSaveable(record?.id) { mutableStateOf(false) }
+    var levelUpDismissed by rememberSaveable(record?.id) { mutableStateOf(false) }
+    val showThankYou = canCelebrate && !thankYouDismissed
+    val showLevelUp = !showThankYou && lastXpGain?.didLevelUp == true &&
+        !levelUpDismissed && !isUncertainRecord && xpEarned > 0
+
+    fun dismissThankYou() {
+        thankYouDismissed = true
+        if (lastXpGain?.didLevelUp != true) viewModel.consumeXpGain()
+        viewModel.consumeFreshScan()
+    }
+    fun dismissLevelUp() {
+        levelUpDismissed = true
+        viewModel.consumeXpGain()
+        viewModel.consumeFreshScan()
+    }
+    // System back dismisses a visible overlay first (TalkBack-consistent).
+    BackHandler(enabled = showThankYou || showLevelUp) {
+        if (showThankYou) dismissThankYou() else dismissLevelUp()
+    }
+
+    // History image: Coil is not a dependency (build files frozen), so decode
+    // the persisted imagePath off-Main. Captured bitmap wins when present.
+    val recordImagePath = record?.imagePath
+    val recordBitmap by produceState<Bitmap?>(initialValue = null, key1 = recordImagePath) {
+        value = if (recordImagePath.isNullOrBlank()) {
+            null
+        } else {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    BitmapFactory.Options().run {
+                        inPreferredConfig = Bitmap.Config.ARGB_8888
+                        BitmapFactory.decodeFile(recordImagePath, this)
+                    }
+                }.getOrNull()
+            }
+        }
+    }
+    val displayBitmap = capturedBitmap ?: recordBitmap
 
     val allCenters = remember(context) { DisposalDatabase.loadCenters(context) }
     var nearbyCenters by remember { mutableStateOf<List<NearbyCenterMatch>>(emptyList()) }
     var userLocation by remember { mutableStateOf<Location?>(null) }
-    
+    var hasLocationPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    var locationRequested by rememberSaveable { mutableStateOf(false) }
+    val usingDefaultLocation = userLocation == null
+
+    fun fetchLocation() {
+        try {
+            val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                if (location != null) userLocation = location
+            }
+        } catch (_: Exception) {
+            // Ignored: default-location disclosure covers the fallback.
+        }
+    }
+
+    val locationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        hasLocationPermission = grants.values.any { it }
+        locationRequested = true
+        if (grants.values.any { it }) fetchLocation()
+    }
+
     LaunchedEffect(Unit) {
         showContent = true
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            try {
-                val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
-                fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                    if (location != null) {
-                        userLocation = location
-                    }
-                }
-            } catch (e: Exception) {
-                // Ignore
-            }
+        if (hasLocationPermission) {
+            fetchLocation()
+        } else if (!locationRequested) {
+            locationRequested = true
+            locationLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
         }
     }
 
@@ -100,19 +191,30 @@ fun ResultScreen(
         }
     }
 
+    // Timeout for the null-result state (no spinner-forever).
+    var loadTimedOut by remember { mutableStateOf(false) }
+    LaunchedEffect(result, error, invalidRecordId) {
+        loadTimedOut = false
+        if (result == null && error == null && !invalidRecordId) {
+            delay(8000)
+            loadTimedOut = true
+        }
+    }
+    val loadingText = stringResource(R.string.common_processing)
+
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
-                title = { 
+                title = {
                     Text(
-                        stringResource(R.string.result_title), 
+                        stringResource(R.string.result_title),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
-                    ) 
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -121,41 +223,48 @@ fun ResultScreen(
                 },
                 actions = {
                     result?.let { r ->
-                        val isBarcode = record?.featureVector?.startsWith("barcode:") == true
-                        val barcodeMeta = if (isBarcode) record?.featureVector?.removePrefix("barcode:") else null
-                        val barcodeParts = barcodeMeta?.split("|", limit = 2)
-                        val barcodeCode = barcodeParts?.getOrNull(0)
-                        val productName = barcodeParts?.getOrNull(1)?.takeIf { it.isNotBlank() }
+                        // Single-parser rule for the share sheet.
+                        val display = parseBarcodeDisplay(
+                            record?.source, record?.barcode,
+                            record?.productName, record?.featureVector
+                        )
+                        val productName = display?.productName
+                        val barcodeCode = display?.code?.takeIf { it.isNotBlank() }
 
                         val shareSubject = if (productName != null) {
                             "$productName - ${r.subclass} (${r.category})"
                         } else {
-                            stringResource(R.string.result_share_subject, r.subclass, r.category)
+                            context.getString(R.string.result_share_subject, r.subclass, r.category)
                         }
                         val shareText = buildString {
-                            appendLine("🌿 WasegMul Waste Analysis Report")
-                            appendLine("═══════════════════════════════")
+                            appendLine(context.getString(R.string.result_share_header))
                             if (productName != null) {
                                 appendLine("Product: $productName")
                                 if (!barcodeCode.isNullOrBlank()) {
                                     appendLine("Barcode: $barcodeCode")
                                 }
                             }
-                            appendLine("Item: ${r.subclass}")
+                            appendLine("Item: ${humanizeLabel(r.subclass)}")
                             appendLine("Category: ${r.category}")
                             appendLine("Confidence: ${(r.confidence.coerceIn(0f, 1f) * 100f).roundToInt()}%")
                             if (WasteMapping.isHazardous(r.subclass)) {
-                                appendLine("\n⚠️ HAZARDOUS MATERIAL ALERT: Requires specialist drop-off!")
+                                appendLine()
+                                appendLine(context.getString(R.string.result_share_hazard))
                             }
-                            appendLine("\n📋 Disposal Protocol:")
+                            appendLine()
+                            appendLine("${context.getString(R.string.result_disposal_protocol)}:")
                             appendLine(r.disposalGuide)
-                            appendLine("\n🌍 Ecological Footprint:")
+                            appendLine()
+                            appendLine("${context.getString(R.string.result_ecological_footprint)}:")
                             appendLine(r.environmentalImpact)
-                            appendLine("\n♻️ Recycling Benefits:")
+                            appendLine()
+                            appendLine("${context.getString(R.string.result_recycling_benefits)}:")
                             appendLine(r.recyclingBenefits)
-                            appendLine("\n📚 Verification Sources:")
+                            appendLine()
+                            appendLine("${context.getString(R.string.result_verification_sources)}:")
                             appendLine(r.sources)
-                            appendLine("\nClassified on-device with WasegMul AI.")
+                            appendLine()
+                            appendLine(context.getString(R.string.result_share_footer))
                         }
 
                         IconButton(onClick = {
@@ -166,7 +275,10 @@ fun ResultScreen(
                                     putExtra(Intent.EXTRA_TEXT, shareText)
                                     type = "text/plain"
                                 }
-                                val shareIntent = Intent.createChooser(sendIntent, "Share Waste Analysis")
+                                val shareIntent = Intent.createChooser(
+                                    sendIntent,
+                                    context.getString(R.string.result_share_title)
+                                )
                                 context.startActivity(shareIntent)
                             } catch (e: Exception) {
                                 android.util.Log.e("ResultShare", "Share failed", e)
@@ -190,7 +302,7 @@ fun ResultScreen(
         }
     ) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            OrganicBackground()
+            OrganicBackground(animate = !reduceMotion)
 
             Column(
                 modifier = Modifier
@@ -207,7 +319,7 @@ fun ResultScreen(
                     ) {
                         result?.let { r ->
                         Column {
-                            capturedBitmap?.let { bmp ->
+                            displayBitmap?.let { bmp ->
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -236,13 +348,14 @@ fun ResultScreen(
                                     Column(modifier = Modifier.weight(1f)) {
                                         val isUncertain = r.category == WasteMapping.UNCERTAIN ||
                                             r.category == WasteMapping.UNKNOWN
-                                        val isBarcode = record?.featureVector?.startsWith("barcode:") == true
-                                        val barcodeMeta = if (isBarcode) record?.featureVector?.removePrefix("barcode:") else null
-                                        val barcodeParts = barcodeMeta?.split("|", limit = 2)
-                                        val barcodeCode = barcodeParts?.getOrNull(0)
-                                        val productName = barcodeParts?.getOrNull(1)?.takeIf { it.isNotBlank() }
+                                        val display = parseBarcodeDisplay(
+                                            record?.source, record?.barcode,
+                                            record?.productName, record?.featureVector
+                                        )
+                                        val barcodeCode = display?.code?.takeIf { it.isNotBlank() }
+                                        val prodName = display?.productName
 
-                                        if (isBarcode) {
+                                        if (display != null) {
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 modifier = Modifier.padding(bottom = 4.dp)
@@ -263,9 +376,9 @@ fun ResultScreen(
                                             }
                                         }
 
-                                        if (productName != null) {
+                                        if (prodName != null) {
                                             Text(
-                                                text = productName,
+                                                text = prodName,
                                                 style = MaterialTheme.typography.headlineSmall,
                                                 fontWeight = FontWeight.Black,
                                                 color = MaterialTheme.colorScheme.onSurface,
@@ -274,7 +387,7 @@ fun ResultScreen(
                                             )
                                             Spacer(modifier = Modifier.height(2.dp))
                                             Text(
-                                                text = "${r.subclass.uppercase()} (${r.category.uppercase()})",
+                                                text = "${humanizeLabel(r.subclass)} (${r.category})",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.primary,
                                                 fontWeight = FontWeight.Bold,
@@ -282,14 +395,15 @@ fun ResultScreen(
                                             )
                                         } else {
                                             Text(
-                                                text = r.subclass,
+                                                text = humanizeLabel(r.subclass),
                                                 style = MaterialTheme.typography.displaySmall,
                                                 fontWeight = FontWeight.Black,
                                                 color = if (isUncertain) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                                                 letterSpacing = 1.sp
                                             )
                                             Text(
-                                                text = if (isUncertain) stringResource(R.string.result_low_confidence_match) else r.category.uppercase(),
+                                                text = if (isUncertain) stringResource(R.string.result_low_confidence_match)
+                                                    else r.category.uppercase(Locale.ROOT),
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = if (isUncertain) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                                                 fontWeight = FontWeight.Bold,
@@ -297,7 +411,10 @@ fun ResultScreen(
                                             )
                                         }
                                     }
-                                    ConfidenceBadge(confidence = r.confidence)
+                                    ConfidenceBadge(
+                                        confidence = r.confidence,
+                                        userThreshold = userThreshold
+                                    )
                                 }
                             }
 
@@ -313,7 +430,7 @@ fun ResultScreen(
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Icon(
                                                 Icons.Default.Warning,
-                                                contentDescription = null,
+                                                contentDescription = stringResource(R.string.result_cd_hazard),
                                                 tint = MaterialTheme.colorScheme.error,
                                                 modifier = Modifier.size(24.dp)
                                             )
@@ -341,7 +458,11 @@ fun ResultScreen(
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                                 ) {
                                     Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                        Icon(
+                                            Icons.Default.Warning,
+                                            contentDescription = stringResource(R.string.result_cd_hazard),
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Text(
                                             text = r.classificationMessage.ifBlank {
@@ -377,7 +498,7 @@ fun ResultScreen(
                             }
 
                             SectionTitle(text = stringResource(R.string.result_environmental_insights))
-                            
+
                             InsightCard(
                                 title = stringResource(R.string.result_disposal_protocol),
                                 content = r.disposalGuide,
@@ -403,14 +524,65 @@ fun ResultScreen(
                             )
 
                             Spacer(modifier = Modifier.height(16.dp))
-                            
+
+                            // Location honesty: request access; while the fix is
+                            // unknown, disclose the default instead of titling
+                            // it "Nearest".
+                            if (usingDefaultLocation) {
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 8.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.LocationOff,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = if (!hasLocationPermission && locationRequested) {
+                                                stringResource(R.string.result_location_denied)
+                                            } else {
+                                                stringResource(R.string.result_default_location)
+                                            },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        if (!hasLocationPermission) {
+                                            TextButton(
+                                                onClick = {
+                                                    locationLauncher.launch(
+                                                        arrayOf(
+                                                            Manifest.permission.ACCESS_FINE_LOCATION,
+                                                            Manifest.permission.ACCESS_COARSE_LOCATION
+                                                        )
+                                                    )
+                                                }
+                                            ) {
+                                                Text(stringResource(R.string.result_enable_location))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             DisposalLocatorSection(
                                 centers = nearbyCenters,
                                 category = r.category
                             )
-                            
+
                             Spacer(modifier = Modifier.height(16.dp))
-                            
+
                             CivicReportingBanner(
                                 category = r.category,
                                 subclass = r.subclass,
@@ -437,7 +609,7 @@ fun ResultScreen(
                                                 horizontalArrangement = Arrangement.SpaceBetween
                                             ) {
                                                 Text(
-                                                    text = label,
+                                                    text = humanizeLabel(label),
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.onSurface
                                                 )
@@ -445,8 +617,7 @@ fun ResultScreen(
                                                     text = "${(conf * 100f).roundToInt()}%",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.primary,
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                                    fontWeight = FontWeight.Bold
                                                 )
                                             }
                                         }
@@ -465,20 +636,21 @@ fun ResultScreen(
                             }
 
                             SectionTitle(text = stringResource(R.string.result_validation))
-                            
+
                             FeedbackSection(
                                 initialFeedback = record?.feedback,
                                 initialCorrection = record?.correctedSubclass,
+                                hapticsEnabled = hapticsEnabled,
                                 onFeedbackSelected = { feedback ->
                                     viewModel.setFeedback(feedback)
                                 },
-                                onCorrectionSelected = { correction ->
-                                    viewModel.setCorrection(correction)
+                                onCorrectionSelected = { correctedSubclass ->
+                                    viewModel.setCorrection(correctedSubclass)
                                 }
                             )
 
                             Spacer(modifier = Modifier.height(16.dp))
-                            
+
                             DecayTimeSection(subclass = r.subclass, category = r.category)
 
                             Spacer(modifier = Modifier.height(16.dp))
@@ -508,42 +680,60 @@ fun ResultScreen(
                                         .weight(1f)
                                         .height(56.dp),
                                     shape = RoundedCornerShape(16.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                    )
                                 ) {
                                     Text(
                                         stringResource(R.string.result_acknowledge_close),
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.Black
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
-                            
+
                             Spacer(modifier = Modifier.height(48.dp))
                         }
                         }
                     }
                 } else {
+                    // Bounded content in the scroll (no fillMaxSize-in-scroll).
                     Box(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 64.dp)
+                            .semantics { contentDescription = loadingText },
                         contentAlignment = Alignment.Center
                     ) {
-                        if (error != null) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text(error.orEmpty(), color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(horizontal = 32.dp))
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Button(onClick = onBack) { Text(stringResource(R.string.common_go_back)) }
+                        when {
+                            invalidRecordId -> {
+                                ResultErrorState(
+                                    message = stringResource(R.string.result_invalid_record),
+                                    onBack = onBack
+                                )
                             }
-                        } else {
-                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                            error != null -> {
+                                ResultErrorState(
+                                    message = error.orEmpty(),
+                                    onBack = onBack
+                                )
+                            }
+                            loadTimedOut -> {
+                                ResultErrorState(
+                                    message = stringResource(R.string.result_load_timeout),
+                                    onBack = onBack
+                                )
+                            }
+                            else -> {
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                            }
                         }
-                    } // ends Box inside else
-                } // ends if/else
-            } // ends Column
-        } // ends Box(innerPadding)
-    } // ends Scaffold
-    
+                    }
+                }
+            }
+        }
+    }
+
     if (showThankYou) {
         lastXpGain?.let { gain ->
             val impact = remember(record) {
@@ -560,12 +750,7 @@ fun ResultScreen(
                 xpEarned = gain.xpEarned,
                 co2PreventedGrams = co2Grams,
                 waterSavedMl = waterMl,
-                onDismiss = {
-                    showThankYou = false
-                    if (!gain.didLevelUp) {
-                        viewModel.consumeXpGain()
-                    }
-                }
+                onDismiss = { dismissThankYou() }
             )
         }
     } else if (showLevelUp) {
@@ -573,15 +758,31 @@ fun ResultScreen(
             LevelUpOverlay(
                 newLevel = gain.newLevel,
                 xpEarned = gain.xpEarned,
-                onDismiss = {
-                    viewModel.consumeXpGain()
-                    showLevelUp = false
-                }
+                onDismiss = { dismissLevelUp() }
             )
         }
     }
 } // ends Box(fillMaxSize)
 } // ends ResultScreen
+
+@Composable
+private fun ResultErrorState(
+    message: String,
+    onBack: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(
+            Icons.Default.Warning,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(48.dp)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(message, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(horizontal = 32.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(onClick = onBack) { Text(stringResource(R.string.common_go_back)) }
+    }
+}
 
 @androidx.compose.ui.tooling.preview.Preview(name = "Result Loading Preview", showBackground = true, backgroundColor = 0xFF121212)
 @Composable
@@ -592,4 +793,3 @@ private fun ResultLoadingPreview() {
         }
     }
 }
-

@@ -26,7 +26,15 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Material & Shape Mapping (Synchronized with PackagingWasteMapper.kt)
+# Material & Shape Mapping — SINGLE SOURCE: taxonomy.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+# Canonical truth lives in taxonomy.yaml (barcode_materials.materials +
+# shapes_fallback). The dicts below are a staged copy for offline/Kaggle runs
+# without the repo file. On import, _load_off_maps_from_taxonomy() overrides
+# them from taxonomy.yaml when present and warns on drift.
+# Drift test note: add a CI/unit check comparing these dicts against
+# taxonomy.yaml (fail on divergence) — see scripts/requirements-train.txt.
+# Synchronized with PackagingWasteMapper.kt (shared KMP) — all three must agree.
 # ─────────────────────────────────────────────────────────────────────────────
 
 SPECIAL_HUMAN_NAMES = {
@@ -130,11 +138,9 @@ MATERIAL_MAPPING: Dict[str, Tuple[str, str]] = {
     "en:cotton": ("Trash", "Textile Trash"),
     "en:jute": ("Organic", "Organic"),
     "en:ceramic": ("Trash", "Miscellaneous Trash"),
-
-    # Batteries / E-Waste
-    "en:battery": ("E-Waste", "Battery"),
-    "en:electronic": ("E-Waste", "Electronic Device"),
-    "en:electronics": ("E-Waste", "Electronic Device"),
+    # NOTE: no en:battery / en:electronic(s) keys — a battery/device is a PRODUCT,
+    # not an OFF packaging-material tag. taxonomy.yaml and PackagingWasteMapper.kt
+    # agree (neither carries them); keeping them here caused OFF-map drift.
 }
 
 SHAPE_FALLBACK: Dict[str, Tuple[str, str]] = {
@@ -174,6 +180,54 @@ SHAPE_FALLBACK: Dict[str, Tuple[str, str]] = {
 }
 
 
+def _load_off_maps_from_taxonomy() -> None:
+    """Override MATERIAL_MAPPING/SHAPE_FALLBACK from taxonomy.yaml when present.
+
+    Single-source rule: taxonomy.yaml wins. If the staged dicts above drift
+    from the yaml, a warning is printed (CI should fail on drift — see header
+    note). Never silently train/ship on a forked mapping.
+    """
+    global MATERIAL_MAPPING, SHAPE_FALLBACK
+    candidates = [
+        Path(__file__).resolve().parent.parent / "taxonomy.yaml",
+        Path(__file__).resolve().parent / "taxonomy.yaml",
+        Path("taxonomy.yaml"),
+    ]
+    tax_path = next((p for p in candidates if p.exists()), None)
+    if tax_path is None:
+        print("NOTE: taxonomy.yaml not found — using staged OFF maps (verify drift before shipping).")
+        return
+    try:
+        import yaml
+    except ImportError:
+        print("NOTE: pyyaml missing — cannot load taxonomy.yaml OFF maps; using staged copy.")
+        return
+    with open(tax_path, encoding="utf-8") as f:
+        tax = yaml.safe_load(f) or {}
+    mats = ((tax.get("barcode_materials") or {}).get("materials")) or {}
+    shapes = ((tax.get("barcode_materials") or {}).get("shapes_fallback")) or {}
+    if not mats and not shapes:
+        print(f"NOTE: {tax_path} has no barcode_materials — using staged OFF maps.")
+        return
+    yaml_mats = {k: (v["category"], v["subclass"]) for k, v in mats.items()
+                 if isinstance(v, dict) and "category" in v and "subclass" in v}
+    yaml_shapes = {k: (v["category"], v["subclass"]) for k, v in shapes.items()
+                   if isinstance(v, dict) and "category" in v and "subclass" in v}
+    drift_m = set(yaml_mats) ^ set(MATERIAL_MAPPING)
+    drift_s = set(yaml_shapes) ^ set(SHAPE_FALLBACK)
+    if drift_m or drift_s:
+        print(f"WARNING: OFF map drift vs {tax_path}: "
+              f"{len(drift_m)} material keys, {len(drift_s)} shape keys differ. "
+              f"taxonomy.yaml wins for this run; update the staged copy + Kotlin mapper.")
+    if yaml_mats:
+        MATERIAL_MAPPING = yaml_mats
+    if yaml_shapes:
+        SHAPE_FALLBACK = yaml_shapes
+
+
+_load_off_maps_from_taxonomy()
+
+
 def compute_ean13_check_digit(digits12: str) -> str:
     """Calculates standard GS1 Modulo-10 check digit for a 12-digit base."""
     digits = [int(c) for c in digits12[:12]]
@@ -188,16 +242,25 @@ def is_valid_ean13(code: str) -> bool:
     return code[12] == compute_ean13_check_digit(code[:12])
 
 
-def normalize_ean13(code: str) -> str:
-    """Ensures a barcode string is 13 digits by padding with leading zeros, preserving check digits."""
+def normalize_ean13(code: str) -> Optional[str]:
+    """Normalize to a VALID EAN-13, or return None (caller must skip + log).
+
+    Policy (audit §3.47 — never pad/truncate into an invalid checksum):
+    - Strip non-digits.
+    - 13 digits: return as-is IFF checksum valid, else None.
+    - 12 digits: treat as UPC-A; convert by prepending '0' (GS1 rule; leading
+      zero preserves the Modulo-10 check) and return IFF the result validates,
+      else None.
+    - Anything else (EAN-8, GTIN-14, junk): None — caller logs + skips.
+      (EAN-8→EAN-13 zero-expansion is intentionally NOT guessed here.)
+    """
     clean = "".join(c for c in str(code) if c.isdigit())
+    if len(clean) == 13:
+        return clean if is_valid_ean13(clean) else None
     if len(clean) == 12:
-        return "0" + clean
-    elif len(clean) < 13:
-        return clean.zfill(13)
-    elif len(clean) > 13:
-        return clean[:13]
-    return clean
+        candidate = "0" + clean
+        return candidate if is_valid_ean13(candidate) else None
+    return None
 
 
 def humanize_tag(tag: Optional[str]) -> str:
@@ -212,7 +275,17 @@ def humanize_tag(tag: Optional[str]) -> str:
 
 
 def map_disposal_action(recycling_tag: Optional[str], fallback_category: str) -> str:
-    """Maps recycling taxonomy tag to Recycle, Discard, or Compost."""
+    """Maps recycling taxonomy tag to Recycle, Discard, or Compost.
+
+    Order matters: check discard-negations FIRST — 'do-not-recycle' contains
+    'recycle' and must map to Discard. Word-boundary matching avoids 'bin'
+    firing inside 'combine'.
+    """
+    import re
+
+    def _has(word: str, text: str) -> bool:
+        return re.search(r"\b" + re.escape(word) + r"\b", text) is not None
+
     if not recycling_tag:
         if fallback_category == "Recyclable":
             return "Recycle"
@@ -220,13 +293,17 @@ def map_disposal_action(recycling_tag: Optional[str], fallback_category: str) ->
             return "Compost"
         else:
             return "Discard"
-    norm = recycling_tag.split(":")[-1].strip().lower()
-    if "recycle" in norm or "reuse" in norm or "re-use" in norm:
-        return "Recycle"
-    if "discard" in norm or "trash" in norm or "bin" in norm or "incinerat" in norm:
+    norm = recycling_tag.split(":")[-1].strip().lower().replace("-", " ").replace("_", " ")
+    # Discard-negations first (do-not-recycle, non recyclable, not recyclable)
+    if ("discard" in norm or "trash" in norm or "incinerat" in norm
+            or "do not recycle" in norm or "do-not-recycle" in recycling_tag.lower()
+            or "non recyclable" in norm or "not recyclable" in norm
+            or _has("bin", norm)):
         return "Discard"
     if "compost" in norm or "biodegrad" in norm:
         return "Compost"
+    if "recycle" in norm or "reuse" in norm or "re use" in norm:
+        return "Recycle"
     if fallback_category == "Recyclable":
         return "Recycle"
     elif fallback_category == "Organic":
@@ -287,8 +364,18 @@ def init_db(db_path: Path) -> sqlite3.Connection:
     return conn
 
 
-def insert_product(conn: sqlite3.Connection, item: Dict[str, Any]) -> None:
-    """Inserts or replaces a product record in the barcode_products table."""
+def insert_product(conn: sqlite3.Connection, item: Dict[str, Any]) -> bool:
+    """Inserts or replaces a product record; validates barcode at insert.
+
+    Returns True on insert, False when rejected (invalid barcode). Invalid
+    codes are NEVER padded/truncated into plausible-looking rows — they are
+    rejected with a logged warning so checksum corruption cannot ship.
+    """
+    barcode = item.get("barcode", "")
+    if not is_valid_ean13(str(barcode)):
+        print(f"  SKIP invalid barcode (checksum/length): {barcode!r} "
+              f"product={item.get('productName')!r}")
+        return False
     conn.execute(
         """
         INSERT OR REPLACE INTO barcode_products (
@@ -317,6 +404,7 @@ def insert_product(conn: sqlite3.Connection, item: Dict[str, Any]) -> None:
             item.get("cachedAt", 0),
         ),
     )
+    return True
 
 
 def optimize_db(conn: sqlite3.Connection) -> None:
@@ -1935,6 +2023,10 @@ def get_curated_fmcg_products() -> List[Dict[str, Any]]:
     now_ms = int(time.time() * 1000)
     for raw in products_raw:
         barcode = normalize_ean13(raw["barcode"])
+        if barcode is None:
+            print(f"  SKIP curated product with invalid barcode: {raw.get('barcode')!r} "
+                  f"product={raw.get('name')!r} (fix the source EAN-13, do not pad/truncate)")
+            continue
         components = raw.get("components", [])
 
         # Determine primary component (heaviest, or first)
@@ -2046,6 +2138,11 @@ def build_from_duckdb(
 
     for row in cursor.fetchall():
         raw_code = str(row[0]).strip()
+        barcode = normalize_ean13(raw_code)
+        if barcode is None:
+            if verbose:
+                print(f"  SKIP invalid barcode from DuckDB: {raw_code!r}")
+            continue
         product_name = row[1]
         brand = row[2]
         mat_tags = row[3] if isinstance(row[3], list) else []
@@ -2077,7 +2174,7 @@ def build_from_duckdb(
         materials_str = ", ".join(mat_names) if mat_names else subclass
 
         item = {
-            "barcode": normalize_ean13(raw_code),
+            "barcode": barcode,
             "productName": product_name,
             "brand": brand,
             "category": category,
@@ -2091,8 +2188,8 @@ def build_from_duckdb(
             "lastAccessed": 0,
             "cachedAt": now_ms,
         }
-        insert_product(conn, item)
-        count += 1
+        if insert_product(conn, item):
+            count += 1
 
     optimize_db(conn)
     conn.close()
@@ -2144,6 +2241,11 @@ def build_from_api(
             raw_code = p.get("code")
             if not raw_code:
                 continue
+            barcode = normalize_ean13(raw_code)
+            if barcode is None:
+                if verbose:
+                    print(f"  SKIP invalid barcode from API: {raw_code!r}")
+                continue
 
             mat_tags = p.get("packaging_materials_tags", [])
             shape_tags = p.get("packaging_shapes_tags", [])
@@ -2169,7 +2271,7 @@ def build_from_api(
                 )
 
             item = {
-                "barcode": normalize_ean13(raw_code),
+                "barcode": barcode,
                 "productName": p.get("product_name"),
                 "brand": p.get("brands"),
                 "category": category,
@@ -2183,8 +2285,8 @@ def build_from_api(
                 "lastAccessed": 0,
                 "cachedAt": now_ms,
             }
-            insert_product(conn, item)
-            count += 1
+            if insert_product(conn, item):
+                count += 1
             if count >= limit:
                 break
 
@@ -2231,6 +2333,12 @@ def build_from_jsonl(
             if not raw_code:
                 continue
 
+            barcode_jsonl = normalize_ean13(raw_code)
+            if barcode_jsonl is None:
+                if verbose:
+                    print(f"  SKIP invalid barcode from JSONL: {raw_code!r}")
+                continue
+
             mat_tags = p.get("packaging_materials_tags", [])
             shape_tags = p.get("packaging_shapes_tags", [])
             primary_mat = mat_tags[0] if mat_tags else None
@@ -2252,7 +2360,7 @@ def build_from_jsonl(
                 )
 
             item = {
-                "barcode": normalize_ean13(raw_code),
+                "barcode": barcode_jsonl,
                 "productName": p.get("product_name"),
                 "brand": p.get("brands"),
                 "category": category,
@@ -2266,8 +2374,8 @@ def build_from_jsonl(
                 "lastAccessed": 0,
                 "cachedAt": now_ms,
             }
-            insert_product(conn, item)
-            count += 1
+            if insert_product(conn, item):
+                count += 1
             if limit and count >= limit:
                 break
 
@@ -2291,7 +2399,8 @@ def build_sample_db(output_path: Path, verbose: bool = False) -> int:
     subclass_counts: Dict[str, int] = {}
 
     for item in products:
-        insert_product(conn, item)
+        if not insert_product(conn, item):
+            continue  # already logged inside insert_product
         category_counts[item["category"]] = category_counts.get(item["category"], 0) + 1
         subclass_counts[item["subclass"]] = subclass_counts.get(item["subclass"], 0) + 1
         if verbose:
@@ -2302,7 +2411,8 @@ def build_sample_db(output_path: Path, verbose: bool = False) -> int:
 
     file_size_kb = round(os.path.getsize(output_path) / 1024, 1)
     print(f"Database successfully generated at: {output_path} ({file_size_kb} KB)")
-    print(f"Total products inserted: {len(products)}")
+    inserted = sum(category_counts.values())
+    print(f"Total products inserted: {inserted} (curated candidates: {len(products)})")
     print("Breakdown by Category:")
     for cat, cnt in sorted(category_counts.items()):
         print(f"  - {cat}: {cnt}")
@@ -2310,7 +2420,7 @@ def build_sample_db(output_path: Path, verbose: bool = False) -> int:
     for sub, cnt in sorted(subclass_counts.items(), key=lambda x: -x[1]):
         print(f"  - {sub}: {cnt}")
 
-    return len(products)
+    return inserted
 
 
 # ─────────────────────────────────────────────────────────────────────────────

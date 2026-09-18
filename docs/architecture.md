@@ -39,7 +39,7 @@ graph TD
     subgraph Data_Layer ["Persistence & Platform Services"]
         Repository["WasteRepository (Interface & DefaultWasteRepository)"]
         WasteDao["WasteDao (Room Data Access Object)"]
-        WasteDB["WasteDatabase (Room SQLite Schema v9)"]
+        WasteDB["WasteDatabase (Room SQLite Schema v11)"]
         DataStore["SettingsManager (Preferences DataStore)"]
         CameraX["CameraX (Preview & ImageAnalysis)"]
     end
@@ -188,7 +188,7 @@ To prevent garbage collection pauses during 20-30 FPS camera analysis:
 
 ## 4. Data Layer & Room Database Schema
 
-The persistence layer is implemented using Room SQLite, updated to schema version 9 with composite indices to guarantee instant queries across historical logs.
+The persistence layer is implemented using Room SQLite, at schema version 11 with single-column indices on `waste_history(timestamp, category, subclass, feedback)`, a `barcode_products` offline cache table (v9→v10), and barcode provenance columns on `waste_history` (`source`, `productName`, `barcode`; v10→v11) to guarantee instant queries across historical logs.
 
 ### 4.1 Database Entity-Relationship Diagram
 

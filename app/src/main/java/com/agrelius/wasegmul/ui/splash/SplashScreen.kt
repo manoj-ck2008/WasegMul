@@ -4,11 +4,15 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -19,30 +23,41 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.res.stringResource
 import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.ui.components.AppLogo
 import com.agrelius.wasegmul.ui.components.VisionImagery
 import com.agrelius.wasegmul.ui.components.FallingPetals
+import com.agrelius.wasegmul.ui.components.rememberReduceMotion
 import com.agrelius.wasegmul.utils.EcoThoughts
 import kotlinx.coroutines.delay
 
 @Composable
 fun SplashScreen(onTimeout: () -> Unit) {
-    var stage by remember { mutableIntStateOf(0) }
-    val currentThought = remember { EcoThoughts.getRandom() }
-    var navigated by remember { mutableStateOf(false) }
-    
+    // Rotation-safe: stage/navigation/thought survive configuration change
+    // (no restart, no replay, no reshuffled quote).
+    var stage by rememberSaveable { mutableIntStateOf(0) }
+    val currentThought = rememberSaveable { EcoThoughts.getRandom() }
+    var navigated by rememberSaveable { mutableStateOf(false) }
+    val reduceMotion = rememberReduceMotion()
+
     val fullTitle = stringResource(R.string.app_name)
-    var displayedTitle by remember { mutableStateOf("") }
-    
+    var displayedTitle by rememberSaveable { mutableStateOf("") }
+
+    fun go() {
+        if (!navigated) {
+            navigated = true
+            onTimeout()
+        }
+    }
+
     val visionAlpha by animateFloatAsState(
         targetValue = if (stage >= 2) 1f else 0f,
-        animationSpec = tween(4000),
+        animationSpec = tween(1200),
         label = "vision_alpha"
     )
 
@@ -50,68 +65,65 @@ fun SplashScreen(onTimeout: () -> Unit) {
         targetValue = when(stage) {
             0 -> 0.0f
             1 -> 1.0f
-            else -> 0.7f
+            else -> 0.85f
         },
         animationSpec = spring(stiffness = Spring.StiffnessVeryLow, dampingRatio = Spring.DampingRatioHighBouncy),
         label = "logo_scale"
     )
 
+    // Clamped offset so compact/landscape screens never clip the logo.
     val logoOffset by animateDpAsState(
         targetValue = when(stage) {
             0 -> 0.dp
             1 -> 0.dp
-            else -> (-140).dp
+            else -> (-48).dp
         },
         animationSpec = spring(stiffness = Spring.StiffnessLow),
         label = "logo_offset"
     )
 
     LaunchedEffect(Unit) {
-        delay(600)
-        stage = 1 // Logo emerges from darkness
-        
-        delay(400)
-        // Cinematic Fluid Title Writing
-        fullTitle.forEachIndexed { index, _ ->
-            displayedTitle = fullTitle.take(index + 1)
-            delay(100)
+        if (navigated) return@LaunchedEffect
+        // Total forced delay stays under ~2s; Skip is always visible.
+        delay(250)
+        stage = 1 // Logo emerges
+        if (!reduceMotion) {
+            fullTitle.forEachIndexed { index, _ ->
+                displayedTitle = fullTitle.take(index + 1)
+                delay(35)
+            }
+        } else {
+            displayedTitle = fullTitle
         }
-        
-        delay(300)
+        delay(200)
         stage = 2 // Vision & Petals Bloom
-        
-        delay(2200)
-        if (!navigated) {
-            navigated = true
-            onTimeout()
-        }
+        delay(900)
+        go()
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
-            .clickable {
-                if (!navigated) {
-                    navigated = true
-                    onTimeout()
-                }
-            },
+            // Theme-aware scrim (was forced black cutting into light Home).
+            .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
         // Organic Vision Layer
         VisionImagery(alpha = visionAlpha)
-        
+
         // Fluid Nature Elements
         if (stage >= 2) {
             FallingPetals()
         }
 
-        // Center aligned column for content
+        // Scrollable + compact-safe column (small screens no longer clip).
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp)
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 32.dp, vertical = 24.dp)
         ) {
             // Central Neural Logo
             Box(
@@ -121,51 +133,50 @@ fun SplashScreen(onTimeout: () -> Unit) {
                     .alpha(if (stage >= 1) 1f else 0f),
                 contentAlignment = Alignment.Center
             ) {
-                AppLogo(size = 200.dp)
-                
-                if (stage >= 2) {
+                AppLogo(size = 160.dp, animate = !reduceMotion)
+
+                if (stage >= 2 && !reduceMotion) {
                     CircularRsAnimation()
                 }
             }
-            
-            // Fixed spacer to maintain layout during animations
-            Spacer(modifier = Modifier.height(100.dp))
+
+            Spacer(modifier = Modifier.height(48.dp))
 
             // Cinematic Title
-            Box(modifier = Modifier.height(120.dp), contentAlignment = Alignment.TopCenter) {
+            Box(modifier = Modifier.heightIn(min = 96.dp), contentAlignment = Alignment.TopCenter) {
                 if (displayedTitle.isNotEmpty()) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = displayedTitle,
                             style = MaterialTheme.typography.displaySmall.copy(
-                                letterSpacing = 12.sp,
+                                letterSpacing = 8.sp,
                                 fontWeight = FontWeight.Black
                             ),
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onBackground,
                             textAlign = TextAlign.Center
                         )
-                        
-                        Spacer(modifier = Modifier.height(20.dp))
-                        
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
                         AnimatedVisibility(
                             visible = stage >= 2,
-                            enter = fadeIn(tween(2000)) + slideInVertically(tween(2000)) { 40 }
+                            enter = fadeIn(tween(800)) + slideInVertically(tween(800)) { 40 }
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
                                     text = stringResource(R.string.home_subtitle),
-                                    style = MaterialTheme.typography.headlineMedium,
+                                    style = MaterialTheme.typography.headlineSmall,
                                     color = MaterialTheme.colorScheme.primary,
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier.alpha(0.8f)
                                 )
-                                
-                                Spacer(modifier = Modifier.height(80.dp))
-                                
+
+                                Spacer(modifier = Modifier.height(32.dp))
+
                                 Text(
                                     text = "\"$currentThought\"",
                                     style = MaterialTheme.typography.bodyLarge,
-                                    color = Color.White.copy(alpha = 0.5f),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center,
                                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
                                     lineHeight = 28.sp
@@ -174,6 +185,19 @@ fun SplashScreen(onTimeout: () -> Unit) {
                         }
                     }
                 }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // Visible Skip control (Role.Button via Button, labelled).
+            Button(
+                onClick = { go() },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            ) {
+                Text(stringResource(R.string.splash_skip))
             }
         }
     }
@@ -191,7 +215,7 @@ fun CircularRsAnimation() {
 
     val primaryColor = MaterialTheme.colorScheme.primary
 
-    Canvas(modifier = Modifier.size(280.dp).rotate(rotation)) {
+    Canvas(modifier = Modifier.size(240.dp).rotate(rotation)) {
         val strokeWidth = 2.dp.toPx()
         for (i in 0..2) {
             drawArc(

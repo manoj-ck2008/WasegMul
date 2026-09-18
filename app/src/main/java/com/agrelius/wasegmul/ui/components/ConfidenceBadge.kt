@@ -18,11 +18,15 @@ import com.agrelius.wasegmul.R
 @Composable
 fun ConfidenceBadge(
     confidence: Float,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // User-tuned threshold from Settings: the "medium" bar follows it
+    // (grades stay consistent with the verification alert the user set).
+    userThreshold: Float = 0.70f
 ) {
+    val mediumBar = userThreshold.coerceIn(0.20f, 0.90f)
     val (color, label) = when {
         confidence >= 0.90f -> MaterialTheme.colorScheme.primary to stringResource(R.string.confidence_high)
-        confidence >= 0.70f -> MaterialTheme.colorScheme.tertiary to stringResource(R.string.confidence_medium)
+        confidence >= mediumBar -> MaterialTheme.colorScheme.tertiary to stringResource(R.string.confidence_medium)
         else -> MaterialTheme.colorScheme.error to stringResource(R.string.confidence_low)
     }
 

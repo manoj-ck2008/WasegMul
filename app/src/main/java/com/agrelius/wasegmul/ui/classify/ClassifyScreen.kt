@@ -1,5 +1,8 @@
 package com.agrelius.wasegmul.ui.classify
 
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -11,9 +14,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ImageSearch
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -23,6 +28,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -31,9 +39,13 @@ import androidx.compose.ui.res.stringResource
 import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.ui.components.GradientActionButton
 import com.agrelius.wasegmul.ui.components.OrganicBackground
+import com.agrelius.wasegmul.ui.components.decodeSampledBitmap
+import com.agrelius.wasegmul.ui.components.rememberReduceMotion
 import com.agrelius.wasegmul.ui.theme.*
 import com.agrelius.wasegmul.utils.EcoThoughts
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,14 +55,50 @@ fun ClassifyScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val app = context.applicationContext as? com.agrelius.wasegmul.WasegMulApp
     val capturedBitmap by viewModel.capturedBitmap.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val classificationResult by viewModel.classificationResult.collectAsState()
     val error by viewModel.error.collectAsState()
-    val loadingThought = remember { EcoThoughts.getRandom() }
+    val modelInitError by viewModel.modelInitError.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val reduceMotion = rememberReduceMotion()
+    // A fresh thought per classification run (not one per composition).
+    var loadingThought by rememberSaveable { mutableStateOf(EcoThoughts.getRandom()) }
+    LaunchedEffect(isLoading) {
+        if (isLoading) loadingThought = EcoThoughts.getRandom()
+    }
+
+    // Empty-state recovery: picking here restores Classify without going Home.
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            scope.launch {
+                val bitmap = withContext(Dispatchers.IO) {
+                    decodeSampledBitmap(context, it, 1024, 1024)
+                }
+                if (bitmap != null) {
+                    viewModel.setBitmap(bitmap)
+                } else {
+                    snackbarHostState.showSnackbar(
+                        context.getString(R.string.home_image_load_failed)
+                    )
+                }
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
-        viewModel.initModel(context)
+        viewModel.initModel(context, app?.modelManager)
+    }
+
+    // System back during inference cancels the job first (no half-written
+    // state, no orphaned XP); otherwise it behaves like the top-bar back.
+    BackHandler {
+        if (isLoading) viewModel.cancelClassification()
+        onBack()
     }
 
     LaunchedEffect(Unit) {
@@ -61,6 +109,7 @@ fun ClassifyScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { 
@@ -73,11 +122,15 @@ fun ClassifyScreen(
                     ) 
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack, enabled = !isLoading) {
+                    // Always enabled: system/tap back cancels inference first.
+                    IconButton(onClick = {
+                        if (isLoading) viewModel.cancelClassification()
+                        onBack()
+                    }) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack, 
                             contentDescription = stringResource(R.string.common_back),
-                            tint = if (isLoading) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f) else MaterialTheme.colorScheme.onSurface
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 },
@@ -88,7 +141,7 @@ fun ClassifyScreen(
         }
     ) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            OrganicBackground()
+            OrganicBackground(animate = !reduceMotion)
             
             Column(
                 modifier = Modifier
@@ -132,32 +185,70 @@ fun ClassifyScreen(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            // Dead-end fix: a pick CTA right in the empty state.
+                            Spacer(modifier = Modifier.height(16.dp))
+                            OutlinedButton(onClick = { galleryLauncher.launch("image/*") }) {
+                                Icon(
+                                    Icons.Default.ImageSearch,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(stringResource(R.string.classify_pick_image))
+                            }
                         }
                     }
 
                     if (isLoading) {
+                        // Single scrim (theme-aware) + scan line; no double dim.
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.8f)),
+                                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.padding(24.dp)
+                                modifier = Modifier
+                                    .padding(24.dp)
+                                    .semantics { liveRegion = LiveRegionMode.Polite }
                             ) {
                                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                                 Spacer(modifier = Modifier.height(24.dp))
                                 Text(
                                     text = loadingThought,
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.White,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     textAlign = TextAlign.Center,
                                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
                                 )
                             }
                         }
                         ScanningOverlay()
+                    }
+                }
+
+                if (modelInitError != null) {
+                    Card(
+                        modifier = Modifier.padding(top = 16.dp).fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = modelInitError.orEmpty(),
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive }
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            TextButton(
+                                onClick = { viewModel.retryInitModel() }
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(stringResource(R.string.common_retry), style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
                     }
                 }
 
@@ -181,7 +272,7 @@ fun ClassifyScreen(
                             ) {
                                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Retry", style = MaterialTheme.typography.labelMedium)
+                                Text(stringResource(R.string.common_retry), style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     }
@@ -192,6 +283,7 @@ fun ClassifyScreen(
                 GradientActionButton(
                     text = if (isLoading) stringResource(R.string.common_processing) else stringResource(R.string.classify_action_analyze),
                     icon = Icons.Default.AutoAwesome,
+                    iconContentDescription = stringResource(R.string.classify_action_analyze),
                     onClick = {
                         viewModel.classify()
                     },
@@ -202,18 +294,31 @@ fun ClassifyScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                TextButton(
-                    onClick = onBack,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isLoading
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        stringResource(R.string.classify_retake),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
+                if (isLoading) {
+                    // Cancellable inference: visible Cancel, not a dead Retake.
+                    OutlinedButton(
+                        onClick = { viewModel.cancelClassification() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            stringResource(R.string.classify_cancel),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                } else {
+                    TextButton(
+                        onClick = onBack,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            stringResource(R.string.classify_retake),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
                 }
             }
         }

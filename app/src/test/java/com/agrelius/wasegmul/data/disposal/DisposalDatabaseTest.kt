@@ -1,7 +1,9 @@
 package com.agrelius.wasegmul.data.disposal
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class DisposalDatabaseTest {
@@ -83,5 +85,93 @@ class DisposalDatabaseTest {
 
         val recyclableContacts = DisposalDatabase.getCivicContacts("Recyclable")
         assertTrue(recyclableContacts.any { it.name.contains("Hasiru Dala") })
+    }
+
+    @Test
+    fun accepts_isCaseInsensitive_withTrashCompat() {
+        val center = DisposalCenter(
+            id = "dwcc_x",
+            name = "X",
+            type = DisposalCenterType.DWCC,
+            zone = "East",
+            address = "Addr",
+            latitude = 12.97,
+            longitude = 77.64,
+            phone = null,
+            operatingHours = "9-5",
+            acceptedCategories = listOf("recyclable")
+        )
+        assertTrue(center.accepts("Recyclable"))
+        assertTrue(center.accepts(" RECYCLABLE "))
+        assertFalse(center.accepts("E-Waste"))
+
+        val residual = center.copy(id = "dwcc_y", acceptedCategories = listOf("Residual"))
+        assertTrue(residual.accepts("Trash"))
+        assertTrue(residual.accepts("residual"))
+    }
+
+    @Test
+    fun constructor_rejectsBadCoordinates() {
+        try {
+            DisposalCenter(
+                id = "bad", name = "Bad", type = DisposalCenterType.DWCC, zone = "E",
+                address = "A", latitude = 91.0, longitude = 77.0, phone = null,
+                operatingHours = "9-5", acceptedCategories = listOf("Recyclable")
+            )
+            fail("expected IllegalArgumentException for latitude=91")
+        } catch (e: IllegalArgumentException) {
+            // expected
+        }
+        try {
+            DisposalCenter(
+                id = "bad", name = "Bad", type = DisposalCenterType.DWCC, zone = "E",
+                address = "A", latitude = 12.0, longitude = Double.NaN, phone = null,
+                operatingHours = "9-5", acceptedCategories = listOf("Recyclable")
+            )
+            fail("expected IllegalArgumentException for NaN longitude")
+        } catch (e: IllegalArgumentException) {
+            // expected
+        }
+    }
+
+    @Test
+    fun haversine_antipodal_isFiniteHalfCircumference() {
+        val d = GeoCalculator.distanceKm(0.0, 0.0, 0.0, 180.0)
+        assertTrue("antipodal distance must be finite, was $d", d.isFinite())
+        assertEquals(20015.0, d, 50.0)
+    }
+
+    @Test
+    fun findNearest_fallsBackToNearest_whenNoCategoryMatch() {
+        val center = DisposalCenter(
+            id = "dwcc_1",
+            name = "Only DWCC",
+            type = DisposalCenterType.DWCC,
+            zone = "East",
+            address = "Addr",
+            latitude = 12.9720,
+            longitude = 77.6420,
+            phone = null,
+            operatingHours = "9-5",
+            acceptedCategories = listOf("Recyclable")
+        )
+        // No center accepts Hazardous: returns nearest regardless, not empty.
+        val results = DisposalDatabase.findNearest(
+            centers = listOf(center),
+            lat = 12.9716,
+            lon = 77.6413,
+            category = "Hazardous",
+            limit = 3
+        )
+        assertEquals(1, results.size)
+        assertEquals("dwcc_1", results[0].center.id)
+    }
+
+    @Test
+    fun civicContacts_hazardousAndOrganic_areExplicit() {
+        val hazardous = DisposalDatabase.getCivicContacts("hazardous")
+        assertTrue(hazardous.any { it.name.contains("Hazardous") })
+        val organic = DisposalDatabase.getCivicContacts("ORGANIC")
+        assertTrue(organic.any { it.name.contains("Compost") })
     }
 }

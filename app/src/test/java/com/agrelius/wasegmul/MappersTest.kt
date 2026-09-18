@@ -49,4 +49,50 @@ class MappersTest {
         assertEquals(entity.feedback, reconstructedEntity.feedback)
         assertEquals(entity.timestamp, reconstructedEntity.timestamp)
     }
+
+    @Test
+    fun toCommon_coercesInvalidNumerics_neverThrows() {
+        val entity = EntityRecord(
+            id = 7L,
+            category = "Recyclable",
+            subclass = "Plastic",
+            confidence = Float.NaN,
+            estimatedWeight = -3.0,
+            timestamp = 1700000000000L
+        )
+
+        // Would have thrown in the shared require() guards; the mapper heals + logs.
+        val common = entity.toCommon()
+
+        assertEquals(0f, common.confidence, 0.0f)
+        assertEquals(EntityRecord.DEFAULT_WEIGHT_KG, common.estimatedWeight, 0.0)
+    }
+
+    @Test
+    fun toCommon_clampsOverRangeConfidence() {
+        val entity = EntityRecord(
+            id = 8L,
+            category = "Organic",
+            subclass = "Banana Peel",
+            confidence = 5.0f,
+            estimatedWeight = 0.1,
+            timestamp = 1700000000000L
+        )
+
+        assertEquals(1f, entity.toCommon().confidence, 0.0f)
+    }
+
+    @Test
+    fun toEntity_healsZeroTimestamp() {
+        // Shared default timestamp is 0L (legacy unset) — healed to nowMs with a log,
+        // exercising the SafeLog JVM path (bare android.util.Log crashes unit tests).
+        val common = WasteRecord(
+            category = "Organic",
+            subclass = "Banana Peel",
+            confidence = 0.8f
+        )
+        val fixedNow = 1700000000000L
+
+        assertEquals(fixedNow, common.toEntity(nowMs = fixedNow).timestamp)
+    }
 }

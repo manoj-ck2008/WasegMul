@@ -32,8 +32,24 @@ private data class FallingPetal(
 @Composable
 fun FallingPetals(
     modifier: Modifier = Modifier,
-    count: Int = 18
+    count: Int = 18,
+    enabled: Boolean = true
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val powerManager = remember {
+        context.getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager
+    }
+    val app = remember(context) {
+        context.applicationContext as? com.agrelius.wasegmul.WasegMulApp
+    }
+    val reduceAnimations by app?.settingsManager?.reduceAnimations?.collectAsState(initial = false)
+        ?: remember { mutableStateOf(false) }
+    val isPowerSave = powerManager?.isPowerSaveMode == true
+    // Battery-saver, reduced-motion, or caller disables decoration: render
+    // nothing (zero GPU cost).
+    if (!enabled || isPowerSave || reduceAnimations) return
+
+    val renderCount = if (count > 12) 12 else count
     val infiniteTransition = rememberInfiniteTransition(label = "petals")
     val time by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -44,8 +60,8 @@ fun FallingPetals(
         label = "time"
     )
 
-    val petals = remember(count) {
-        (0 until count).map { i ->
+    val petals = remember(renderCount) {
+        (0 until renderCount).map { i ->
             FallingPetal(
                 startX = (i * 0.053f + (i % 7) * 0.11f) % 1f,
                 startY = -0.1f - (i * 0.06f),
@@ -68,7 +84,8 @@ fun FallingPetals(
 
     val petalPath = remember { Path() }
 
-    Canvas(modifier = Modifier.fillMaxSize()) {
+    // Honor the caller's modifier (previously ignored in favor of fillMaxSize).
+    Canvas(modifier = modifier.fillMaxSize()) {
         val baseHeight = 12.dp.toPx()
         val baseWidth = 8.dp.toPx()
 

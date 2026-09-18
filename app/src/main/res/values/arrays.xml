@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Subclass-only options for user corrections (FeedbackSection, History).
+        Categories must NEVER appear here: a Category stored in correctedSubclass
+        corrupts the taxonomy (getCategory -> UNKNOWN, stale category/weight).
+        Keep the full mixed list (material_options in strings.xml) for the
+        Knowledge Base guide only. -->
+    <string-array name="correction_material_options">
+        <item>Battery</item>
+        <item>Cardboard</item>
+        <item>Electronic Component</item>
+        <item>Electronic Device</item>
+        <item>Glass</item>
+        <item>Keyboard</item>
+        <item>Laptop</item>
+        <item>Metal</item>
+        <item>Microwave</item>
+        <item>Mobile</item>
+        <item>Mouse</item>
+        <item>Paper</item>
+        <item>PCB</item>
+        <item>Plastic</item>
+        <item>Printer</item>
+        <item>Refrigerator</item>
+        <item>Television</item>
+        <item>Washing Machine</item>
+        <item>Clothing</item>
+        <item>Food Waste</item>
+        <item>Miscellaneous Trash</item>
+        <item>Plastic Bag</item>
+        <item>Plastic Container</item>
+        <item>Textile Trash</item>
+    </string-array>
+</resources>

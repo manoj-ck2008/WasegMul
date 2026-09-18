@@ -92,7 +92,11 @@ datasets:
     attribution_required: false
     attribution_text: ""
     images: 0
+    # classes: 30 counts EfficientNet SUBCLASSES for user-collected
+    # classification crops — NOT the 15 YOLO detection classes. YOLO labels for
+    # custom data still use the 15 yolo_classes from taxonomy.yaml (single source).
     classes: 30
+    class_kind: "efficientnet_subclasses"  # vs "yolo_detection" for detector datasets
     format: "YOLO"
     included_in_production: true
     notes: "User-collected images. Place in datasets/custom/images/ and datasets/custom/labels/"

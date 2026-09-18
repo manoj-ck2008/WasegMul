@@ -25,7 +25,8 @@ fun GradientActionButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    containerColor: Color = MaterialTheme.colorScheme.primary
+    containerColor: Color = MaterialTheme.colorScheme.primary,
+    hapticsEnabled: Boolean = true
 ) {
     val haptic = LocalHapticFeedback.current
     val gradient = remember(containerColor) {
@@ -47,12 +48,20 @@ fun GradientActionButton(
 
     Button(
         onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            // Single tap confirmation. (No dedicated tap constant exists on
+            // this Compose version; LongPress is the supported key.)
+            if (hapticsEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             onClick()
         },
         modifier = modifier
             .fillMaxWidth()
-            .height(64.dp),
+            .height(64.dp)
+            // Gradient on the OUTER modifier (under the ripple) so the touch
+            // ripple stays visible; the inner box is transparent.
+            .background(
+                brush = if (enabled) gradient else disabledGradient,
+                shape = RoundedCornerShape(16.dp)
+            ),
         enabled = enabled,
         shape = RoundedCornerShape(16.dp),
         colors = ButtonDefaults.buttonColors(
@@ -64,11 +73,7 @@ fun GradientActionButton(
         contentPadding = PaddingValues(0.dp)
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    brush = if (enabled) gradient else disabledGradient
-                ),
+            modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
             Row(
@@ -78,7 +83,9 @@ fun GradientActionButton(
                 if (icon != null) {
                     Icon(
                         imageVector = icon,
-                        contentDescription = iconContentDescription,
+                        // Meaningful action icons need a description; fall
+                        // back to the button text when none is provided.
+                        contentDescription = iconContentDescription ?: text,
                         tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(24.dp)
                     )

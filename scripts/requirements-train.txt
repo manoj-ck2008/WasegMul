@@ -1,0 +1,32 @@
+# WasegMul training dependencies (pinned for reproducibility)
+# Install: pip install -r scripts/requirements-train.txt
+# Python: 3.10+ (Kaggle default). All versions pinned to avoid silent
+# accuracy regressions from transitive upgrades.
+#
+# NOTE on determinism:
+#   - Set PYTHONHASHSEED=0 in the shell before running training for
+#     reproducible hashing/stratified splits.
+#   - Scripts set random.seed(seed) + ultralytics seed= + torch manual seed
+#     where applicable, and cudnn.benchmark=False (documented in
+#     train_waste_yolo.py / kaggle_train.py). TF32 may still introduce
+#     minor non-determinism on GPU; that is expected and documented.
+#   - No secrets are read from this file. Kaggle auth uses KAGGLE_API_TOKEN
+#     env var or ~/.kaggle/kaggle.json (never committed).
+
+torch==2.3.1
+ultralytics==8.3.0
+onnx2tf==1.26.3
+tensorflow==2.17.0
+opencv-python-headless==4.10.0.84
+pyyaml==6.0.1
+pycocotools==2.0.7
+numpy==1.26.4
+pillow==10.4.0
+
+# Optional (only needed for specific modes):
+# imagehash==4.3.1   # enables perceptual pHash near-dedup in prepare_dataset.py;
+#                    # if absent, script falls back to filename-group + resolution
+#                    # check + MD5 exact-dedup (documented limitation: MD5 alone
+#                    # misses burst-frame near-duplicates).
+# duckdb==1.0.0      # only for build_barcode_db.py --mode duckdb
+# kaggle==1.6.17     # only for kaggle_pipeline.py / dataset downloads

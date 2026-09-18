@@ -2,19 +2,25 @@ package com.agrelius.wasegmul.ui.result
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.data.disposal.DisposalCenterType
 import com.agrelius.wasegmul.data.disposal.NearbyCenterMatch
 import kotlinx.coroutines.delay
@@ -25,36 +31,69 @@ fun DisposalLocatorSection(
     category: String,
     modifier: Modifier = Modifier
 ) {
-    if (centers.isEmpty()) return
-
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
-            text = "Nearest Disposal Facilities",
+            text = stringResource(R.string.disposal_nearest_for_category, category),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(vertical = 8.dp)
         )
 
-        centers.forEachIndexed { index, match ->
-            var visible by remember { mutableStateOf(false) }
-            
-            LaunchedEffect(Unit) {
-                delay(index * 100L)
-                visible = true
-            }
-
-            AnimatedVisibility(
-                visible = visible,
-                enter = slideInVertically(
-                    initialOffsetY = { 50 },
-                    animationSpec = tween(durationMillis = 400)
+        if (centers.isEmpty()) {
+            // Empty state instead of the previous silent return.
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                 )
             ) {
-                DisposalCenterCard(
-                    match = match,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.LocationOff,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = stringResource(R.string.disposal_empty, category),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            return
+        }
+
+        centers.forEachIndexed { index, match ->
+            // Keyed per item so the stagger replays correctly per list.
+            key(match.center.name, match.center.latitude, match.center.longitude) {
+                var visible by remember { mutableStateOf(false) }
+
+                LaunchedEffect(Unit) {
+                    delay(index * 100L)
+                    visible = true
+                }
+
+                AnimatedVisibility(
+                    visible = visible,
+                    enter = fadeIn(tween(400)) + slideInVertically(
+                        initialOffsetY = { 50 },
+                        animationSpec = tween(durationMillis = 400)
+                    )
+                ) {
+                    DisposalCenterCard(
+                        match = match,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                }
             }
         }
     }
@@ -67,7 +106,9 @@ private fun DisposalCenterCard(
 ) {
     val context = LocalContext.current
     val center = match.center
-    
+    val noMapsText = stringResource(R.string.disposal_no_maps)
+    val cannotCallText = stringResource(R.string.disposal_cannot_call)
+
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -87,73 +128,109 @@ private fun DisposalCenterCard(
             ) {
                 TypeBadge(type = center.type)
                 Text(
-                    text = String.format("%.1f km", match.distanceKm),
+                    text = stringResource(
+                        R.string.disposal_distance_km,
+                        match.distanceKm
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
-            
+
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             Text(
                 text = center.name,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            
+
             Spacer(modifier = Modifier.height(4.dp))
-            
+
             Text(
                 text = center.address,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            
+
             Text(
                 text = center.operatingHours,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 2.dp)
             )
-            
+
             Spacer(modifier = Modifier.height(12.dp))
-            
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
                     onClick = {
-                        val uri = Uri.parse("geo:0,0?q=${center.latitude},${center.longitude}(${center.name})")
-                        val intent = Intent(Intent.ACTION_VIEW, uri)
-                        intent.setPackage("com.google.android.apps.maps")
-                        if (intent.resolveActivity(context.packageManager) != null) {
-                            context.startActivity(intent)
-                        } else {
-                            val fallbackIntent = Intent(Intent.ACTION_VIEW, uri)
-                            context.startActivity(fallbackIntent)
+                        try {
+                            val label = Uri.encode(center.name)
+                            val uri = Uri.parse(
+                                "geo:0,0?q=${center.latitude},${center.longitude}($label)"
+                            )
+                            val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+                                setPackage("com.google.android.apps.maps")
+                            }
+                            if (intent.resolveActivity(context.packageManager) != null) {
+                                context.startActivity(intent)
+                            } else {
+                                val fallback = Intent(
+                                    Intent.ACTION_VIEW,
+                                    Uri.parse(
+                                        "geo:${center.latitude},${center.longitude}?q=${Uri.encode(center.name)}"
+                                    )
+                                )
+                                if (fallback.resolveActivity(context.packageManager) != null) {
+                                    context.startActivity(
+                                        Intent.createChooser(
+                                            fallback,
+                                            context.getString(R.string.disposal_navigate)
+                                        )
+                                    )
+                                } else {
+                                    Toast.makeText(context, noMapsText, Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        } catch (_: Exception) {
+                            Toast.makeText(context, noMapsText, Toast.LENGTH_SHORT).show()
                         }
                     },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF00FF94),
-                        contentColor = Color(0xFF020408)
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
                     )
                 ) {
-                    Text("Navigate")
+                    Text(stringResource(R.string.disposal_navigate))
                 }
-                
+
                 if (center.phone != null) {
                     OutlinedButton(
                         onClick = {
-                            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${center.phone}"))
-                            context.startActivity(intent)
+                            try {
+                                val intent = Intent(
+                                    Intent.ACTION_DIAL,
+                                    Uri.parse("tel:${Uri.encode(center.phone)}")
+                                )
+                                if (intent.resolveActivity(context.packageManager) != null) {
+                                    context.startActivity(intent)
+                                } else {
+                                    Toast.makeText(context, cannotCallText, Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (_: Exception) {
+                                Toast.makeText(context, cannotCallText, Toast.LENGTH_SHORT).show()
+                            }
                         },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Call")
+                        Text(stringResource(R.string.disposal_call))
                     }
                 }
             }
@@ -163,12 +240,15 @@ private fun DisposalCenterCard(
 
 @Composable
 private fun TypeBadge(type: DisposalCenterType) {
+    // Mid-tone hues readable on both light and dark surfaces (no
+    // light-blue-on-light / neon-on-white pairs).
     val (backgroundColor, textColor, label) = when (type) {
-        DisposalCenterType.DWCC -> Triple(Color(0xFF1E88E5).copy(alpha = 0.2f), Color(0xFF64B5F6), "DWCC")
-        DisposalCenterType.E_WASTE -> Triple(Color(0xFFE53935).copy(alpha = 0.2f), Color(0xFFE57373), "E-Waste")
-        DisposalCenterType.COMPOST -> Triple(Color(0xFF43A047).copy(alpha = 0.2f), Color(0xFF81C784), "Compost")
-        DisposalCenterType.WARD_OFFICE -> Triple(Color(0xFFFFB300).copy(alpha = 0.2f), Color(0xFFFFD54F), "Ward Office")
-        DisposalCenterType.RETAILER -> Triple(Color(0xFF8E24AA).copy(alpha = 0.2f), Color(0xFFBA68C8), "Retailer")
+        DisposalCenterType.DWCC -> Triple(Color(0xFF1565C0).copy(alpha = 0.15f), Color(0xFF1565C0), "DWCC")
+        DisposalCenterType.E_WASTE -> Triple(Color(0xFFC0392B).copy(alpha = 0.15f), Color(0xFFC0392B), "E-Waste")
+        DisposalCenterType.COMPOST -> Triple(Color(0xFF1E8E4D).copy(alpha = 0.15f), Color(0xFF1E8E4D), "Compost")
+        DisposalCenterType.WARD_OFFICE -> Triple(Color(0xFF9A7B0A).copy(alpha = 0.18f), Color(0xFF7D6305), "Ward Office")
+        DisposalCenterType.RETAILER -> Triple(Color(0xFF6A1B9A).copy(alpha = 0.15f), Color(0xFF6A1B9A), "Retailer")
+        DisposalCenterType.HAZARDOUS -> Triple(Color(0xFFE65100).copy(alpha = 0.18f), Color(0xFFE65100), "Hazardous")
     }
 
     Surface(

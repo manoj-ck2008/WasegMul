@@ -86,14 +86,19 @@ class MessageGeneratorTest {
     }
 
     @Test
-    fun testGenerateBarcode_blankProductNameDefaultsToUnknown() {
-        val msg = MessageGenerator.generateBarcode(
-            productName = "",
-            category = "Recyclable",
-            subclass = "cardboard",
-            mode = ClassificationMode.BARCODE_GROUND_TRUTH
-        )
-        assertTrue("Should default to 'Unknown Product'", msg.contains("Unknown Product"))
+    fun testGenerateBarcode_blankProductNameThrows() {
+        // Audit §3.52: the API never synthesises product names — UI renders its own fallback.
+        try {
+            MessageGenerator.generateBarcode(
+                productName = "",
+                category = "Recyclable",
+                subclass = "cardboard",
+                mode = ClassificationMode.BARCODE_GROUND_TRUTH
+            )
+            fail("blank productName must throw IllegalArgumentException")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message!!.contains("productName"))
+        }
     }
 
     @Test
@@ -105,5 +110,32 @@ class MessageGeneratorTest {
             mode = ClassificationMode.BOTH_AGREE
         )
         assertTrue("Should generate agree message", msg.contains("Metal") && msg.contains("Recyclable"))
+    }
+
+    @Test
+    fun testModerateAgreement_neverClaimsHighDependability() {
+        val banned = listOf("highly dependable", "High-confidence", "High reliability")
+        for (seed in 0..20) {
+            val msg = MessageGenerator.generate(
+                category = "Recyclable",
+                subcategory = "Plastic",
+                catConfidence = 0.55f,
+                subConfidence = 0.55f,
+                topSubcategories = listOf("Plastic" to 0.55f),
+                topCategories = listOf("Recyclable" to 0.55f),
+                mode = ClassificationMode.BOTH_AGREE,
+                random = kotlin.random.Random(seed)
+            )
+            banned.forEach { phrase ->
+                assertFalse("seed $seed leaked '$phrase'", msg.contains(phrase))
+            }
+        }
+    }
+
+    @Test
+    fun testHumanizeLabel_preservesHyphensAndAcronyms() {
+        assertEquals("Air-Conditioner", MessageGenerator.humanizeLabel("Air-Conditioner"))
+        assertEquals("PET", MessageGenerator.humanizeLabel("pet"))
+        assertEquals("HDPE", MessageGenerator.humanizeLabel("HDPE"))
     }
 }

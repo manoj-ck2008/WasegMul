@@ -17,7 +17,7 @@
   <img src="https://img.shields.io/badge/Kotlin-2.1.0-7F52FF" alt="Kotlin">
   <img src="https://img.shields.io/badge/TensorFlow%20Lite-2.17.0-FF6F00" alt="TFLite">
   <img src="https://img.shields.io/badge/Compose%20BOM-2024.11.00-4285F4" alt="Compose">
-  <img src="https://img.shields.io/badge/Tests-8%20Suites%20Passing-success" alt="Tests">
+   <img src="https://img.shields.io/badge/Tests-27%20Suites%20Passing-success" alt="Tests">
 </p>
 
 <p align="center">
@@ -63,7 +63,7 @@ flowchart TD
     end
 
     subgraph StorageAndUI ["Presentation & Persistence"]
-        DB[("Room Database v9: Composite Indices")]
+        DB[("Room Database v11: Single-Column Indices")]
         UI["Jetpack Compose Material 3 UI"]
     end
 
@@ -93,13 +93,13 @@ flowchart TD
 
 ### Implemented
 
-- **On-Device Waste Classification**: Dual EfficientNet neural networks classify items into 4 categories and 30 subclasses in under 50ms.
+- **On-Device Waste Classification**: Dual EfficientNet neural networks classify items into 4 categories and 30 subclasses in milliseconds per model on modern devices (reference figures in Model Specifications — device-dependent, not a guarantee).
 - **Zero-Allocation Tensor Pipelines**: Reusable preallocated direct native `ByteBuffer` instances eliminate GC churn during continuous camera streaming.
 - **YOLO Real-Time Object Detection**: Live CameraX object detection with bounding boxes, labels, and interactive tap-to-classify ROI cropping.
 - **Multi-Model ML Arbitrator**: Cross-validates category and subclass predictions, detects conflicts, and quantifies uncertainty using Shannon entropy.
 - **Actionable Disposal Guidance**: EPA-aligned disposal instructions, environmental hazards, and preparation steps across all 30 subclasses.
 - **Eco Impact Dashboard**: Tracks cumulative diverted landfill waste, avoided CO2 emissions, conserved water, and saved energy.
-- **Room Database v9**: Optimized schema with composite indices on `(isHarmful, timestamp)` and `(category, timestamp)` for high-performance querying.
+- **Room Database v11**: Schema with single-column indices on `waste_history(timestamp, category, subclass, feedback)`, a `barcode_products` cache table (v9→v10), and barcode provenance columns on `waste_history` (v10→v11) for high-performance querying.
 - **Data Integrity & Consistency**: Re-derives canonical category automatically upon user feedback correction.
 - **Material Design 3 & Expressive UI**: Glassmorphism cards with Android 12+ RenderEffect frosted blur, animated organic backgrounds, and falling petals.
 - **Dynamic Color & Themes**: Full support for Android 12+ dynamic color matching, Emerald Neon dark mode, Light mode, and Olive Nature theme.
@@ -179,20 +179,20 @@ stateDiagram-v2
 | Property | Value |
 |---|---|
 | **Model Architecture** | EfficientNet-B0 (Fine-tuned) |
-| **Input Dimensions** | 224 x 224 x 3 RGB Normalized Float32 (0.0 to 1.0) |
+| **Input Dimensions** | 224 x 224 x 3 RGB Float32, raw [0,255] (no NormalizeOp — matches the `ImagePreprocessor` normalization contract; training preprocessing must use the same scale) |
 | **Output Shape** | `[1, 4]` (Probability distribution via Softmax) |
 | **Classes** | `E-Waste`, `Organic`, `Recyclable`, `Trash` |
-| **Latency** | ~25 ms (CPU / XNNPACK) |
+| **Latency** | ~25 ms reference figure (Pixel-class device, CPU / XNNPACK — device-dependent, not a guarantee) |
 
 ### 2. Subclass Classifier
 
 | Property | Value |
 |---|---|
 | **Model Architecture** | EfficientNet-B0 (Fine-tuned) |
-| **Input Dimensions** | 224 x 224 x 3 RGB Normalized Float32 (0.0 to 1.0) |
+| **Input Dimensions** | 224 x 224 x 3 RGB Float32, raw [0,255] (no NormalizeOp — matches the `ImagePreprocessor` normalization contract; training preprocessing must use the same scale) |
 | **Output Shape** | `[1, 30]` (Probability distribution via Softmax) |
 | **Classes (30)** | `Air-Conditioner`, `Battery`, `Cardboard`, `Electronic Component`, `Electronic Device`, `Glass`, `Keyboard`, `Laptop`, `Metal`, `Microwave`, `Miscellaneous Trash`, `Mobile`, `Mouse`, `Organic`, `PCB`, `Paper`, `Plastic`, `Player`, `Printer`, `Refrigerator`, `Television`, `Textile Trash`, `Washing Machine`, `automobile wastes`, `clothing`, `disposable_plastic_cutlery`, `light bulbs`, `shoes`, `styrofoam_cups`, `styrofoam_food_containers` |
-| **Latency** | ~35 ms (CPU / XNNPACK) |
+| **Latency** | ~35 ms reference figure (Pixel-class device, CPU / XNNPACK — device-dependent, not a guarantee) |
 
 ### 3. YOLO Object Detector
 
@@ -201,25 +201,32 @@ stateDiagram-v2
 | **Model Architecture** | YOLO11n (Ultralytics) / YOLOv8n fallback |
 | **Input Dimensions** | 640 x 640 x 3 RGB Normalized Float32 (Letterbox preservation) |
 | **Output Shape** | `[1, 19, 8400]` (4 box coordinates + 15 waste classes) or `[1, 84, 8400]` (COCO) |
-| **NMS Post-Processing** | IoU threshold = 0.45, Confidence threshold = 0.35 |
+| **NMS Post-Processing** | IoU threshold = 0.45, Confidence threshold = 0.45 (see `YoloDetector` `IOU_THRESHOLD` / `CONFIDENCE_THRESHOLD`) |
 | **Feature** | Real-time bounding boxes with tap-to-focus ROI crop and classification |
 
 ---
 
 ## Test Verification Matrix
 
-All test suites execute against the Kotlin Multiplatform shared library and Android application modules:
+All test suites execute against the Kotlin Multiplatform shared library and Android application modules — 14 app suites (127 tests) + 13 shared suites (100 tests):
 
 | Test Suite | File Path | Test Cases | Seam / Coverage |
 |---|---|---|---|
-| **EcoImpactTest** | `app/src/test/.../EcoImpactTest.kt` | 14 tests | Diversion multipliers, hazardous penalty, zero bounds, aggregation |
-| **MLArbitratorTest** | `app/src/test/.../MLArbitratorTest.kt` | 12 tests | Full agreement, partial agreement, degradation fallbacks, entropy spikes |
-| **PredictionCodecTest** | `app/src/test/.../PredictionCodecTest.kt` | 9 tests | Base64 and Hex serialization/deserialization, float precision, boundary cases |
-| **MessageGeneratorTest** | `app/src/test/.../MessageGeneratorTest.kt` | 9 tests | 8 operational classification modes, fallback safety messages |
-| **WasteKnowledgeBaseTest**| `app/src/test/.../WasteKnowledgeBaseTest.kt` | 10 tests | 30 subclass rules, hazard flags, missing entry fallbacks |
-| **WasteMappingTest** | `app/src/test/.../WasteMappingTest.kt` | 8 tests | Subclass-to-category taxonomy integrity, case insensitivity |
-| **MappersTest** | `app/src/test/.../MappersTest.kt` | 7 tests | Domain model to Room entity bidirectional mapping, null safety |
-| **ExampleUnitTest** | `app/src/test/.../ExampleUnitTest.kt` | 1 test | Base test runner sanity verification |
+| **EcoImpactTest** | `app/src/test/.../EcoImpactTest.kt` | 9 tests | Diversion multipliers, hazardous credit, zero bounds, credited-counts |
+| **MLArbitratorTest** | `app/src/test/.../MLArbitratorTest.kt` | 14 tests | Full agreement, partial agreement, degradation fallbacks, entropy spikes |
+| **ModelBenchmarkTest** | `app/src/test/.../ModelBenchmarkTest.kt` | 20 tests | Taxonomy counts, IoU contract, prod entropy/softmax/range-guard, CSV sanitize, pinned timeouts, codec round-trip |
+| **PredictionCodecTest** | `app/src/test/.../PredictionCodecTest.kt` | 7 tests | Base64 and Hex serialization/deserialization, float precision, boundary cases |
+| **MessageGeneratorTest** | `app/src/test/.../MessageGeneratorTest.kt` | 10 tests | 8 operational classification modes, fallback safety messages |
+| **WasteKnowledgeBaseTest**| `app/src/test/.../WasteKnowledgeBaseTest.kt` | 5 tests | 30 subclass rules, hazard flags, missing entry fallbacks |
+| **WasteMappingTest** | `app/src/test/.../WasteMappingTest.kt` | 7 tests | Subclass-to-category taxonomy integrity, case insensitivity |
+| **MappersTest** | `app/src/test/.../MappersTest.kt` | 4 tests | Domain model to Room entity bidirectional mapping, null safety |
+| **WasteRepositoryTest** | `app/src/test/.../WasteRepositoryTest.kt` | 10 tests | Repository data-access seams |
+| **BarcodeScannerTest** | `app/src/test/.../ml/BarcodeScannerTest.kt` | 8 tests | EAN-13 checksum fixtures, GTIN URL parsing, junk rejection, lifecycle |
+| **BarcodeRepositoryTest** | `app/src/test/.../repository/BarcodeRepositoryTest.kt` | 7 tests | Barcode resolution seams |
+| **BarcodeDisplayTest** | `app/src/test/.../ui/BarcodeDisplayTest.kt` | 8 tests | Barcode display parsing, CSV cell sanitize |
+| **GamificationManagerTest** | `app/src/test/.../gamification/GamificationManagerTest.kt` | 10 tests | XP/state computation seams |
+| **DisposalDatabaseTest** | `app/src/test/.../data/disposal/DisposalDatabaseTest.kt` | 8 tests | Disposal data loading/filtering seams |
+| **Shared commonTest** | `shared/src/commonTest/...` (13 suites) | 100 tests | CommonModels, DecayTime, EcoImpact, IOSBridge, MessageGenerator, MLArbitrator (+barcode), network GTIN/lenient-JSON, PackagingWasteMapper, PredictionCodec, WasteKnowledgeBase, WasteMapping |
 
 Execute the complete test suite locally:
 
@@ -240,7 +247,9 @@ WasegMul/
 │   ├── schemas/                    # Room exported JSON schemas for schema migrations
 │   │   └── com.agrelius.wasegmul.data.WasteDatabase/
 │   │       ├── 8.json              # Version 8 schema
-│   │       └── 9.json              # Version 9 schema with composite indices
+│   │       ├── 9.json              # Version 9 schema with category/subclass/feedback indices
+│   │       ├── 10.json             # Version 10 schema with barcode_products cache table
+│   │       └── 11.json             # Version 11 schema with barcode provenance columns
 │   ├── src/
 │   │   ├── main/
 │   │   │   ├── assets/             # Bundled TFLite models and label dictionaries
@@ -250,7 +259,7 @@ WasegMul/
 │   │   │   │   ├── subclass_classes.txt
 │   │   │   │   └── yolov8n.tflite
 │   │   │   ├── java/com/agrelius/wasegmul/
-│   │   │   │   ├── data/           # Room entities, DAOs, and database migrations (MIGRATION_8_9)
+│   │   │   │   ├── data/           # Room entities, DAOs, and database migrations (MIGRATION_6_7 through MIGRATION_10_11)
 │   │   │   │   ├── ml/             # ModelManager, YoloDetector, TfliteClassifier, Preprocessors
 │   │   │   │   │   ├── classifiers/
 │   │   │   │   │   │   ├── CategoryClassifier.kt
@@ -272,7 +281,7 @@ WasegMul/
 │   │   │   │   ├── utils/          # SettingsManager, CSVExporter, ShareHelper, EcoThoughts
 │   │   │   │   └── viewmodel/      # HomeViewModel, ClassificationViewModel, HistoryViewModel
 │   │   │   └── res/                # Vector drawables, strings, colors, mipmaps
-│   │   └── test/                   # Comprehensive unit test suites (8 suites)
+│   │   └── test/                   # Unit test suites (14 app suites; 13 more in shared/commonTest)
 │   ├── build.gradle.kts            # Android application build configuration
 │   └── proguard-rules.pro          # TFLite, Room, and Coroutines R8 keep rules
 ├── shared/                         # Kotlin Multiplatform (KMP) shared module
@@ -376,6 +385,20 @@ Then invoke:
 ```bash
 ./gradlew assembleRelease
 ```
+
+> **Keystore discipline**: `keystore.properties`, `*.jks`, and `*.keystore` are
+> git-ignored (never commit them — a force-add would be a security incident).
+> Prefer CI secrets / environment variables over a root-located file, `chmod 600`
+> the file and key, and rotate credentials if they ever touch VCS, screenshots,
+> or shared machines. Release builds fail closed without valid signing config
+> (see `app/build.gradle.kts`).
+
+### Versioning
+
+The app version is single-sourced from `gradle.properties` (`VERSION_NAME=2.0.0`,
+`VERSION_CODE=3`). The iOS shell's `kAppVersionString` (`ContentView.swift`) and
+the shared `IOSBridge` surface must be bumped in the same commit — there is no
+automatic cross-platform version propagation.
 
 ---
 

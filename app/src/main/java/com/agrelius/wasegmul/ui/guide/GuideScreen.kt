@@ -15,11 +15,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -28,8 +31,13 @@ import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.WasteKnowledgeBase
 import com.agrelius.wasegmul.WasteMapping
 import com.agrelius.wasegmul.ui.components.OrganicBackground
+import com.agrelius.wasegmul.ui.components.rememberReduceMotion
 import com.agrelius.wasegmul.ui.home.format
+import com.agrelius.wasegmul.ui.result.humanizeLabel
 import com.agrelius.wasegmul.ui.theme.*
+import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 data class GuideItem(
     val subclass: String,
@@ -47,26 +55,36 @@ data class GuideItem(
 fun GuideScreen(
     onBack: () -> Unit
 ) {
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf("All") }
-    var expandedItemKey by remember { mutableStateOf<String?>(null) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var selectedCategory by rememberSaveable { mutableStateOf("All") }
+    var expandedItemKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val reduceMotion = rememberReduceMotion()
 
+    // Canonical filter keys; labels localized via shared history resources.
     val categories = listOf("All", "Recyclable", "Organic", "E-Waste", "Trash", "Hazardous")
 
-    val allGuideItems = remember {
-        (WasteMapping.MAPPING + WasteMapping.EXTENDED_MAPPING).map { (subclass, meta) ->
-            val info = WasteKnowledgeBase.getInfo(meta.category, subclass)
-            GuideItem(
-                subclass = subclass,
-                category = meta.category,
-                weightKg = meta.weightKg,
-                isHazardous = meta.isHazardous,
-                disposalGuide = info.disposalGuide,
-                environmentalImpact = info.environmentalImpact,
-                recyclingBenefits = info.recyclingBenefits,
-                sources = info.sources
-            )
-        }.sortedBy { it.subclass.lowercase() }
+    // Knowledge Base load off-Main (was: map + getInfo inside remember on
+    // the UI thread). Dedupe MAPPING+EXTENDED overlaps by subclass+category.
+    var allGuideItems by remember { mutableStateOf<List<GuideItem>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        allGuideItems = withContext(Dispatchers.IO) {
+            (WasteMapping.MAPPING + WasteMapping.EXTENDED_MAPPING)
+                .map { (subclass, meta) ->
+                    val info = WasteKnowledgeBase.getInfo(meta.category, subclass)
+                    GuideItem(
+                        subclass = subclass,
+                        category = meta.category,
+                        weightKg = meta.weightKg,
+                        isHazardous = meta.isHazardous,
+                        disposalGuide = info.disposalGuide,
+                        environmentalImpact = info.environmentalImpact,
+                        recyclingBenefits = info.recyclingBenefits,
+                        sources = info.sources
+                    )
+                }
+                .distinctBy { "${it.category.lowercase(Locale.ROOT)}/${it.subclass.lowercase(Locale.ROOT)}" }
+                .sortedBy { it.subclass.lowercase(Locale.ROOT) }
+        }
     }
 
     val filteredItems = remember(allGuideItems, searchQuery, selectedCategory) {
@@ -81,7 +99,9 @@ fun GuideScreen(
                 item.subclass.contains(sq, ignoreCase = true) ||
                 item.category.contains(sq, ignoreCase = true) ||
                 item.disposalGuide.contains(sq, ignoreCase = true) ||
-                item.environmentalImpact.contains(sq, ignoreCase = true)
+                item.environmentalImpact.contains(sq, ignoreCase = true) ||
+                item.recyclingBenefits.contains(sq, ignoreCase = true) ||
+                item.sources.contains(sq, ignoreCase = true)
             }
             matchesCategory && matchesSearch
         }
@@ -103,8 +123,7 @@ fun GuideScreen(
                         Text(
                             stringResource(R.string.guide_subtitle),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 10.sp
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 },
@@ -122,7 +141,7 @@ fun GuideScreen(
         }
     ) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            OrganicBackground()
+            OrganicBackground(animate = !reduceMotion)
 
             Column(
                 modifier = Modifier
@@ -153,7 +172,7 @@ fun GuideScreen(
                     trailingIcon = {
                         if (searchQuery.isNotBlank()) {
                             IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.history_clear_search), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     },
@@ -169,7 +188,7 @@ fun GuideScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Category Filter Chips
+                // Category Filter Chips (localized canonical labels)
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -181,7 +200,7 @@ fun GuideScreen(
                             onClick = { selectedCategory = category },
                             label = {
                                 Text(
-                                    text = category,
+                                    text = guideFilterLabel(category),
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                                 )
@@ -220,7 +239,7 @@ fun GuideScreen(
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                stringResource(R.string.history_no_search_results),
+                                stringResource(R.string.guide_no_results),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -232,13 +251,14 @@ fun GuideScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         contentPadding = PaddingValues(bottom = 24.dp)
                     ) {
-                        items(filteredItems, key = { it.subclass }) { item ->
-                            val isExpanded = expandedItemKey == item.subclass
+                        items(filteredItems, key = { "${it.category}/${it.subclass}" }) { item ->
+                            val itemKey = "${item.category}/${item.subclass}"
+                            val isExpanded = expandedItemKey == itemKey
                             GuideCard(
                                 item = item,
                                 isExpanded = isExpanded,
                                 onToggleExpand = {
-                                    expandedItemKey = if (isExpanded) null else item.subclass
+                                    expandedItemKey = if (isExpanded) null else itemKey
                                 }
                             )
                         }
@@ -250,17 +270,24 @@ fun GuideScreen(
 }
 
 @Composable
+private fun guideFilterLabel(key: String): String = when (key) {
+    "All" -> stringResource(R.string.history_filter_all)
+    "E-Waste" -> stringResource(R.string.history_filter_ewaste)
+    "Recyclable" -> stringResource(R.string.history_filter_recyclable)
+    "Organic" -> stringResource(R.string.history_filter_organic)
+    "Trash" -> stringResource(R.string.history_filter_trash)
+    "Hazardous" -> stringResource(R.string.history_filter_hazardous)
+    else -> key
+}
+
+@Composable
 private fun GuideCard(
     item: GuideItem,
     isExpanded: Boolean,
     onToggleExpand: () -> Unit
 ) {
-    val categoryColor = when (item.category) {
-        "Recyclable" -> HighConfidenceGreen
-        "Organic" -> GrassGreenLustrous
-        "E-Waste" -> SkyBlueDeep
-        else -> Color(0xFFFFA726)
-    }
+    // Single category-color map (no per-screen palette drift).
+    val categoryColor = categoryColor(item.category)
 
     val hazardColor = MaterialTheme.colorScheme.error
 
@@ -273,7 +300,13 @@ private fun GuideCard(
                 color = if (item.isHazardous) hazardColor.copy(alpha = 0.6f) else LocalGlassColors.current.border,
                 shape = RoundedCornerShape(18.dp)
             )
-            .clickable { onToggleExpand() },
+            // Single expand handler on the card (Role.Button with a label;
+            // no nested clickable duplicating the action).
+            .clickable(
+                role = Role.Button,
+                onClickLabel = humanizeLabel(item.subclass),
+                onClick = onToggleExpand
+            ),
         colors = CardDefaults.cardColors(
             containerColor = if (item.isHazardous) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f)
             else MaterialTheme.colorScheme.surface.copy(alpha = 0.55f)
@@ -296,7 +329,7 @@ private fun GuideCard(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = item.subclass,
+                            text = humanizeLabel(item.subclass),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = if (item.isHazardous) hazardColor else MaterialTheme.colorScheme.onSurface,
@@ -361,13 +394,11 @@ private fun GuideCard(
                     }
                 }
 
-                IconButton(onClick = onToggleExpand) {
-                    Icon(
-                        imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = if (isExpanded) "Collapse" else "Expand",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             AnimatedVisibility(

@@ -25,24 +25,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.agrelius.wasegmul.EcoImpactCalculator
+import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.WasteRecord
 import com.agrelius.wasegmul.ui.components.GlassCard
+import com.agrelius.wasegmul.ui.theme.categoryColor
+import java.util.Locale
 import kotlinx.coroutines.delay
-
-private fun getCategoryColor(category: String): Color {
-    return when (category.lowercase()) {
-        "e-waste" -> Color(0xFFE74C3C)
-        "organic" -> Color(0xFF2ECC71)
-        "recyclable" -> Color(0xFF3498DB)
-        "trash" -> Color(0xFF95A5A6)
-        else -> Color(0xFFF39C12) // Other/Unknown
-    }
-}
 
 @Composable
 fun HistoryDashboard(allHistory: List<WasteRecord>) {
@@ -101,10 +97,24 @@ fun HistoryDashboard(allHistory: List<WasteRecord>) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AnimatedDonutChart(categoryData: Map<String, Int>) {
     val totalCount = categoryData.values.sum()
     var startAnimation by remember { mutableStateOf(false) }
+
+    // Resolve slice colors in composition (never inside the Canvas draw
+    // scope or a stdlib-transform lambda, neither of which is a
+    // @Composable context — hence the plain for-loop).
+    val sortedEntries = remember(categoryData) {
+        categoryData.entries.sortedByDescending { it.value }
+    }
+    val sliceColors = mutableMapOf<String, androidx.compose.ui.graphics.Color>()
+    for ((category, _) in sortedEntries) {
+        sliceColors[category] = categoryColor(category)
+    }
+    // Hoisted: MaterialTheme is @Composable and unusable in draw scope.
+    val fallbackSliceColor = MaterialTheme.colorScheme.primary
 
     val sweepProgress by animateFloatAsState(
         targetValue = if (startAnimation) 1f else 0f,
@@ -138,22 +148,26 @@ fun AnimatedDonutChart(categoryData: Map<String, Int>) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     var startAngle = -90f
                     val strokeWidth = 24.dp.toPx()
-                    val gap = 3f
+                    // No gap for a single slice (a full ring with a notch is
+                    // a lie); gaps only separate 2+ slices.
+                    val gap = if (categoryData.size < 2) 0f else 3f
+                    // Inset by half-stroke so round caps are not clipped at canvas edges.
+                    val halfStroke = strokeWidth / 2f
 
                     val totalSweep = 360f - (categoryData.size * gap)
-                    
-                    categoryData.entries.sortedByDescending { it.value }.forEach { (category, count) ->
+
+                    sortedEntries.forEach { (category, count) ->
                         val proportion = count.toFloat() / totalCount
                         val sweepAngle = proportion * totalSweep * sweepProgress
-                        
+
                         drawArc(
-                            color = getCategoryColor(category),
+                            color = sliceColors[category] ?: fallbackSliceColor,
                             startAngle = startAngle,
                             sweepAngle = sweepAngle,
                             useCenter = false,
                             style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
-                            size = Size(size.width, size.height),
-                            topLeft = Offset(0f, 0f)
+                            size = Size(size.width - strokeWidth, size.height - strokeWidth),
+                            topLeft = Offset(halfStroke, halfStroke)
                         )
                         startAngle += sweepAngle + gap
                     }
@@ -169,7 +183,7 @@ fun AnimatedDonutChart(categoryData: Map<String, Int>) {
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Total Scans",
+                        text = stringResource(R.string.dashboard_total_scans),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -179,21 +193,21 @@ fun AnimatedDonutChart(categoryData: Map<String, Int>) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Legend
-            FlowRow(
+            // Legend (foundation FlowRow directly; color + text, never color alone)
+            @OptIn(ExperimentalLayoutApi::class)
+            androidx.compose.foundation.layout.FlowRow(
                 horizontalArrangement = Arrangement.Center,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 categoryData.entries.sortedByDescending { it.value }.forEach { (category, count) ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 8.dp)
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Box(
                             modifier = Modifier
                                 .size(12.dp)
-                                .background(getCategoryColor(category), CircleShape)
+                                .background(categoryColor(category), CircleShape)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
@@ -209,27 +223,10 @@ fun AnimatedDonutChart(categoryData: Map<String, Int>) {
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun FlowRow(
-    modifier: Modifier = Modifier,
-    horizontalArrangement: Arrangement.Horizontal = Arrangement.Start,
-    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
-    content: @Composable () -> Unit
-) {
-    androidx.compose.foundation.layout.FlowRow(
-        modifier = modifier,
-        horizontalArrangement = horizontalArrangement,
-        verticalArrangement = verticalArrangement
-    ) {
-        content()
-    }
-}
-
-
 @Composable
 fun DashboardStatsRow(history: List<WasteRecord>) {
-    val totalWeight = history.sumOf { it.estimatedWeight ?: 0.0 }
+    // estimatedWeight is non-null Double (shared model); no stale Elvis needed.
+    val totalWeight = history.sumOf { it.estimatedWeight }
     val co2Prevented = EcoImpactCalculator.calculate(history).co2PreventedKg
 
     Row(
@@ -238,7 +235,7 @@ fun DashboardStatsRow(history: List<WasteRecord>) {
     ) {
         StatCard(
             modifier = Modifier.weight(1f),
-            title = "Scans",
+            title = stringResource(R.string.dashboard_total_scans),
             value = history.size.toFloat(),
             icon = Icons.Default.Analytics,
             isInteger = true,
@@ -246,7 +243,7 @@ fun DashboardStatsRow(history: List<WasteRecord>) {
         )
         StatCard(
             modifier = Modifier.weight(1f),
-            title = "Weight",
+            title = stringResource(R.string.dashboard_total_weight),
             value = totalWeight.toFloat(),
             icon = Icons.Default.Scale,
             isInteger = false,
@@ -254,7 +251,7 @@ fun DashboardStatsRow(history: List<WasteRecord>) {
         )
         StatCard(
             modifier = Modifier.weight(1f),
-            title = "CO₂ Saved",
+            title = stringResource(R.string.dashboard_co2_offset),
             value = co2Prevented.toFloat(),
             icon = Icons.Default.Cloud,
             isInteger = false,
@@ -284,7 +281,7 @@ fun StatCard(
         startAnimation = true
     }
 
-    GlassCard(modifier = modifier) {
+    GlassCard(modifier = modifier.semantics { contentDescription = "$title: $value $unit" }) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -302,7 +299,7 @@ fun StatCard(
             val formattedValue = if (isInteger) {
                 animatedValue.toInt().toString()
             } else {
-                String.format("%.2f", animatedValue)
+                String.format(Locale.getDefault(), "%.2f", animatedValue)
             }
             
             Text(
@@ -328,13 +325,15 @@ fun CategoryBreakdownRow(categoryData: Map<String, Int>, totalCount: Int) {
     val sortedCategories = categoryData.entries.sortedByDescending { it.value }
 
     LazyRow(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { contentDescription = "Category breakdown" },
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(horizontal = 4.dp)
     ) {
         items(sortedCategories) { (category, count) ->
             val percentage = if (totalCount > 0) (count.toFloat() / totalCount * 100) else 0f
-            val color = getCategoryColor(category)
+            val color = categoryColor(category)
             
             Box(
                 modifier = Modifier
@@ -349,7 +348,7 @@ fun CategoryBreakdownRow(categoryData: Map<String, Int>, totalCount: Int) {
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "$category ${String.format("%.1f%%", percentage)}",
+                        text = "$category ${String.format(Locale.getDefault(), "%.1f%%", percentage)}",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = color

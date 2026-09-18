@@ -32,19 +32,19 @@ class EcoImpactTest {
         // Total weight = 1.0 + 2.0 + 0.5 + 0.1 = 3.6 kg
         assertEquals(3.6, metrics.totalWeightKg, 0.001)
 
-        // CO2 prevented:
-        // Recyclable: 1.0 * 1.5 = 1.5 kg
-        // Organic: 2.0 * 0.8 = 1.6 kg
-        // E-Waste: 0.5 * 2.2 = 1.1 kg
+        // CO2 prevented (docs/architecture.md multipliers):
+        // Recyclable: 1.0 * 1.8 = 1.8 kg
+        // Organic: 2.0 * 0.5 = 1.0 kg
+        // E-Waste: 0.5 * 3.5 = 1.75 kg
         // Trash: 0 kg
-        // Total CO2: 1.5 + 1.6 + 1.1 = 4.2 kg
-        assertEquals(4.2, metrics.co2PreventedKg, 0.001)
+        // Total CO2: 1.8 + 1.0 + 1.75 = 4.55 kg
+        assertEquals(4.55, metrics.co2PreventedKg, 0.001)
 
-        // Water saved: 1.0 * 15.0 = 15.0 Liters
-        assertEquals(15.0, metrics.waterSavedLiters, 0.001)
+        // Water saved: Recyclable 1.0*25 + Organic 2.0*2.0 + E-Waste 0.5*15.0 = 36.5 L
+        assertEquals(36.5, metrics.waterSavedLiters, 0.001)
 
-        // Tree-year equivalent: 4.2 / 21.77
-        val expectedTreeYears = 4.2 / 21.77
+        // Tree-year equivalent: 4.55 / 21.77
+        val expectedTreeYears = 4.55 / 21.77
         assertEquals(expectedTreeYears, metrics.treeYearEquivalent, 0.001)
         assertEquals(4, metrics.totalItems)
 
@@ -86,8 +86,8 @@ class EcoImpactTest {
             )
         )
         val metrics = EcoImpactCalculator.calculate(records)
-        // Battery maps to E-Waste -> 1.0 kg * 2.2 = 2.2 kg CO2, 6.5 kWh energy
-        assertEquals(2.2, metrics.co2PreventedKg, 0.001)
+        // Battery maps to E-Waste -> 1.0 kg * 3.5 = 3.5 kg CO2, 6.5 kWh energy, 15.0 L water
+        assertEquals(3.5, metrics.co2PreventedKg, 0.001)
         assertEquals(6.5, metrics.energySavedKwh, 0.001)
     }
 
@@ -112,6 +112,52 @@ class EcoImpactTest {
         assertEquals(1, metrics.totalItems)
     }
 
+    @Test
+    fun calculate_hazardousTrash_earnsDiversionCredit() {
+        val records = listOf(
+            WasteRecord(id = 1, category = "Trash", subclass = "light bulbs", confidence = 0.9f, estimatedWeight = 1.0)
+        )
+        val metrics = EcoImpactCalculator.calculate(records)
+        // Hazardous: 1.0 * 2.2 CO2, 10.0 water, 3.0 energy
+        assertEquals(2.2, metrics.co2PreventedKg, 0.001)
+        assertEquals(10.0, metrics.waterSavedLiters, 0.001)
+        assertEquals(3.0, metrics.energySavedKwh, 0.001)
+    }
+
+    @Test
+    fun calculate_divertedCountsOnlyCredited() {
+        val records = listOf(
+            WasteRecord(id = 1, category = "Recyclable", subclass = "Plastic", confidence = 0.9f, estimatedWeight = 1.0),
+            WasteRecord(id = 2, category = "Trash", subclass = "Miscellaneous Trash", confidence = 0.7f, estimatedWeight = 0.5),
+            WasteRecord(
+                id = 3, category = "Recyclable", subclass = "Plastic", confidence = 0.7f,
+                estimatedWeight = 2.0, feedback = "incorrect", correctedSubclass = null
+            )
+        )
+        val metrics = EcoImpactCalculator.calculate(records)
+        assertEquals(3, metrics.totalItems)
+        assertEquals(1.5, metrics.totalWeightKg, 0.001)
+        assertEquals(1, metrics.divertedItems)
+        assertEquals(1.0, metrics.divertedWeightKg, 0.001)
+    }
+
+    @Test
+    fun calculate_typoCorrection_fallsBackAndFlags() {
+        val records = listOf(
+            WasteRecord(
+                id = 1, category = "Recyclable", subclass = "Plastic", confidence = 0.8f,
+                estimatedWeight = 1.0, feedback = "incorrect", correctedSubclass = "Plastc-typo-99"
+            )
+        )
+        val metrics = EcoImpactCalculator.calculate(records)
+        assertEquals(1.8, metrics.co2PreventedKg, 0.001)
+        assertEquals(1, metrics.fallbackCorrectionItems)
+    }
+
+    // NOTE (placement): this is a Knowledge-Base/Mapping integrity probe, not an
+    // EcoImpact assertion — its canonical home is WasteKnowledgeBaseTest (which owns
+    // the full guidance suite). Kept here as a cheap cross-module smoke signal only;
+    // do not grow KB coverage in this file.
     @Test
     fun wasteKnowledgeBase_all30ClassesHaveDetailedGuidance() {
         assertEquals(30, WasteMapping.MAPPING.size)

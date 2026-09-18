@@ -1,8 +1,9 @@
 package com.agrelius.wasegmul.ui.settings
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -10,11 +11,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.res.stringResource
@@ -23,6 +26,7 @@ import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.utils.ThemeMode
 import kotlinx.coroutines.launch
 import com.agrelius.wasegmul.viewmodel.HomeViewModel
+import kotlin.math.roundToInt
 
 import android.os.Build
 import androidx.compose.ui.tooling.preview.Preview
@@ -35,7 +39,28 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as? com.agrelius.wasegmul.WasegMulApp
-        ?: return
+    if (app == null) {
+        // Error UI instead of a blank screen on a bad Application cast.
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    Icons.Default.ErrorOutline,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(48.dp)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = stringResource(R.string.home_app_error),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 32.dp)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(onClick = onBack) { Text(stringResource(R.string.common_go_back)) }
+            }
+        }
+        return
+    }
     val settingsViewModel: SettingsViewModel = viewModel(
         factory = SettingsViewModel.Factory(app.settingsManager)
     )
@@ -44,16 +69,20 @@ fun SettingsScreen(
     val dynamicColor by settingsViewModel.dynamicColor.collectAsState()
     val confidenceThreshold by settingsViewModel.confidenceThreshold.collectAsState()
     val hapticsEnabled by settingsViewModel.hapticsEnabled.collectAsState()
+    val homeError by homeViewModel.error.collectAsState()
 
     SettingsContent(
         themeMode = themeMode,
         dynamicColor = dynamicColor,
         confidenceThreshold = confidenceThreshold,
         hapticsEnabled = hapticsEnabled,
+        homeError = homeError,
+        onHomeErrorConsumed = { homeViewModel.clearError() },
         onThemeModeChange = { settingsViewModel.setThemeMode(it) },
         onDynamicColorChange = { settingsViewModel.setDynamicColor(it) },
         onConfidenceThresholdChange = { settingsViewModel.setConfidenceThreshold(it) },
         onHapticsChange = { settingsViewModel.setHapticsEnabled(it) },
+        onResetDefaults = { settingsViewModel.resetToDefaults() },
         onPurgeHistory = { onComplete ->
             homeViewModel.clearHistory(onComplete)
         },
@@ -73,13 +102,26 @@ fun SettingsContent(
     onConfidenceThresholdChange: (Float) -> Unit,
     onHapticsChange: (Boolean) -> Unit,
     onPurgeHistory: (onComplete: () -> Unit) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    homeError: String? = null,
+    onHomeErrorConsumed: () -> Unit = {},
+    onResetDefaults: () -> Unit = {}
 ) {
-    var showDeleteConfirm by remember { mutableStateOf(false) }
-    var showLicensesDialog by remember { mutableStateOf(false) }
+    var showDeleteConfirm by rememberSaveable { mutableStateOf(false) }
+    var showLicensesDialog by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
+    val purgeFailedText = stringResource(R.string.settings_purge_failed)
+    val resetDoneText = stringResource(R.string.settings_reset_done)
+
+    // Purge failures were silent; surface HomeViewModel errors here.
+    LaunchedEffect(homeError) {
+        homeError?.let {
+            snackbarHostState.showSnackbar(it.ifBlank { purgeFailedText })
+            onHomeErrorConsumed()
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
@@ -114,18 +156,26 @@ fun SettingsContent(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .selectableGroup()
+                ) {
                     listOf(ThemeMode.DARK, ThemeMode.LIGHT, ThemeMode.COLOUR, ThemeMode.SYSTEM).forEach { mode ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onThemeModeChange(mode) }
+                                .selectable(
+                                    selected = themeMode == mode,
+                                    role = Role.RadioButton,
+                                    onClick = { onThemeModeChange(mode) }
+                                )
                                 .padding(vertical = 8.dp)
                         ) {
                             RadioButton(
                                 selected = themeMode == mode,
-                                onClick = { onThemeModeChange(mode) }
+                                onClick = null
                             )
                             Text(
                                 text = when(mode) {
@@ -177,7 +227,7 @@ fun SettingsContent(
 
             Spacer(modifier = Modifier.height(32.dp))
             Text(
-                "DETECTION & ACCURACY",
+                stringResource(R.string.settings_detection_accuracy),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(bottom = 16.dp)
@@ -188,8 +238,13 @@ fun SettingsContent(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
+                    // Debounced slider: drag updates local state only; the
+                    // ViewModel (DataStore) is hit once on release, coerced.
+                    var sliderValue by remember(confidenceThreshold) {
+                        mutableStateOf(confidenceThreshold)
+                    }
                     Text(
-                        text = stringResource(R.string.settings_confidence_threshold, (confidenceThreshold * 100).toInt()),
+                        text = stringResource(R.string.settings_confidence_threshold, (sliderValue * 100).roundToInt()),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -200,8 +255,9 @@ fun SettingsContent(
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                     Slider(
-                        value = confidenceThreshold,
-                        onValueChange = onConfidenceThresholdChange,
+                        value = sliderValue,
+                        onValueChange = { sliderValue = it.coerceIn(0.20f, 0.90f) },
+                        onValueChangeFinished = { onConfidenceThresholdChange(sliderValue) },
                         valueRange = 0.20f..0.90f,
                         steps = 13
                     )
@@ -253,6 +309,21 @@ fun SettingsContent(
                 Icon(Icons.Default.DeleteSweep, contentDescription = null)
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(stringResource(R.string.settings_purge_history))
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedButton(
+                onClick = {
+                    onResetDefaults()
+                    scope.launch { snackbarHostState.showSnackbar(resetDoneText) }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Icon(Icons.Default.RestartAlt, contentDescription = null)
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(stringResource(R.string.settings_reset_defaults))
             }
 
             Spacer(modifier = Modifier.height(32.dp))

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -22,11 +23,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.WasteRecord
-import com.agrelius.wasegmul.ui.home.toRelativeTime
+import com.agrelius.wasegmul.ui.home.toRelativeTimeText
 import com.agrelius.wasegmul.ui.home.toIso8601
-import com.agrelius.wasegmul.ui.home.csvEscape
+import com.agrelius.wasegmul.ui.result.humanizeLabel
+import com.agrelius.wasegmul.ui.result.parseBarcodeDisplay
+import com.agrelius.wasegmul.ui.theme.categoryColor
 import com.agrelius.wasegmul.viewmodel.HomeViewModel
 
 import com.agrelius.wasegmul.WasteMapping
@@ -43,6 +47,20 @@ enum class HistorySortOrder {
     NEWEST, OLDEST, CONFIDENCE
 }
 
+/** Canonical filter keys; labels come from resources (localized chips). */
+private val FILTER_KEYS = listOf("All", "E-Waste", "Recyclable", "Organic", "Trash", "Hazardous")
+
+@Composable
+private fun filterLabel(key: String): String = when (key) {
+    "All" -> stringResource(R.string.history_filter_all)
+    "E-Waste" -> stringResource(R.string.history_filter_ewaste)
+    "Recyclable" -> stringResource(R.string.history_filter_recyclable)
+    "Organic" -> stringResource(R.string.history_filter_organic)
+    "Trash" -> stringResource(R.string.history_filter_trash)
+    "Hazardous" -> stringResource(R.string.history_filter_hazardous)
+    else -> key
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(
@@ -52,15 +70,29 @@ fun HistoryScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
     val allHistory by viewModel.allHistory.collectAsState()
+    val historyLoaded by viewModel.historyLoaded.collectAsState()
+    val vmError by viewModel.error.collectAsState()
     var editingRecord by remember { mutableStateOf<WasteRecord?>(null) }
     var recordToDelete by remember { mutableStateOf<WasteRecord?>(null) }
-    var showClearAllConfirm by remember { mutableStateOf(false) }
+    var showClearAllConfirm by rememberSaveable { mutableStateOf(false) }
 
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf("All") }
-    var sortOrder by remember { mutableStateOf(HistorySortOrder.NEWEST) }
-    val categories = listOf("All", "E-Waste", "Recyclable", "Organic", "Trash", "Hazardous")
+    // Rotation-safe filters (persisted by value, not by transient remember).
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var selectedCategory by rememberSaveable { mutableStateOf("All") }
+    var sortOrderName by rememberSaveable { mutableStateOf(HistorySortOrder.NEWEST.name) }
+    val sortOrder = remember(sortOrderName) {
+        runCatching { HistorySortOrder.valueOf(sortOrderName) }
+            .getOrDefault(HistorySortOrder.NEWEST)
+    }
+
+    LaunchedEffect(vmError) {
+        vmError?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearError()
+        }
+    }
 
     val filteredHistory = remember(allHistory, searchQuery, selectedCategory, sortOrder) {
         val filtered = allHistory.filter { record ->
@@ -86,8 +118,13 @@ fun HistoryScreen(
         }
     }
 
+    val exportDoneText = stringResource(R.string.history_export_done)
+    val exportFailedText = stringResource(R.string.history_export_failed)
+    val exportTitleText = stringResource(R.string.history_export_title)
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(stringResource(R.string.history_title), style = MaterialTheme.typography.titleMedium) },
@@ -103,20 +140,31 @@ fun HistoryScreen(
                                 try {
                                     // Clean up old cached export files
                                     context.cacheDir.listFiles { _, name -> name.startsWith("waseg_history_") }?.forEach { it.delete() }
-                                    val csv = buildString {
-                                        appendLine("ID,TimestampISO,TimestampEpoch,Subclass,Category,Confidence,WeightKg,Feedback,Correction")
-                                        allHistory.forEach { rec ->
-                                            appendLine(
-                                                "${rec.id},${rec.timestamp.toIso8601()},${rec.timestamp}," +
-                                                    "${rec.subclass.csvEscape()},${rec.category.csvEscape()}," +
-                                                    "${"%.4f".format(java.util.Locale.US, rec.confidence)}," +
-                                                    "${"%.4f".format(java.util.Locale.US, rec.estimatedWeight)}," +
-                                                    "${rec.feedback.orEmpty().csvEscape()},${rec.correctedSubclass.orEmpty().csvEscape()}"
-                                            )
-                                        }
-                                    }
                                     val file = java.io.File(context.cacheDir, "waseg_history_${System.currentTimeMillis()}.csv")
-                                    file.writeText(csv)
+                                    // Streaming write: no in-memory whole-file
+                                    // string, sanitized cells, full columns.
+                                    file.bufferedWriter().use { writer ->
+                                        writeHistoryCsv(
+                                            writer,
+                                            allHistory.asSequence().map { rec ->
+                                                CsvRow(
+                                                    id = rec.id,
+                                                    timestampIso = rec.timestamp.toIso8601(),
+                                                    timestampEpoch = rec.timestamp,
+                                                    category = rec.category,
+                                                    subclass = rec.subclass,
+                                                    confidence = rec.confidence,
+                                                    weightKg = rec.estimatedWeight,
+                                                    feedback = rec.feedback,
+                                                    correctedSubclass = rec.correctedSubclass,
+                                                    source = rec.source,
+                                                    productName = rec.productName,
+                                                    barcode = rec.barcode,
+                                                    imagePath = rec.imagePath
+                                                )
+                                            }
+                                        )
+                                    }
                                     val uri = androidx.core.content.FileProvider.getUriForFile(
                                         context, "${context.packageName}.fileprovider", file
                                     )
@@ -128,10 +176,14 @@ fun HistoryScreen(
                                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                             type = "text/csv"
                                         }
-                                        context.startActivity(Intent.createChooser(sendIntent, "Export History"))
+                                        context.startActivity(Intent.createChooser(sendIntent, exportTitleText))
+                                        snackbarHostState.showSnackbar(exportDoneText)
                                     }
                                 } catch (e: Exception) {
                                     android.util.Log.e("HistoryExport", "Export failed", e)
+                                    withContext(Dispatchers.Main) {
+                                        snackbarHostState.showSnackbar(exportFailedText)
+                                    }
                                 }
                             }
                         }) {
@@ -147,9 +199,28 @@ fun HistoryScreen(
         }
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
-            if (allHistory.isEmpty()) {
-                EmptyHistoryState()
-            } else {
+            when {
+                // Loading vs empty parity: skeleton until Room emits.
+                !historyLoaded -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                stringResource(R.string.history_loading),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+                allHistory.isEmpty() -> {
+                    EmptyHistoryState()
+                }
+                else -> {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -170,7 +241,7 @@ fun HistoryScreen(
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {
                                 IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.history_clear_search), modifier = Modifier.size(16.dp))
                                 }
                             }
                         },
@@ -184,17 +255,17 @@ fun HistoryScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Filter chips row
+                    // Filter chips row (localized, canonical keys)
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        items(categories.size) { index ->
-                            val cat = categories[index]
+                        items(FILTER_KEYS.size) { index ->
+                            val cat = FILTER_KEYS[index]
                             FilterChip(
                                 selected = selectedCategory == cat,
                                 onClick = { selectedCategory = cat },
-                                label = { Text(cat, style = MaterialTheme.typography.labelSmall) },
+                                label = { Text(filterLabel(cat), style = MaterialTheme.typography.labelSmall) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = if (cat == "Hazardous") MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
                                     selectedLabelColor = if (cat == "Hazardous") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
@@ -218,17 +289,17 @@ fun HistoryScreen(
                         )
                         FilterChip(
                             selected = sortOrder == HistorySortOrder.NEWEST,
-                            onClick = { sortOrder = HistorySortOrder.NEWEST },
+                            onClick = { sortOrderName = HistorySortOrder.NEWEST.name },
                             label = { Text(stringResource(R.string.history_sort_newest), style = MaterialTheme.typography.labelSmall) }
                         )
                         FilterChip(
                             selected = sortOrder == HistorySortOrder.OLDEST,
-                            onClick = { sortOrder = HistorySortOrder.OLDEST },
+                            onClick = { sortOrderName = HistorySortOrder.OLDEST.name },
                             label = { Text(stringResource(R.string.history_sort_oldest), style = MaterialTheme.typography.labelSmall) }
                         )
                         FilterChip(
                             selected = sortOrder == HistorySortOrder.CONFIDENCE,
-                            onClick = { sortOrder = HistorySortOrder.CONFIDENCE },
+                            onClick = { sortOrderName = HistorySortOrder.CONFIDENCE.name },
                             label = { Text(stringResource(R.string.history_sort_confidence), style = MaterialTheme.typography.labelSmall) }
                         )
                     }
@@ -266,16 +337,17 @@ fun HistoryScreen(
                         }
                     }
                 }
+                }
             }
 
             editingRecord?.let { recordToEdit ->
                 FeedbackDialog(
                     record = recordToEdit,
                     onDismiss = { editingRecord = null },
-                    onFeedbackSelected = { feedback, correction ->
+                    onFeedbackSelected = { feedback, correctedSubclass ->
                         viewModel.updateFeedback(recordToEdit.id, feedback)
-                        if (correction != null) {
-                            viewModel.updateCorrection(recordToEdit.id, correction)
+                        if (correctedSubclass != null) {
+                            viewModel.updateCorrection(recordToEdit.id, correctedSubclass)
                         }
                         editingRecord = null
                     }
@@ -292,7 +364,7 @@ fun HistoryScreen(
                             viewModel.deleteRecord(rec.id)
                             recordToDelete = null
                         }) {
-                            Text(stringResource(R.string.common_delete_all), color = MaterialTheme.colorScheme.error)
+                            Text(stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error)
                         }
                     },
                     dismissButton = {
@@ -338,13 +410,14 @@ fun HistoryCard(
     onDelete: () -> Unit = {},
     onClick: () -> Unit
 ) {
+    val cardColor = categoryColor(record.category)
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f))
-            .clickable { onClick() }
+            .clickable(role = Role.Button, onClickLabel = humanizeLabel(record.subclass)) { onClick() }
             .padding(14.dp)
     ) {
         Row(
@@ -353,13 +426,14 @@ fun HistoryCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                val isBarcode = record.featureVector?.startsWith("barcode:") == true
-                val barcodeMeta = if (isBarcode) record.featureVector?.removePrefix("barcode:") else null
-                val barcodeParts = barcodeMeta?.split("|", limit = 2)
-                val barcodeCode = barcodeParts?.getOrNull(0)
-                val productName = barcodeParts?.getOrNull(1)?.takeIf { it.isNotBlank() }
+                // Single-parser rule: first-class columns win, legacy fallback.
+                val display = parseBarcodeDisplay(
+                    record.source, record.barcode,
+                    record.productName, record.featureVector
+                )
+                val productName = display?.productName
 
-                if (isBarcode) {
+                if (display != null) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(bottom = 2.dp)
@@ -372,7 +446,7 @@ fun HistoryCard(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = barcodeCode ?: "Barcode",
+                            text = display.code,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold
@@ -384,8 +458,8 @@ fun HistoryCard(
                     text = when {
                         productName != null -> productName
                         record.feedback == "incorrect" && record.correctedSubclass != null ->
-                            "${record.subclass} ➔ ${record.correctedSubclass}"
-                        else -> record.subclass
+                            "${humanizeLabel(record.subclass)} ➔ ${humanizeLabel(record.correctedSubclass!!)}"
+                        else -> humanizeLabel(record.subclass)
                     },
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
@@ -396,8 +470,8 @@ fun HistoryCard(
                 if (productName != null) {
                     Text(
                         text = if (record.feedback == "incorrect" && record.correctedSubclass != null)
-                            "${record.subclass} ➔ ${record.correctedSubclass}"
-                        else record.subclass,
+                            "${humanizeLabel(record.subclass)} ➔ ${humanizeLabel(record.correctedSubclass!!)}"
+                        else humanizeLabel(record.subclass),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                         maxLines = 1,
@@ -406,27 +480,27 @@ fun HistoryCard(
                 }
 
                 Text(
-                    text = record.timestamp.toRelativeTime(),
+                    text = record.timestamp.toRelativeTimeText(),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 )
             }
-            
+
             Row(verticalAlignment = Alignment.CenterVertically) {
                 FeedbackBadge(feedback = record.feedback)
                 IconButton(onClick = onEditFeedback) {
                     Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.common_edit_feedback), modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
                 }
                 IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.DeleteOutline, contentDescription = "Delete item", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f))
+                    Icon(Icons.Default.DeleteOutline, contentDescription = stringResource(R.string.history_delete_record), modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f))
                 }
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                        .background(cardColor.copy(alpha = 0.1f))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
-                    Text(text = record.category, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    Text(text = record.category, style = MaterialTheme.typography.labelSmall, color = cardColor)
                 }
             }
         }
@@ -440,7 +514,7 @@ fun FeedbackBadge(feedback: String?) {
         "incorrect" -> MaterialTheme.colorScheme.error to Icons.Default.Cancel
         else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) to Icons.Default.QuestionMark
     }
-    
+
     Icon(
         imageVector = icon,
         contentDescription = null,
@@ -455,28 +529,32 @@ fun FeedbackDialog(
     onDismiss: () -> Unit,
     onFeedbackSelected: (String, String?) -> Unit
 ) {
-    var showCorrection by remember { mutableStateOf(false) }
+    var showCorrection by rememberSaveable { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
-    val options = context.resources.getStringArray(R.array.material_options).toList()
+    // Subclass-only options: Categories must never be offered as corrections.
+    val options = context.resources.getStringArray(R.array.correction_material_options).toList()
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (!showCorrection) stringResource(R.string.history_refine) else stringResource(R.string.history_select_material)) },
         text = {
             if (!showCorrection) {
-                Text(stringResource(R.string.history_feedback_help, record.subclass))
+                Text(stringResource(R.string.history_feedback_help, humanizeLabel(record.subclass)))
             } else {
-                Column {
-                    options.chunked(2).forEach { row ->
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            row.forEach { option ->
-                                FilterChip(
-                                    selected = false,
-                                    onClick = { onFeedbackSelected("incorrect", option) },
-                                    label = { Text(option) }
-                                )
-                            }
-                        }
+                // Scrollable: 24 options no longer overflow small screens.
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(options) { option ->
+                        FilterChip(
+                            selected = option.equals(record.correctedSubclass, ignoreCase = true),
+                            onClick = { onFeedbackSelected("incorrect", option) },
+                            label = { Text(humanizeLabel(option)) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }
@@ -517,8 +595,8 @@ fun EmptyHistoryState() {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
-            Icons.Default.CloudOff, 
-            contentDescription = null, 
+            Icons.Default.CloudOff,
+            contentDescription = null,
             modifier = Modifier.size(64.dp),
             tint = MaterialTheme.colorScheme.surfaceVariant
         )
@@ -558,4 +636,3 @@ private fun EmptyHistoryStatePreview() {
         }
     }
 }
-

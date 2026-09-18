@@ -240,8 +240,12 @@ class MLArbitratorBarcodeTest {
         assertEquals("Metal", result.subcategory)
         assertEquals(0.95f, result.categoryConfidence, 0.001f)
         assertEquals(0.95f, result.subcategoryConfidence, 0.001f)
-        assertEquals(listOf("Recyclable" to 0.95f), result.topCategories)
-        assertEquals(listOf("Metal" to 0.95f), result.topSubcategories)
+        // Disagreement signal preserved: barcode verdict first, visual evidence merged after.
+        assertEquals("Metal" to 0.95f, result.topSubcategories[0])
+        assertEquals("Miscellaneous Trash" to 0.84f, result.topSubcategories[1])
+        assertEquals("Plastic" to 0.12f, result.topSubcategories[2])
+        assertEquals("Recyclable" to 0.95f, result.topCategories[0])
+        assertEquals("Trash" to 0.88f, result.topCategories[1])
         assertTrue(
             result.classificationMessage.contains("Coca-Cola Original 330ml"),
             "Message should reference product name"
@@ -249,8 +253,7 @@ class MLArbitratorBarcodeTest {
     }
 
     @Test
-    fun testBarcodeVisualConflict_organicVsRecyclable() {
-        // Visual model confused apple core with cardboard
+    fun testBarcodeVisualConflict_organicVsRecyclable() {        // Visual model confused apple core with cardboard
         val visualPrediction = PredictionResult(
             category = "Recyclable",
             categoryConfidence = 0.75f,
@@ -273,11 +276,65 @@ class MLArbitratorBarcodeTest {
         assertEquals("Organic", result.subcategory)
         assertEquals(0.95f, result.categoryConfidence, 0.001f)
         assertEquals(0.95f, result.subcategoryConfidence, 0.001f)
-        assertEquals(listOf("Organic" to 0.95f), result.topCategories)
-        assertEquals(listOf("Organic" to 0.95f), result.topSubcategories)
+        // Visual evidence preserved behind the barcode verdict.
+        assertEquals("Organic" to 0.95f, result.topCategories[0])
+        assertEquals("Recyclable" to 0.75f, result.topCategories[1])
+        assertEquals("Organic" to 0.95f, result.topSubcategories[0])
+        assertEquals("Cardboard" to 0.70f, result.topSubcategories[1])
         assertTrue(
             result.classificationMessage.contains("Fresh Organic Apple"),
             "Message should reference product name"
+        )
+    }
+
+    @Test
+    fun testBarcodeUnknownCategory_rejected_visualEvidenceUsedAlone() {
+        val visualPrediction = PredictionResult(
+            category = "Recyclable",
+            categoryConfidence = 0.90f,
+            subcategory = "Plastic",
+            subcategoryConfidence = 0.85f,
+            topCategories = listOf("Recyclable" to 0.90f),
+            topSubcategories = listOf("Plastic" to 0.85f)
+        )
+        val bogus = BarcodeEvidence(
+            productName = "Mystery Item",
+            category = "FooBar",
+            subclass = "Plastic",
+            isComplete = true
+        )
+        val result = MLArbitrator.arbitrateWithBarcode(visualPrediction, bogus)
+        // Blind trust refused: visual-only arbitration result, never FooBar @0.98.
+        assertEquals("Recyclable", result.category)
+        assertEquals("Plastic", result.subcategory)
+    }
+
+    @Test
+    fun testBarcodeUnknownCategory_noVisual_returnsUnknown() {
+        val bogus = BarcodeEvidence(
+            productName = "Mystery Item",
+            category = "FooBar",
+            subclass = "WeirdStuff",
+            isComplete = true
+        )
+        val result = MLArbitrator.arbitrateWithBarcode(null, bogus)
+        assertEquals("Unknown", result.category)
+        assertEquals(0f, result.categoryConfidence, 0.001f)
+    }
+
+    @Test
+    fun testBarcodeBlankProductName_rendersNeutrallyNeverThrows() {
+        val barcode = BarcodeEvidence(
+            productName = "   ",
+            category = "Recyclable",
+            subclass = "Glass",
+            isComplete = true
+        )
+        val result = MLArbitrator.arbitrateWithBarcode(null, barcode)
+        assertEquals("Recyclable", result.category)
+        assertTrue(
+            result.classificationMessage.contains("this product"),
+            "blank names render neutrally, got: ${result.classificationMessage}"
         )
     }
 }

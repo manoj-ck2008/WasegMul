@@ -1,8 +1,10 @@
 package com.agrelius.wasegmul.ui.home
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.launch
@@ -13,6 +15,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,17 +35,20 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
+import androidx.core.content.ContextCompat
 import com.agrelius.wasegmul.BuildConfig
 import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.EcoImpactCalculator
 import com.agrelius.wasegmul.WasteRecord
 import com.agrelius.wasegmul.ui.components.*
+import com.agrelius.wasegmul.ui.result.parseBarcodeDisplay
 import com.agrelius.wasegmul.ui.theme.*
 import com.agrelius.wasegmul.viewmodel.HomeViewModel
 import com.agrelius.wasegmul.gamification.GamificationManager
@@ -60,16 +67,26 @@ fun HomeScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToYolo: () -> Unit = {},
     onNavigateToGuide: () -> Unit = {},
-    onNavigateToBarcode: () -> Unit = {}
+    onNavigateToBarcode: () -> Unit = {},
+    onNavigateToResult: (Long) -> Unit = {}
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as? com.agrelius.wasegmul.WasegMulApp
+    // No fake XP fallback: when the app handle is missing we surface an error
+    // instead of rendering 0 XP as if it were real.
+    val appMissing = app == null
     val totalXp by app?.settingsManager?.totalXp?.collectAsState(initial = 0) ?: remember { mutableIntStateOf(0) }
     val gamificationState = remember(totalXp) { GamificationManager.computeState(totalXp) }
     val recentHistory by viewModel.recentHistory.collectAsState()
     val allHistory by viewModel.allHistory.collectAsState()
-    var showImpactDetail by remember { mutableStateOf(false) }
-    var showPermissionRationale by remember { mutableStateOf(false) }
+    val totalScanCount by viewModel.totalCount.collectAsState()
+    val vmError by viewModel.error.collectAsState()
+    var showImpactDetail by rememberSaveable { mutableStateOf(false) }
+    var showPermissionRationale by rememberSaveable { mutableStateOf(false) }
+    var showSettingsRedirect by rememberSaveable { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val galleryFailedText = stringResource(R.string.home_image_load_failed)
+    val photoExpiredText = stringResource(R.string.home_photo_expired)
     var section1Visible by remember { mutableStateOf(false) }
     var section2Visible by remember { mutableStateOf(false) }
     var section3Visible by remember { mutableStateOf(false) }
@@ -90,19 +107,30 @@ fun HomeScreen(
         section4Visible = true
     }
 
+    // Surfaced errors (clear/delete/feedback/correction) were previously
+    // collected by no screen. Show them here.
+    LaunchedEffect(vmError) {
+        vmError?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearError()
+        }
+    }
+
     val scope = rememberCoroutineScope()
+    val reduceMotion = rememberReduceMotion()
 
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        uri?.let {
-            scope.launch {
-                val bitmap = withContext(Dispatchers.IO) {
-                    decodeSampledBitmap(context, it, 1024, 1024)
-                }
-                if (bitmap != null) {
-                    onImageSelected(bitmap)
-                }
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val bitmap = withContext(Dispatchers.IO) {
+                decodeSampledBitmap(context, uri, 1024, 1024)
+            }
+            if (bitmap != null) {
+                onImageSelected(bitmap)
+            } else {
+                snackbarHostState.showSnackbar(galleryFailedText)
             }
         }
     }
@@ -112,13 +140,19 @@ fun HomeScreen(
         contract = ActivityResultContracts.TakePicture()
     ) { success: Boolean ->
         if (success) {
-            tempPhotoUri?.let { uri ->
+            val uri = tempPhotoUri
+            // Guard stale process-death URIs: verify the file still opens.
+            if (uri == null || !uriExists(context, uri)) {
+                scope.launch { snackbarHostState.showSnackbar(photoExpiredText) }
+            } else {
                 scope.launch {
                     val bitmap = withContext(Dispatchers.IO) {
                         decodeSampledBitmap(context, uri, 1024, 1024)
                     }
                     if (bitmap != null) {
                         onImageSelected(bitmap)
+                    } else {
+                        snackbarHostState.showSnackbar(galleryFailedText)
                     }
                 }
             }
@@ -127,6 +161,14 @@ fun HomeScreen(
 
     fun launchCamera() {
         try {
+            // Purge stale captures off-Main so cache IO never blocks the UI.
+            scope.launch(Dispatchers.IO) {
+                try {
+                    context.cacheDir.listFiles { f ->
+                        f.isFile && f.name.startsWith("camera_capture_") && f.name.endsWith(".jpg")
+                    }?.forEach { runCatching { it.delete() } }
+                } catch (_: Exception) { }
+            }
             val photoFile = java.io.File(context.cacheDir, "camera_capture_${System.currentTimeMillis()}.jpg")
             val uri = androidx.core.content.FileProvider.getUriForFile(
                 context,
@@ -147,12 +189,36 @@ fun HomeScreen(
         if (isGranted) {
             launchCamera()
         } else {
-            showPermissionRationale = true
+            // Permanent denial (no rationale left) -> Settings deep-link path;
+            // otherwise show the educational rationale.
+            val activity = context as? androidx.activity.ComponentActivity
+            val shouldRationale = activity?.shouldShowRequestPermissionRationale(
+                android.Manifest.permission.CAMERA
+            ) == true
+            if (shouldRationale) {
+                showPermissionRationale = true
+            } else {
+                showSettingsRedirect = true
+            }
+        }
+    }
+
+    fun requestCamera() {
+        // Check-first: never loop the system dialog when already decided.
+        when {
+            ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED -> launchCamera()
+            (context as? androidx.activity.ComponentActivity)
+                ?.shouldShowRequestPermissionRationale(android.Manifest.permission.CAMERA) == true ->
+                showPermissionRationale = true
+            else -> permissionLauncher.launch(android.Manifest.permission.CAMERA)
         }
     }
 
     Scaffold(
         containerColor = Color.Transparent,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { innerPadding ->
         Box(
@@ -165,24 +231,65 @@ fun HomeScreen(
                 )
                 .padding(innerPadding)
         ) {
-            OrganicBackground()
+            OrganicBackground(animate = !reduceMotion)
             BackgroundGlows()
 
             if (showPermissionRationale) {
                 AlertDialog(
                     onDismissRequest = { showPermissionRationale = false },
-                    title = { Text("Camera Permission Required") },
-                    text = { Text("Camera access is needed to scan and classify waste items. Please grant the permission to use the scanner.") },
+                    title = { Text(stringResource(R.string.home_camera_title)) },
+                    text = { Text(stringResource(R.string.home_camera_text)) },
                     confirmButton = {
                         TextButton(onClick = { showPermissionRationale = false; permissionLauncher.launch(android.Manifest.permission.CAMERA) }) {
-                            Text("Try Again")
+                            Text(stringResource(R.string.home_try_again))
                         }
                     },
                     dismissButton = {
                         TextButton(onClick = { showPermissionRationale = false; galleryLauncher.launch("image/*") }) {
-                            Text("Use Gallery Instead")
+                            Text(stringResource(R.string.home_use_gallery))
                         }
                     }
+                )
+            }
+
+            if (showSettingsRedirect) {
+                AlertDialog(
+                    onDismissRequest = { showSettingsRedirect = false },
+                    title = { Text(stringResource(R.string.home_camera_title)) },
+                    text = { Text(stringResource(R.string.home_camera_denied_perm)) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showSettingsRedirect = false
+                            try {
+                                context.startActivity(
+                                    Intent(
+                                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                        Uri.fromParts("package", context.packageName, null)
+                                    )
+                                )
+                            } catch (_: Exception) {
+                                galleryLauncher.launch("image/*")
+                            }
+                        }) {
+                            Text(stringResource(R.string.home_open_settings))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showSettingsRedirect = false; galleryLauncher.launch("image/*") }) {
+                            Text(stringResource(R.string.home_use_gallery))
+                        }
+                    }
+                )
+            }
+
+            if (appMissing) {
+                Text(
+                    text = stringResource(R.string.home_app_error),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 16.dp)
                 )
             }
 
@@ -200,7 +307,7 @@ fun HomeScreen(
                         },
                         modifier = Modifier.align(Alignment.TopEnd)
                     ) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.common_settings), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
 
@@ -248,12 +355,14 @@ fun HomeScreen(
                     GlassCard(
                         modifier = Modifier.weight(1f)
                     ) {
-                        Column(modifier = Modifier.clickable {
-                            onNavigateToHistory()
-                        }) {
-                            Icon(Icons.Default.Dataset, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                        Column(modifier = Modifier.clickable(
+                            role = Role.Button,
+                            onClickLabel = stringResource(R.string.home_cd_scans),
+                            onClick = { onNavigateToHistory() }
+                        )) {
+                            Icon(Icons.Default.Dataset, contentDescription = stringResource(R.string.home_cd_scans), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
                             Spacer(modifier = Modifier.height(12.dp))
-                            Text(text = recentHistory.size.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+                            Text(text = totalScanCount.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
                             Text(text = stringResource(R.string.home_neural_scans), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary, letterSpacing = 1.sp)
                         }
                     }
@@ -275,7 +384,11 @@ fun HomeScreen(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.clickable { onNavigateToYolo() }
+                            modifier = Modifier.clickable(
+                                role = Role.Button,
+                                onClickLabel = stringResource(R.string.home_cd_live_detect),
+                                onClick = { onNavigateToYolo() }
+                            )
                         ) {
                             Box(
                                 modifier = Modifier
@@ -284,7 +397,7 @@ fun HomeScreen(
                                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Default.Visibility, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                Icon(Icons.Default.Visibility, contentDescription = stringResource(R.string.home_cd_live_detect), tint = MaterialTheme.colorScheme.primary)
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             Column {
@@ -316,7 +429,11 @@ fun HomeScreen(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.clickable { onNavigateToGuide() }
+                            modifier = Modifier.clickable(
+                                role = Role.Button,
+                                onClickLabel = stringResource(R.string.home_cd_guide),
+                                onClick = { onNavigateToGuide() }
+                            )
                         ) {
                             Box(
                                 modifier = Modifier
@@ -325,7 +442,7 @@ fun HomeScreen(
                                     .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                                Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = stringResource(R.string.home_cd_guide), tint = MaterialTheme.colorScheme.secondary)
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             Column {
@@ -371,9 +488,8 @@ fun HomeScreen(
                     GradientActionButton(
                         text = stringResource(R.string.home_launch_scanner),
                         icon = Icons.Default.CameraAlt,
-                        onClick = {
-                            permissionLauncher.launch(android.Manifest.permission.CAMERA)
-                        },
+                        iconContentDescription = stringResource(R.string.home_cd_camera),
+                        onClick = { requestCamera() },
                         containerColor = MaterialTheme.colorScheme.tertiary
                     )
 
@@ -394,7 +510,7 @@ fun HomeScreen(
                     ) {
                         Icon(
                             Icons.Default.QrCodeScanner,
-                            contentDescription = null,
+                            contentDescription = stringResource(R.string.home_cd_barcode),
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.width(12.dp))
@@ -420,7 +536,7 @@ fun HomeScreen(
                         ),
                         border = BorderStroke(1.dp, LocalGlassColors.current.border)
                     ) {
-                        Icon(Icons.Default.Collections, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                        Icon(Icons.Default.Collections, contentDescription = stringResource(R.string.home_import_device), tint = MaterialTheme.colorScheme.secondary)
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
                             text = stringResource(R.string.home_import_device),
@@ -443,17 +559,20 @@ fun HomeScreen(
                                 modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
                             )
                             recentHistory.take(3).forEach { record ->
-                                val isBarcodeScan = record.featureVector?.startsWith("barcode:") == true
-                                val barcodeMeta = if (isBarcodeScan) record.featureVector?.removePrefix("barcode:") else null
-                                val barcodeParts = barcodeMeta?.split("|", limit = 2)
-                                val productName = barcodeParts?.getOrNull(1)?.takeIf { it.isNotBlank() }
-                                val displayName = productName ?: record.subclass
+                                // Single-parser rule: never split the legacy vector inline.
+                                val display = parseBarcodeDisplay(
+                                    record.source, record.barcode,
+                                    record.productName, record.featureVector
+                                )
+                                val displayName = display?.productName
+                                    ?: com.agrelius.wasegmul.ui.result.humanizeLabel(record.subclass)
                                 RecentItem(
                                     name = displayName,
-                                    time = record.timestamp.toRelativeTime(),
-                                    type = record.category,
+                                    time = record.timestamp.toRelativeTimeText(),
+                                    category = record.category,
                                     feedback = record.feedback,
-                                    isBarcode = isBarcodeScan
+                                    isBarcode = display != null,
+                                    onClick = { onNavigateToResult(record.id) }
                                 )
                             }
                         }
@@ -575,22 +694,38 @@ fun ImpactDetailDialog(onDismiss: () -> Unit, history: List<WasteRecord>) {
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = "MATERIAL BREAKDOWN",
+                    text = stringResource(R.string.home_material_breakdown),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
-                val groups = history.groupBy { it.category }
-                groups.forEach { (cat, items) ->
-                    val weight = items.sumOf { it.estimatedWeight }
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(cat, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                        Text("${weight.format(3)} kg (${items.size})", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                // Normalized (trim + case-insensitive), sorted by weight, and
+                // bounded in a LazyColumn so large histories cannot blow up
+                // the dialog.
+                val groups = remember(history) {
+                    history.groupBy { it.category.trim().lowercase(Locale.ROOT) }
+                        .map { (_, items) ->
+                            val label = items.firstOrNull()?.category?.trim().orEmpty()
+                            label to items
+                        }
+                        .sortedByDescending { (_, items) -> items.sumOf { it.estimatedWeight } }
+                }
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 180.dp)
+                ) {
+                    items(groups) { (cat, items) ->
+                        val weight = items.sumOf { it.estimatedWeight }
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(cat, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                            Text("${weight.format(3)} kg (${items.size})", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                        }
                     }
                 }
 
@@ -637,9 +772,8 @@ private fun ImpactStatCard(
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 9.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -655,34 +789,43 @@ private fun ImpactStatCard(
     }
 }
 
-fun Long.toRelativeTime(): String {
-    val now = System.currentTimeMillis()
-    val diff = (now - this).coerceAtLeast(0L)
-    return when {
-        diff < 60000 -> "Just now"
-        diff < 3600000 -> "${diff / 60000}m ago"
-        diff < 86400000 -> "${diff / 3600000}h ago"
-        else -> SimpleDateFormat("MMM dd, yyyy", Locale.US).format(Date(this))
-    }
-}
+/**
+ * Locale policy: display numbers follow the user locale; machine strings
+ * (ISO-8601, CSV, uppercase keys) always use Locale.ROOT.
+ */
+fun Double.format(digits: Int) = "%.${digits}f".format(Locale.getDefault(), this)
 
-fun Double.format(digits: Int) = "%.${digits}f".format(Locale.US, this)
+fun Double.formatMachine(digits: Int) = "%.${digits}f".format(Locale.ROOT, this)
 
 fun Long.toIso8601(): String {
-    return SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+    return SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.ROOT).apply {
         timeZone = TimeZone.getTimeZone("UTC")
     }.format(Date(this))
 }
 
 fun String.csvEscape(): String = "\"${replace("\"", "\"\"")}\""
 
+/** Localized relative timestamp (TalkBack-friendly, user-locale months). */
+@Composable
+fun Long.toRelativeTimeText(): String {
+    val now = System.currentTimeMillis()
+    val diff = (now - this).coerceAtLeast(0L)
+    return when {
+        diff < 60000 -> stringResource(R.string.time_just_now)
+        diff < 3600000 -> stringResource(R.string.time_minutes_ago, diff / 60000)
+        diff < 86400000 -> stringResource(R.string.time_hours_ago, diff / 3600000)
+        else -> SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(this))
+    }
+}
+
 @Composable
 fun RecentItem(
     name: String,
     time: String,
-    type: String,
+    category: String,
     feedback: String?,
-    isBarcode: Boolean = false
+    isBarcode: Boolean = false,
+    onClick: (() -> Unit)? = null
 ) {
     Row(
         modifier = Modifier
@@ -691,6 +834,13 @@ fun RecentItem(
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.4f))
             .border(1.dp, LocalGlassColors.current.border, RoundedCornerShape(16.dp))
+            .then(
+                if (onClick != null) Modifier.clickable(
+                    role = Role.Button,
+                    onClickLabel = name,
+                    onClick = onClick
+                ) else Modifier
+            )
             .padding(14.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -700,7 +850,7 @@ fun RecentItem(
                 if (isBarcode) {
                     Icon(
                         imageVector = Icons.Default.QrCodeScanner,
-                        contentDescription = null,
+                        contentDescription = stringResource(R.string.home_cd_barcode),
                         modifier = Modifier.size(14.dp),
                         tint = MaterialTheme.colorScheme.primary
                     )
@@ -721,7 +871,7 @@ fun RecentItem(
                     Spacer(modifier = Modifier.width(8.dp))
                     Icon(
                         imageVector = if (feedback == "correct") Icons.Default.CheckCircle else Icons.Default.Cancel,
-                        contentDescription = null,
+                        contentDescription = if (feedback == "correct") stringResource(R.string.home_cd_feedback_correct) else stringResource(R.string.home_cd_feedback_incorrect),
                         modifier = Modifier.size(12.dp),
                         tint = if (feedback == "correct") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                     )
@@ -735,7 +885,7 @@ fun RecentItem(
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
                 .padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
-            Text(text = type, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            Text(text = category, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -764,59 +914,8 @@ fun BackgroundGlows() {
     }
 }
 
-private fun decodeSampledBitmap(context: android.content.Context, uri: Uri, reqWidth: Int, reqHeight: Int): Bitmap? {
-    return try {
-        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
-        options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight)
-        options.inJustDecodeBounds = false
-        options.inPreferredConfig = Bitmap.Config.ARGB_8888
-        val rawBitmap = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
-            ?: return null
-
-        val orientation = try {
-            context.contentResolver.openInputStream(uri)?.use { stream ->
-                val exif = android.media.ExifInterface(stream)
-                exif.getAttributeInt(
-                    android.media.ExifInterface.TAG_ORIENTATION,
-                    android.media.ExifInterface.ORIENTATION_NORMAL
-                )
-            } ?: android.media.ExifInterface.ORIENTATION_NORMAL
-        } catch (e: Exception) {
-            android.media.ExifInterface.ORIENTATION_NORMAL
-        }
-
-        when (orientation) {
-            android.media.ExifInterface.ORIENTATION_ROTATE_90 -> rotateBitmap(rawBitmap, 90f)
-            android.media.ExifInterface.ORIENTATION_ROTATE_180 -> rotateBitmap(rawBitmap, 180f)
-            android.media.ExifInterface.ORIENTATION_ROTATE_270 -> rotateBitmap(rawBitmap, 270f)
-            else -> rawBitmap
-        }
-    } catch (e: Exception) {
-        android.util.Log.e("HomeScreen", "Failed to decode sampled bitmap", e)
-        null
-    }
-}
-
-private fun rotateBitmap(bitmap: Bitmap, degrees: Float): Bitmap {
-    val matrix = android.graphics.Matrix().apply { postRotate(degrees) }
-    val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-    if (rotated !== bitmap) bitmap.recycle()
-    return rotated
-}
-
-private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
-    val (height, width) = options.outHeight to options.outWidth
-    var inSampleSize = 1
-    if (height > reqHeight || width > reqWidth) {
-        val halfHeight = height / 2
-        val halfWidth = width / 2
-        while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
-            inSampleSize *= 2
-        }
-    }
-    return inSampleSize
-}
+private fun decodeSampledBitmap(context: android.content.Context, uri: Uri, reqWidth: Int, reqHeight: Int): android.graphics.Bitmap? =
+    com.agrelius.wasegmul.ui.components.decodeSampledBitmap(context, uri, reqWidth, reqHeight)
 
 @androidx.compose.ui.tooling.preview.Preview(name = "RecentItem Preview", showBackground = true, backgroundColor = 0xFF121212)
 @Composable
@@ -826,7 +925,7 @@ private fun RecentItemPreview() {
             RecentItem(
                 name = "cardboard_box",
                 time = "5m ago",
-                type = "Recyclable",
+                category = "Recyclable",
                 feedback = "correct"
             )
         }

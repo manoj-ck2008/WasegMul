@@ -43,12 +43,55 @@ class DecayTimeDataTest {
 
     @Test
     fun testComparisons() {
-        assertEquals("Less than a single season", DecayTimeData.getComparison(0.5))
-        assertEquals("Longer than a generation", DecayTimeData.getComparison(25.0))
+        // Anchors: season ~= 0.25 y, generation ~= 25 y (UN demographic convention).
+        assertEquals("Less than a single season", DecayTimeData.getComparison(0.1))
+        assertEquals("Less than a single season", DecayTimeData.getComparison(0.24))
+        assertEquals("Within a single generation", DecayTimeData.getComparison(0.25))
+        assertEquals("Within a single generation", DecayTimeData.getComparison(0.5))
+        assertEquals("Within a single generation", DecayTimeData.getComparison(24.9))
+        assertEquals("Your grandchildren would still see it", DecayTimeData.getComparison(25.0))
         assertEquals("Your grandchildren would still see it", DecayTimeData.getComparison(75.0))
         assertEquals("Outlasts every building standing today", DecayTimeData.getComparison(200.0))
         assertEquals("Longer than most civilizations have existed", DecayTimeData.getComparison(800.0))
         assertEquals("Longer than recorded human history", DecayTimeData.getComparison(5000.0))
         assertEquals("Effectively permanent - it will outlast humanity itself", DecayTimeData.getComparison(1500000.0))
+    }
+
+    @Test
+    fun testCigaretteAndExtendedShapes_haveSpecificEntries() {
+        val cig = DecayTimeData.getDecayInfo("cigarette", "Trash")
+        assertEquals(10.0, cig.minYears, 0.001)
+        assertEquals(12.0, cig.maxYears, 0.001)
+
+        val bag = DecayTimeData.getDecayInfo("plastic_bag", "Trash")
+        assertEquals(10.0, bag.minYears, 0.001)
+        assertEquals(20.0, bag.maxYears, 0.001)
+
+        val can = DecayTimeData.getDecayInfo("can", "Recyclable")
+        assertEquals(80.0, can.minYears, 0.001)
+
+        val bottle = DecayTimeData.getDecayInfo("bottle", "Recyclable")
+        assertEquals(450.0, bottle.minYears, 0.001)
+
+        val wine = DecayTimeData.getDecayInfo("wine glass", "Trash")
+        assertTrue(wine.minYears >= 1000000.0)
+
+        val banana = DecayTimeData.getDecayInfo("banana", "Organic")
+        assertTrue(banana.minYears < 0.25)
+    }
+
+    @Test
+    fun testInputsTrimmedAndNewFallbacks() {
+        val trimmed = DecayTimeData.getDecayInfo("  Glass  ", "  Recyclable  ")
+        assertEquals("Glass", trimmed.subclass)
+
+        val hz = DecayTimeData.getDecayInfo("MysterySludge", "Hazardous")
+        assertEquals(3, hz.severityLevel)
+
+        val residual = DecayTimeData.getDecayInfo("MysteryMix", "Residual")
+        assertEquals("Generic Trash", residual.subclass)
+
+        val unknown = DecayTimeData.getDecayInfo("MysteryMix", "Unknown")
+        assertEquals("Unknown Waste", unknown.subclass)
     }
 }

@@ -177,8 +177,7 @@ class MLArbitratorTest {
     }
 
     @Test
-    fun testConfusedCategory_highConfidenceSubclass_trustsSubclass() {
-        // Category model is confused (low confidence 0.35, high entropy), but subclass model is 0.95 confident for Laptop (E-Waste)
+    fun testConfusedCategory_highConfidenceSubclass_trustsSubclass() {        // Category model is confused (low confidence 0.35, high entropy), but subclass model is 0.95 confident for Laptop (E-Waste)
         val input = PredictionResult(
             category = "Trash",
             categoryConfidence = 0.35f,
@@ -202,5 +201,64 @@ class MLArbitratorTest {
         assertEquals("Laptop", output.subcategory)
         assertEquals(0.95f, output.subcategoryConfidence, 0.001f)
         assertTrue(output.classificationMessage.isNotBlank())
+    }
+
+    @Test
+    fun testNeither_zeroesStaleConfidencesAndPreservesRaw() {
+        val input = PredictionResult(
+            category = "Recyclable",
+            categoryConfidence = 0.7f,
+            subcategory = "Plastic",
+            subcategoryConfidence = 0.6f,
+            topCategories = emptyList(),
+            topSubcategories = emptyList()
+        )
+
+        val output = MLArbitrator.arbitrate(input)
+
+        assertEquals(WasteMapping.UNCERTAIN, output.category)
+        assertEquals(WasteMapping.UNCERTAIN, output.subcategory)
+        assertEquals(0f, output.categoryConfidence, 0.001f)
+        assertEquals(0f, output.subcategoryConfidence, 0.001f)
+        assertEquals(0.7f, output.rawCategoryConfidence!!, 0.001f)
+        assertEquals(0.6f, output.rawSubcategoryConfidence!!, 0.001f)
+    }
+
+    @Test
+    fun testEntropy_emptyIsMaxUncertain() {
+        assertEquals(2.0f, MLArbitrator.computeEntropy(emptyList()), 0.001f)
+    }
+
+    @Test
+    fun testUnknownCategory_rejectedNotPassedThrough() {
+        val input = PredictionResult(
+            category = "FooBar",
+            categoryConfidence = 0.99f,
+            subcategory = "Plastic",
+            subcategoryConfidence = 0.9f,
+            topCategories = listOf("FooBar" to 0.99f),
+            topSubcategories = listOf("Plastic" to 0.9f)
+        )
+
+        val output = MLArbitrator.arbitrate(input)
+
+        assertEquals(WasteMapping.UNKNOWN, output.category)
+        assertEquals(0f, output.categoryConfidence, 0.001f)
+    }
+
+    @Test
+    fun testStrictSlider_forcesUncertainOverSubclassGuess() {
+        val input = PredictionResult(
+            category = "Trash",
+            categoryConfidence = 0.3f,
+            subcategory = "Laptop",
+            subcategoryConfidence = 0.70f,
+            topCategories = listOf("Trash" to 0.3f, "E-Waste" to 0.3f),
+            topSubcategories = listOf("Laptop" to 0.70f)
+        )
+
+        val output = MLArbitrator.arbitrate(input, 0.95f)
+
+        assertEquals(WasteMapping.UNCERTAIN, output.category)
     }
 }

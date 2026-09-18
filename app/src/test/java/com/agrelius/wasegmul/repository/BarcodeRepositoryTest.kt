@@ -50,6 +50,14 @@ class BarcodeRepositoryTest {
         override suspend fun pruneOldEntries(cutoff: Long) {
             products.removeAll { it.cachedAt < cutoff && it.source != "preloaded" }
         }
+
+        // Bounded prune-batch mirror (data batch): at most [limit] stale rows.
+        override suspend fun pruneOldEntriesPaged(cutoff: Long, limit: Int) {
+            products
+                .filter { it.cachedAt < cutoff && it.source != "preloaded" && it.source != "user_identified" }
+                .take(limit)
+                .forEach { products.remove(it) }
+        }
     }
 
     @Test

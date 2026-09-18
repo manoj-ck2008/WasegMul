@@ -1,17 +1,28 @@
 #!/usr/bin/env python3
-"""Export YOLOv8n to TFLite for WasegMul Android app.
+"""Export STOCK COCO YOLOv8n to TFLite (generic fallback — NOT the waste model).
+
+WARNING: this script downloads stock yolov8n.pt (COCO-80, Ultralytics) and
+exports it. The output is a GENERIC object detector (person/car/bottle/...),
+NOT the WasegMul 15-class waste detector. The app's YoloDetector guards
+against mislabeling (COCO-0 person is never reported as waste-0 battery),
+but COCO output must never be presented as waste classes.
+
+For the real waste model, train + export via:
+    python scripts/train_waste_yolo.py            # -> waste_yolo11n.tflite
+    python scripts/export_waste_model_tflite.py   # -> waste_yolo11n.tflite
+
+Output filename keeps the app's COCO-fallback contract:
+    app/src/main/assets/yolov8n.tflite  (COCO-80; pair ONLY with COCO-80 labels)
 
 Requirements:
-    pip install ultralytics onnx2tf
+    pip install -r scripts/requirements-train.txt  # (ultralytics, onnx2tf)
 
 Usage:
     python scripts/export_yolo_tflite.py
+    python scripts/export_yolo_tflite.py --output-name yolov8n  # default; COCO contract
 
 On Linux/macOS: exports directly via ultralytics.
 On Windows: exports to ONNX first, then converts via onnx2tf.
-
-Output:
-    app/src/main/assets/yolov8n.tflite
 """
 import platform
 import subprocess
@@ -24,7 +35,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "app" / "src" / "main" / "assets"
-MODEL_FILENAME = "yolov8n.tflite"
+MODEL_FILENAME = "yolov8n.tflite"  # COCO-80 fallback contract with YoloDetector.kt; do NOT rename without updating app
 IS_WINDOWS = platform.system() == "Windows"
 
 
@@ -97,6 +108,14 @@ def export_via_onnx() -> Path:
 
 
 def main() -> None:
+    import argparse
+    parser = argparse.ArgumentParser(description="Export STOCK COCO YOLOv8n (NOT waste model)")
+    parser.add_argument("--output-name", default="yolov8n",
+                        help="Output stem (default yolov8n = app COCO-fallback contract)")
+    cli = parser.parse_args()
+    model_filename = f"{cli.output_name}.tflite"
+    print("WARNING: exporting STOCK COCO-80 weights (generic detector).")
+    print("This is NOT the 15-class WasegMul waste model. For waste, use train_waste_yolo.py.")
     try:
         if IS_WINDOWS:
             tflite_src = export_via_onnx()
@@ -106,7 +125,7 @@ def main() -> None:
         print(f"ERROR: Export failed: {e}")
         sys.exit(1)
 
-    dest = ASSETS_DIR / MODEL_FILENAME
+    dest = ASSETS_DIR / model_filename
     ASSETS_DIR.mkdir(parents=True, exist_ok=True)
     shutil.copy2(tflite_src, dest)
     size_mb = dest.stat().st_size / (1024 * 1024)

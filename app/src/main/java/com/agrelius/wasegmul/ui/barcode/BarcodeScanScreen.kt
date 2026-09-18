@@ -2,12 +2,15 @@ package com.agrelius.wasegmul.ui.barcode
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.ConnectivityManager
 import android.net.Network
+import android.net.Uri
 import android.util.Log
 import android.view.ViewGroup
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
@@ -92,11 +95,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Alignment
@@ -133,6 +136,7 @@ import com.agrelius.wasegmul.ui.theme.LocalGlassColors
 import com.agrelius.wasegmul.ui.theme.LowConfidence
 import com.agrelius.wasegmul.ui.theme.MediumConfidenceYellow
 import com.agrelius.wasegmul.ui.theme.SkyBlueDeep
+import com.agrelius.wasegmul.ui.theme.categoryColor
 import com.agrelius.wasegmul.utils.ConnectivityChecker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -160,27 +164,41 @@ fun BarcodeScanScreen(
         factory = BarcodeScanViewModel.Factory(
             barcodeRepository = (LocalContext.current.applicationContext as WasegMulApp).barcodeRepository,
             wasteRepository = (LocalContext.current.applicationContext as WasegMulApp).repository,
-            modelManager = (LocalContext.current.applicationContext as WasegMulApp).modelManager
+            modelManager = (LocalContext.current.applicationContext as WasegMulApp).modelManager,
+            settingsManager = (LocalContext.current.applicationContext as WasegMulApp).settingsManager
         )
     )
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
     val uiState by viewModel.uiState.collectAsState()
 
+    // Back collapses the bottom sheet first (resume scanning); only a bare
+    // viewfinder pops the screen. Deep-link ready via wasegmul://barcode.
+    BackHandler(enabled = uiState !is BarcodeScanState.Scanning) {
+        viewModel.resumeScanning()
+    }
+
+    // Permission check-first with rationale + Settings redirect (no blind
+    // auto-fire, no permanent-denial loop).
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         )
     }
+    var permissionAsked by rememberSaveable { mutableStateOf(false) }
+    var showPermissionRationale by rememberSaveable { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasCameraPermission = granted
+        permissionAsked = true
+        if (!granted) showPermissionRationale = true
     }
 
     LaunchedEffect(Unit) {
-        if (!hasCameraPermission) {
+        if (!hasCameraPermission && !permissionAsked) {
+            permissionAsked = true
             permissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
@@ -219,39 +237,56 @@ fun BarcodeScanScreen(
 
     var isTorchOn by remember { mutableStateOf(false) }
     var hasFlash by remember { mutableStateOf(false) }
-    var showManualInputDialog by remember { mutableStateOf(false) }
-    var manualBarcode by remember { mutableStateOf("") }
+    // Rotation-safe form state.
+    var showManualInputDialog by rememberSaveable { mutableStateOf(false) }
+    var manualBarcode by rememberSaveable { mutableStateOf("") }
+    var manualError by rememberSaveable { mutableStateOf<String?>(null) }
+    val manualInvalidText = stringResource(R.string.barcode_manual_invalid)
+
+    fun submitManual(code: String) {
+        // EAN-8..GTIN-14 digit check (UI-side parity with VM validation).
+        val clean = code.trim()
+        if (!clean.matches(Regex("^[0-9]{8,14}$"))) {
+            manualError = manualInvalidText
+            return
+        }
+        manualError = null
+        showManualInputDialog = false
+        manualBarcode = ""
+        // The VM only accepts detections from Scanning; manual entry must be
+        // reachable from NotFound/Error too, so resume first (public VM API,
+        // no logic duplicated).
+        viewModel.resumeScanning()
+        viewModel.onBarcodeDetected(clean)
+    }
 
     if (showManualInputDialog) {
         androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showManualInputDialog = false },
-            title = { Text("Manual Barcode Entry") },
+            onDismissRequest = { showManualInputDialog = false; manualError = null },
+            title = { Text(stringResource(R.string.barcode_manual_title)) },
             text = {
-                OutlinedTextField(
-                    value = manualBarcode,
-                    onValueChange = { manualBarcode = it },
-                    label = { Text("Enter Barcode (e.g., 12 or 13 digits)") },
-                    singleLine = true,
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                Column {
+                    OutlinedTextField(
+                        value = manualBarcode,
+                        onValueChange = { manualBarcode = it; manualError = null },
+                        label = { Text(stringResource(R.string.barcode_manual_label)) },
+                        singleLine = true,
+                        isError = manualError != null,
+                        supportingText = manualError?.let { { Text(it) } },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                        )
                     )
-                )
+                }
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        showManualInputDialog = false
-                        if (manualBarcode.isNotBlank()) {
-                            viewModel.onBarcodeDetected(manualBarcode.trim())
-                        }
-                    }
-                ) {
-                    Text("Search")
+                TextButton(onClick = { submitManual(manualBarcode) }) {
+                    Text(stringResource(R.string.barcode_manual_search))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showManualInputDialog = false }) {
-                    Text("Cancel")
+                TextButton(onClick = { showManualInputDialog = false; manualError = null }) {
+                    Text(stringResource(R.string.common_cancel))
                 }
             }
         )
@@ -259,18 +294,23 @@ fun BarcodeScanScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
                     Text(
-                        text = "Barcode Scanner",
+                        text = stringResource(R.string.barcode_scanner_title),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.Bold
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = {
+                        // Back collapses the sheet first (see BackHandler).
+                        if (uiState !is BarcodeScanState.Scanning) viewModel.resumeScanning()
+                        else onBack()
+                    }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.common_back),
@@ -286,7 +326,7 @@ fun BarcodeScanScreen(
                     IconButton(onClick = { showManualInputDialog = true }) {
                         Icon(
                             imageVector = Icons.Default.Search,
-                            contentDescription = "Manual Search",
+                            contentDescription = stringResource(R.string.barcode_manual_search_cd),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -313,6 +353,7 @@ fun BarcodeScanScreen(
         ) {
             if (!hasCameraPermission) {
                 CameraPermissionRequired(
+                    showRationale = showPermissionRationale,
                     onRequestPermission = { permissionLauncher.launch(Manifest.permission.CAMERA) }
                 )
             } else {
@@ -346,16 +387,18 @@ fun BarcodeScanScreen(
                     ) {
                         when (val state = uiState) {
                             is BarcodeScanState.Resolving -> {
-                                ResolvingCardContent(barcode = state.barcode)
+                                ResolvingCardContent(
+                                    barcode = state.barcode,
+                                    onCancel = { viewModel.resumeScanning() }
+                                )
                             }
                             is BarcodeScanState.Resolved -> {
                                 ResolvedCardContent(
                                     product = state.product,
                                     components = state.components,
+                                    snackbarHostState = snackbarHostState,
                                     onConfirmAndSave = {
-                                        scope.launch {
-                                            viewModel.confirmAndSave(state.product)
-                                        }
+                                        viewModel.confirmAndSave(state.product)
                                     },
                                     onResumeScanning = { viewModel.resumeScanning() }
                                 )
@@ -366,6 +409,7 @@ fun BarcodeScanScreen(
                                     onConfirm = { name, cat, sub ->
                                         viewModel.quickClassifyAndSave(state.barcode, name, cat, sub)
                                     },
+                                    onManualEntry = { showManualInputDialog = true },
                                     onFallbackToCamera = onFallbackToCamera,
                                     onResumeScanning = { viewModel.resumeScanning() }
                                 )
@@ -375,8 +419,11 @@ fun BarcodeScanScreen(
                                     barcode = "Unindexed Code",
                                     errorMessage = state.message,
                                     onConfirm = { name, cat, sub ->
-                                        viewModel.quickClassifyAndSave("code_${System.currentTimeMillis()}", name, cat, sub)
+                                        // persistCache=false: error-state pseudo-codes must
+                                        // never land in the barcode cache as junk keys.
+                                        viewModel.quickClassifyAndSave("code_${System.currentTimeMillis()}", name, cat, sub, persistCache = false)
                                     },
+                                    onManualEntry = { showManualInputDialog = true },
                                     onFallbackToCamera = onFallbackToCamera,
                                     onResumeScanning = { viewModel.resumeScanning() }
                                 )
@@ -429,7 +476,8 @@ private fun CameraPreviewWithBarcodeScanner(
 
     LaunchedEffect(focusPoint) {
         if (focusPoint != null) {
-            delay(1200)
+            // Matches the AF auto-cancel duration (3s) below.
+            delay(3000)
             focusPoint = null
         }
     }
@@ -760,7 +808,7 @@ private fun ReticleOverlay(
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f))
             ) {
                 Text(
-                    text = "Point camera at product barcode",
+                    text = stringResource(R.string.barcode_point_hint),
                     style = MaterialTheme.typography.labelMedium,
                     color = Color.White.copy(alpha = 0.9f),
                     fontWeight = FontWeight.Medium,
@@ -780,7 +828,7 @@ private fun NetworkStatusBadge(
     modifier: Modifier = Modifier
 ) {
     val indicatorColor = if (isOnline) HighConfidenceGreen else MediumConfidenceYellow
-    val statusText = if (isOnline) "Online" else "Offline"
+    val statusText = if (isOnline) stringResource(R.string.network_online) else stringResource(R.string.network_offline)
 
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -813,7 +861,10 @@ private fun NetworkStatusBadge(
  * Content displayed in the bottom card while resolving a scanned barcode.
  */
 @Composable
-private fun ResolvingCardContent(barcode: String) {
+private fun ResolvingCardContent(
+    barcode: String,
+    onCancel: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -827,17 +878,26 @@ private fun ResolvingCardContent(barcode: String) {
         )
         Spacer(modifier = Modifier.height(14.dp))
         Text(
-            text = "Resolving Product...",
+            text = stringResource(R.string.barcode_resolving),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Looking up barcode: $barcode",
+            text = stringResource(R.string.barcode_looking_up, barcode),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        Spacer(modifier = Modifier.height(12.dp))
+        // Cancellable: the OFF cascade can take ~60s; never trap the user.
+        TextButton(onClick = onCancel) {
+            Text(
+                stringResource(R.string.barcode_cancel),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
     }
 }
 
@@ -848,18 +908,16 @@ private fun ResolvingCardContent(barcode: String) {
 private fun ResolvedCardContent(
     product: BarcodeProduct,
     components: List<ResolvedPackagingComponent>,
-    onConfirmAndSave: () -> Unit,
+    snackbarHostState: androidx.compose.material3.SnackbarHostState,
+    onConfirmAndSave: suspend () -> Unit,
     onResumeScanning: () -> Unit
 ) {
-    var isSaving by remember { mutableStateOf(false) }
+    var isSaving by rememberSaveable { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val saveFailedText = stringResource(R.string.barcode_save_failed)
 
-    val categoryColor = when (product.category) {
-        "Recyclable" -> HighConfidenceGreen
-        "Organic" -> GrassGreenLustrous
-        "E-Waste" -> SkyBlueDeep
-        "Trash" -> LowConfidence
-        else -> Color(0xFFFFA726)
-    }
+    // Single category-color map (was a local palette incl. Trash->red drift).
+    val categoryColor = categoryColor(product.category)
 
     Column(
         modifier = Modifier
@@ -910,7 +968,7 @@ private fun ResolvedCardContent(
         Spacer(modifier = Modifier.height(12.dp))
 
         Text(
-            text = "PACKAGING BREAKDOWN",
+            text = stringResource(R.string.barcode_packaging_breakdown),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.Bold,
@@ -941,10 +999,9 @@ private fun ResolvedCardContent(
                         val weight = comp.weightGrams
                         if (weight != null && weight > 0.0) {
                             Text(
-                                text = "Weight: ${weight}g",
+                                text = stringResource(R.string.barcode_weight_fmt, weight),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 10.sp
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -958,8 +1015,18 @@ private fun ResolvedCardContent(
         Button(
             onClick = {
                 if (!isSaving) {
-                    isSaving = true
-                    onConfirmAndSave()
+                    // try/catch + reset: a failed save must never wedge the
+                    // button in a permanently disabled state.
+                    scope.launch {
+                        isSaving = true
+                        try {
+                            onConfirmAndSave()
+                        } catch (_: Exception) {
+                            snackbarHostState.showSnackbar(saveFailedText)
+                        } finally {
+                            isSaving = false
+                        }
+                    }
                 }
             },
             enabled = !isSaving,
@@ -967,19 +1034,19 @@ private fun ResolvedCardContent(
             shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = Color.Black
+                contentColor = MaterialTheme.colorScheme.onPrimary
             )
         ) {
             if (isSaving) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(18.dp),
-                    color = Color.Black,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     strokeWidth = 2.dp
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Saving...", fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.barcode_saving), fontWeight = FontWeight.Bold)
             } else {
-                Text("View Disposal Guide", fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.barcode_confirm_guide), fontWeight = FontWeight.Bold)
             }
         }
 
@@ -990,7 +1057,7 @@ private fun ResolvedCardContent(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
-                text = "Scan Another",
+                text = stringResource(R.string.barcode_scan_another),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -1047,10 +1114,17 @@ private fun QuickClassifierCardContent(
     errorMessage: String? = null,
     onConfirm: (productName: String, category: String, subclass: String) -> Unit,
     onFallbackToCamera: () -> Unit,
-    onResumeScanning: () -> Unit
+    onResumeScanning: () -> Unit,
+    onManualEntry: () -> Unit = {}
 ) {
-    var productName by remember { mutableStateOf("") }
-    var selectedIndex by remember { mutableIntStateOf(0) }
+    // Rotation-safe form; nothing pre-selected (a one-tap default once
+    // misfiled cardboard as e-waste).
+    var productName by rememberSaveable { mutableStateOf("") }
+    var selectedIndex by rememberSaveable { mutableStateOf<Int?>(null) }
+    var nameError by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectionError by rememberSaveable { mutableStateOf<String?>(null) }
+    val nameRequiredText = stringResource(R.string.barcode_name_required)
+    val selectionRequiredText = stringResource(R.string.barcode_select_required)
 
     val options = remember {
         listOf(
@@ -1098,14 +1172,16 @@ private fun QuickClassifierCardContent(
                 label = "General Trash",
                 description = "Composite Packaging, Wrappers",
                 category = "Trash",
-                subclass = "Plastic",
+                // Was Plastic (Recyclable): contradictory category/subclass
+                // pair. Miscellaneous Trash is the mapped Trash subclass.
+                subclass = "Miscellaneous Trash",
                 icon = Icons.Default.DeleteOutline,
                 accentColor = LowConfidence
             )
         )
     }
 
-    val selectedOption = options[selectedIndex]
+    val selectedOption = selectedIndex?.let { options.getOrNull(it) }
 
     Column(
         modifier = Modifier
@@ -1125,28 +1201,43 @@ private fun QuickClassifierCardContent(
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Quick Product Classifier",
+                        text = stringResource(R.string.barcode_quick_title),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Code: ${if (barcode.length > 20) barcode.take(18) + "..." else barcode}",
+                        text = stringResource(
+                            R.string.barcode_code_full,
+                            if (barcode.length > 20) barcode.take(18) + "..." else barcode
+                        ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
+            // Manual entry is reachable from error states too (no dead end).
+            TextButton(onClick = onManualEntry) {
+                Text(
+                    stringResource(R.string.barcode_manual_entry),
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
+        }
+
+        // Selected-category badge (nothing pre-selected: hidden until chosen).
+        selectedOption?.let { selected ->
             Surface(
                 shape = RoundedCornerShape(8.dp),
-                color = selectedOption.accentColor.copy(alpha = 0.15f),
-                border = BorderStroke(1.dp, selectedOption.accentColor.copy(alpha = 0.4f))
+                color = selected.accentColor.copy(alpha = 0.15f),
+                border = BorderStroke(1.dp, selected.accentColor.copy(alpha = 0.4f)),
+                modifier = Modifier.padding(top = 8.dp)
             ) {
                 Text(
-                    text = selectedOption.category,
-                    color = selectedOption.accentColor,
+                    text = selected.category,
+                    color = selected.accentColor,
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
@@ -1154,14 +1245,37 @@ private fun QuickClassifierCardContent(
             }
         }
 
+        // Full code in the body (header truncates past 20 chars).
+        if (barcode.length > 20) {
+            Text(
+                text = barcode,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+
+        if (errorMessage != null) {
+            Text(
+                text = errorMessage,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+
         Spacer(modifier = Modifier.height(10.dp))
 
         OutlinedTextField(
             value = productName,
-            onValueChange = { productName = it },
-            label = { Text("Product / Item Name (e.g. Uno Box, Laptop)") },
-            placeholder = { Text("Name this item...") },
+            onValueChange = { productName = it; nameError = null },
+            label = { Text(stringResource(R.string.barcode_manual_label)) },
+            placeholder = { Text(stringResource(R.string.barcode_manual_entry)) },
             singleLine = true,
+            isError = nameError != null,
+            supportingText = nameError?.let { { Text(it) } },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
@@ -1173,12 +1287,20 @@ private fun QuickClassifierCardContent(
         Spacer(modifier = Modifier.height(10.dp))
 
         Text(
-            text = "SELECT WASTE CATEGORY",
+            text = stringResource(R.string.barcode_select_category),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.Bold,
             letterSpacing = 1.sp
         )
+        selectionError?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
         Spacer(modifier = Modifier.height(6.dp))
 
         LazyColumn(
@@ -1199,7 +1321,10 @@ private fun QuickClassifierCardContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 2.dp)
-                        .clickable { selectedIndex = index }
+                        .clickable {
+                            selectedIndex = if (isSelected) null else index
+                            selectionError = null
+                        }
                 ) {
                     Row(
                         modifier = Modifier
@@ -1209,7 +1334,7 @@ private fun QuickClassifierCardContent(
                     ) {
                         Icon(
                             imageVector = opt.icon,
-                            contentDescription = null,
+                            contentDescription = opt.label,
                             tint = if (isSelected) opt.accentColor else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp)
                         )
@@ -1224,8 +1349,7 @@ private fun QuickClassifierCardContent(
                             Text(
                                 text = opt.description,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 10.sp
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         if (isSelected) {
@@ -1245,19 +1369,32 @@ private fun QuickClassifierCardContent(
 
         Button(
             onClick = {
-                val finalName = productName.ifBlank { selectedOption.label }
-                onConfirm(finalName, selectedOption.category, selectedOption.subclass)
+                // Validated: blank names no longer save the option label as
+                // the product name, and a category must be chosen.
+                val chosen = selectedOption
+                var valid = true
+                if (productName.isBlank()) {
+                    nameError = nameRequiredText
+                    valid = false
+                }
+                if (chosen == null) {
+                    selectionError = selectionRequiredText
+                    valid = false
+                }
+                if (valid && chosen != null) {
+                    onConfirm(productName.trim(), chosen.category, chosen.subclass)
+                }
             },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = Color.Black
+                contentColor = MaterialTheme.colorScheme.onPrimary
             )
         ) {
             Icon(Icons.Default.VerifiedUser, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Confirm & View Disposal Guide", fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.barcode_confirm_guide), fontWeight = FontWeight.Bold)
         }
 
         Spacer(modifier = Modifier.height(6.dp))
@@ -1269,10 +1406,10 @@ private fun QuickClassifierCardContent(
             TextButton(onClick = onFallbackToCamera) {
                 Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Analyze with Camera", style = MaterialTheme.typography.labelMedium)
+                Text(stringResource(R.string.barcode_camera), style = MaterialTheme.typography.labelMedium)
             }
             TextButton(onClick = onResumeScanning) {
-                Text("Scan Another", style = MaterialTheme.typography.labelMedium)
+                Text(stringResource(R.string.barcode_scan_another), style = MaterialTheme.typography.labelMedium)
             }
         }
     }
@@ -1282,7 +1419,11 @@ private fun QuickClassifierCardContent(
  * Prompt displayed when camera permission has not yet been granted.
  */
 @Composable
-private fun CameraPermissionRequired(onRequestPermission: () -> Unit) {
+private fun CameraPermissionRequired(
+    showRationale: Boolean,
+    onRequestPermission: () -> Unit
+) {
+    val context = LocalContext.current
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1303,16 +1444,38 @@ private fun CameraPermissionRequired(onRequestPermission: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
+        if (showRationale) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.barcode_permission_rationale),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        }
         Spacer(modifier = Modifier.height(24.dp))
         Button(
             onClick = onRequestPermission,
             shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = Color.Black
+                contentColor = MaterialTheme.colorScheme.onPrimary
             )
         ) {
             Text(stringResource(R.string.common_grant_permission), fontWeight = FontWeight.Bold)
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        TextButton(onClick = {
+            try {
+                context.startActivity(
+                    Intent(
+                        android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + context.packageName)
+                    )
+                )
+            } catch (_: Exception) { }
+        }) {
+            Text(stringResource(R.string.home_open_settings))
         }
     }
 }

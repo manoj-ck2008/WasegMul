@@ -14,6 +14,36 @@
 -keep class com.agrelius.wasegmul.data.WasteRecord { *; }
 -keep class com.agrelius.wasegmul.data.WasteDao { <methods>; }
 -keep class com.agrelius.wasegmul.data.WasteDatabase { *; }
+-keep class com.agrelius.wasegmul.data.BarcodeProduct { *; }
+-keep class com.agrelius.wasegmul.data.BarcodeProductDao { <methods>; }
+-keep class com.agrelius.wasegmul.data.disposal.** { *; }
+
+# ── Serialization & Network Models ───────────────────────────────────────────
+# (single block: SerialName members + OFF DTOs + shared packaging mapper;
+# duplicates removed — keep this the ONE network/serialization section)
+-keepattributes *Annotation*
+-keepclassmembers class * {
+    @kotlinx.serialization.SerialName <fields>;
+}
+-keep class com.agrelius.wasegmul.network.** { *; }
+-keepclassmembers class com.agrelius.wasegmul.network.** {
+    <fields>;
+    <methods>;
+}
+-keepclasseswithmembers class com.agrelius.wasegmul.network.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+# Serializer core (required when minify is on)
+-keep class kotlinx.serialization.** { *; }
+-dontwarn kotlinx.serialization.**
+-keep class com.agrelius.wasegmul.ResolvedPackagingComponent { *; }
+-keep class com.agrelius.wasegmul.PackagingWasteMapper { *; }
+
+# ── Enums (needed for valueOf() lookups) ──────────────────────────────────────
+-keepclassmembers enum * {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}
 
 # ── ViewModel Factories (needed for R8 to keep Factory.create()) ──────────────
 -keep class * extends androidx.lifecycle.ViewModel
@@ -55,3 +85,10 @@
 # ── Application class (referenced from AndroidManifest) ──────────────────────
 -keep class com.agrelius.wasegmul.WasegMulApp { *; }
 -keep class com.agrelius.wasegmul.MainActivity { *; }
+
+# ── kotlinx.serialization (OFF API DTOs): merged into the Serialization & ──
+# ── Network Models block above; kept here as pointer only (no duplicate rules).
+
+# ── Disposal enum used via valueOf() ───────────────────────────────────────────
+-keep class com.agrelius.wasegmul.data.disposal.DisposalCenterType { *; }
+-keep class com.agrelius.wasegmul.data.disposal.DisposalCenter { *; }

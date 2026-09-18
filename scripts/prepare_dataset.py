@@ -16,7 +16,19 @@ Architecture:
     EfficientNet classifies 30 fine subclasses (WHAT each object is)
 
 Requirements:
-    pip install pycocotools opencv-python-headless numpy pyyaml
+    pip install -r scripts/requirements-train.txt
+    # (pins pycocotools, opencv-python-headless, numpy, pyyaml; Pillow +
+    #  imagehash optional for pHash near-dedup — see deduplicate() below)
+
+Determinism:
+    Set PYTHONHASHSEED=0 in your shell for reproducible splits. This script
+    seeds random with --seed (default 42). cudnn.benchmark is forced False
+    in training scripts; no GPU nondeterminism originates here.
+
+Local reruns (no Kaggle needed):
+    python scripts/prepare_dataset.py --taco-dir ./datasets/taco --sources taco
+    python scripts/prepare_dataset.py --taco-dir ./datasets/taco --custom-dir ./datasets/custom --sources taco custom --output ./datasets/waste-yolo
+    Kaggle dirs can also come from env: WASEGMUL_KNEROMA_DIR / WASEGMUL_MANOJKARI_DIR / WASEGMUL_TACO_DIR.
 
 Usage:
     # On Kaggle (with datasets as Input):
@@ -292,7 +304,21 @@ def load_custom_dataset(custom_dir: Path) -> list[dict]:
 
 
 def deduplicate(records: list[dict]) -> list[dict]:
-    """Remove duplicate images across datasets (by content hash)."""
+    """Remove duplicate images across datasets.
+
+    Two-stage:
+      1. Exact dedup by MD5 content hash (always on).
+      2. Near-dedup for burst frames: light pHash via PIL/imagehash when
+         installed; otherwise filename-group + resolution check fallback.
+
+    LIMITATION (documented): MD5 alone misses near-duplicates (burst frames,
+    re-exports). Install Pillow + imagehash for pHash stage:
+        pip install pillow imagehash
+    Without them the fallback groups by (stem-prefix, width, height) and keeps
+    the first per group, logging each drop. This is conservative and may keep
+    some near-dupes — re-run with imagehash for strict pipelines.
+    """
+    # Stage 1: exact MD5
     seen = set()
     unique = []
     dupes = 0
@@ -305,8 +331,56 @@ def deduplicate(records: list[dict]) -> list[dict]:
             dupes += 1
 
     if dupes:
-        print(f"  Removed {dupes} duplicate images")
-    return unique
+        print(f"  Removed {dupes} duplicate images (MD5 exact)")
+
+    # Stage 2: near-dedup
+    try:
+        from PIL import Image
+        import imagehash
+        _has_phash = True
+    except ImportError:
+        _has_phash = False
+
+    if _has_phash:
+        seen_hashes: list = []
+        kept: list[dict] = []
+        near_dupes = 0
+        for r in unique:
+            try:
+                with Image.open(r["image_path"]) as im:
+                    ph = imagehash.phash(im)
+            except Exception:
+                kept.append(r)
+                continue
+            if any((ph - h) <= 5 for h in seen_hashes):
+                near_dupes += 1
+                continue
+            seen_hashes.append(ph)
+            kept.append(r)
+        if near_dupes:
+            print(f"  Removed {near_dupes} near-duplicate images (pHash Hamming<=5)")
+        return kept
+
+    # Fallback: filename-group + resolution check (no extra deps)
+    print("  NOTE: Pillow/imagehash not installed — using filename-group + "
+          "resolution fallback for near-dedup (MD5 exact already applied).")
+    seen_groups = set()
+    kept = []
+    group_dupes = 0
+    for r in unique:
+        stem = Path(r.get("image_name", "")).stem
+        # Group key: alphanumeric prefix (strips burst suffixes like _001, -2)
+        import re
+        prefix = re.sub(r"[_-]?\d+$", "", stem).lower()[:32]
+        key = (prefix, r.get("width", 0), r.get("height", 0))
+        if key in seen_groups and prefix:
+            group_dupes += 1
+            continue
+        seen_groups.add(key)
+        kept.append(r)
+    if group_dupes:
+        print(f"  Removed {group_dupes} suspected burst-frame dupes (filename-group fallback)")
+    return kept
 
 
 def filter_quality(records: list[dict], min_objects: int = 1) -> list[dict]:
@@ -318,13 +392,20 @@ def filter_quality(records: list[dict], min_objects: int = 1) -> list[dict]:
     return filtered
 
 
-def stratified_split(records: list[dict], train_ratio=0.8, val_ratio=0.1, seed=42):
+def stratified_split(records: list[dict], train_ratio=0.8, val_ratio=0.1, seed=42,
+                       allow_rare: bool = False):
     """Stratified split ensuring all classes appear in each split.
-    
+
     Strategy:
     1. Group images by their primary (most frequent) class
     2. Split each group proportionally
     3. This ensures rare classes appear in train/val/test
+
+    Minimum-val enforcement (audit §3.47): classes with <=2 images CANNOT
+    satisfy train/val/test coverage. Previously this silently produced zero
+    val images. Now it FAILS with a clear error unless allow_rare=True, in
+    which case rare singles are redistributed into train and explicitly logged
+    (never silent).
     """
     random.seed(seed)
 
@@ -343,11 +424,28 @@ def stratified_split(records: list[dict], train_ratio=0.8, val_ratio=0.1, seed=4
             primary_class = NUM_YOLO_CLASSES - 1  # other
         class_groups[primary_class].append(r)
 
+    # Enforce minimum coverage: need >=3 images per class for train/val/test.
+    rare = {c: len(g) for c, g in class_groups.items() if len(g) < 3}
+    if rare:
+        detail = ", ".join(f"class {c} (n={n})" for c, n in sorted(rare.items()))
+        if not allow_rare:
+            raise SystemExit(
+                f"STRATIFIED SPLIT BLOCKED: {detail} have <3 images, so val/test "
+                f"coverage is impossible. Collect more images for these classes, "
+                f"or re-run with --allow-rare to redistribute rare singles into "
+                f"train (logged, not silent)."
+            )
+        print(f"  WARNING (--allow-rare): redistributing rare groups into train: {detail}")
+
     train, val, test = [], [], []
 
     for cls, group in class_groups.items():
         random.shuffle(group)
         n = len(group)
+        if n < 3 and allow_rare:
+            # Redistribute: all into train so nothing is silently dropped.
+            train.extend(group)
+            continue
         n_train = int(n * train_ratio)
         n_val = max(1, int(n * val_ratio)) if n > 2 else 0
 
@@ -440,11 +538,14 @@ Examples:
   python scripts/prepare_dataset.py --sources taco custom
         """,
     )
-    parser.add_argument("--taco-dir", type=str, help="Path to TACO dataset")
+    parser.add_argument("--taco-dir", type=str, default=os.environ.get("WASEGMUL_TACO_DIR"),
+                        help="Path to TACO dataset (or WASEGMUL_TACO_DIR env)")
     parser.add_argument("--kneroma-dir", type=str,
-                        default="/kaggle/input/datasets/kneroma/tacotrashdataset")
+                        default=os.environ.get("WASEGMUL_KNEROMA_DIR",
+                                               "/kaggle/input/datasets/kneroma/tacotrashdataset"))
     parser.add_argument("--manojkari-dir", type=str,
-                        default="/kaggle/input/datasets/manojkari/taco-dataset1")
+                        default=os.environ.get("WASEGMUL_MANOJKARI_DIR",
+                                               "/kaggle/input/datasets/manojkari/taco-dataset1"))
     parser.add_argument("--custom-dir", type=str,
                         default="./datasets/custom",
                         help="Path to custom YOLO dataset")
@@ -454,6 +555,10 @@ Examples:
     parser.add_argument("--kaggle-mode", action="store_true")
     parser.add_argument("--train-ratio", type=float, default=0.8)
     parser.add_argument("--val-ratio", type=float, default=0.1)
+    parser.add_argument("--seed", type=int, default=int(os.environ.get("PYTHON_SEED", "42")),
+                        help="Random seed for splits (or PYTHON_SEED env). Set PYTHONHASHSEED=0 for full reproducibility.")
+    parser.add_argument("--allow-rare", action="store_true",
+                        help="Redistribute classes with <3 images into train instead of failing (logged, not silent)")
     parser.add_argument("--download-kaggle", type=str,
                         help="Kaggle dataset slug to download directly (e.g. kneroma/tacotrashdataset or manojkari/taco-dataset1)")
     parser.add_argument("--no-verify", action="store_true",
@@ -530,11 +635,13 @@ Examples:
     print(f"  After filter: {len(all_records)} images")
 
     # Step 5: Stratified split
-    print(f"\nStep 5: Stratified split")
+    print(f"\nStep 5: Stratified split (seed={args.seed})")
     train, val, test = stratified_split(
         all_records,
         train_ratio=args.train_ratio,
         val_ratio=args.val_ratio,
+        seed=args.seed,
+        allow_rare=args.allow_rare,
     )
     print(f"  Train: {len(train)}")
     print(f"  Val:   {len(val)}")

@@ -25,45 +25,59 @@ fun AppLogo(
     val density = LocalDensity.current
     val sizePx = with(density) { size.toPx() }
 
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(12000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "rotation"
-    )
+    // All decorative motion honors `animate` (reduced-motion / power-save
+    // callers pass false); previously only the orbiting nodes were gated.
+    val rotation = if (animate) {
+        val r by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(12000, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "rotation"
+        )
+        r
+    } else 0f
 
-    val energyFlow by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(4000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "energy"
-    )
+    val energyFlow = if (animate) {
+        val e by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(4000, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "energy"
+        )
+        e
+    } else 0.5f
 
-    val nodePulse by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 0.9f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = LinearOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "node_pulse"
-    )
+    val nodePulse = if (animate) {
+        val n by infiniteTransition.animateFloat(
+            initialValue = 0.3f,
+            targetValue = 0.9f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(2000, easing = LinearOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "node_pulse"
+        )
+        n
+    } else 0.6f
 
-    val glowPulse by infiniteTransition.animateFloat(
-        initialValue = 0.15f,
-        targetValue = 0.45f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = SinEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "glow_pulse"
-    )
+    val glowPulse = if (animate) {
+        val g by infiniteTransition.animateFloat(
+            initialValue = 0.15f,
+            targetValue = 0.45f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(3000, easing = SinEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "glow_pulse"
+        )
+        g
+    } else 0.3f
 
     val leafPathCache = remember { Path() }
 
@@ -232,10 +246,10 @@ fun AppLogo(
     }
 }
 
-/** Smooth sine easing for organic pulsing. */
+/** Smooth sine easing for organic pulsing (standard 0..1 sine in-out). */
 private object SinEasing : Easing {
     override fun transform(fraction: Float): Float =
-        ((sin(fraction * PI) / PI) + 0.5).toFloat().coerceIn(0f, 1f)
+        ((1 - cos(fraction * PI)) / 2).toFloat().coerceIn(0f, 1f)
 }
 
 @androidx.compose.ui.tooling.preview.Preview(name = "AppLogo Preview", showBackground = true, backgroundColor = 0xFF121212)

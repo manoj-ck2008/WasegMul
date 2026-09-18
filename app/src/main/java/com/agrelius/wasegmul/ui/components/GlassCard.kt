@@ -28,6 +28,8 @@ fun GlassCard(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val glassColors = LocalGlassColors.current
+    // Perf: skip the per-card blur tax when motion/decoration is reduced.
+    val reduceMotion = rememberReduceMotion()
     val bgBrush = remember(glassColors) {
         Brush.verticalGradient(
             colors = listOf(
@@ -47,8 +49,8 @@ fun GlassCard(
         )
     }
     val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
-    val blurModifier = remember {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+    val blurModifier = remember(reduceMotion) {
+        if (!reduceMotion && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             Modifier.blur(16.dp)
         } else {
             Modifier

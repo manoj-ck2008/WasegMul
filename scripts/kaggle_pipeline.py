@@ -10,8 +10,9 @@ Automates the complete lifecycle of remote model training on Kaggle GPU clusters
   5. Syncs ready-to-use models into app/src/main/assets/.
 
 Requirements:
-  - Kaggle API token configured (~/.kaggle/access_token or KAGGLE_API_TOKEN env)
-  - Python 3.8+ with kaggle, pyyaml
+  - Kaggle API token configured (~/.kaggle/kaggle.json or KAGGLE_API_TOKEN env).
+    Never commit tokens: this script reads env/file only and never writes secrets.
+    See scripts/requirements-train.txt for pip deps (kaggle, pyyaml).
 
 Usage:
   # Check status of ongoing Kaggle training
@@ -25,6 +26,13 @@ Usage:
 
   # List accessible Kaggle datasets
   python scripts/kaggle_pipeline.py datasets
+
+Env overrides (keep defaults for the documented project; local reruns):
+  WASEGMUL_KAGGLE_USER, WASEGMUL_KAGGLE_SLUG, WASEGMUL_KAGGLE_TITLE,
+  WASEGMUL_KAGGLE_DATASETS (comma-separated slugs).
+  CLI flags take precedence over env. Determinism: set PYTHONHASHSEED=0;
+  training-seed/epochs/cache/resume are read by kaggle_train.py via
+  WASEGMUL_* (see its header + requirements-train.txt).
 """
 
 import argparse
@@ -44,10 +52,10 @@ ASSETS_DIR = PROJECT_ROOT / "app" / "src" / "main" / "assets"
 TAXONOMY_PATH = PROJECT_ROOT / "taxonomy.yaml"
 TRAIN_SCRIPT = SCRIPT_DIR / "kaggle_train.py"
 
-DEFAULT_USERNAME = "manojkari"
-DEFAULT_SLUG = "wasegmul-yolo11n-waste-training"
-DEFAULT_TITLE = "WasegMul YOLO11n Waste Training"
-DEFAULT_DATASETS = ["manojkari/taco-dataset1"]
+DEFAULT_USERNAME = os.environ.get("WASEGMUL_KAGGLE_USER", "manojkari")
+DEFAULT_SLUG = os.environ.get("WASEGMUL_KAGGLE_SLUG", "wasegmul-yolo11n-waste-training")
+DEFAULT_TITLE = os.environ.get("WASEGMUL_KAGGLE_TITLE", "WasegMul YOLO11n Waste Training")
+DEFAULT_DATASETS = os.environ.get("WASEGMUL_KAGGLE_DATASETS", "manojkari/taco-dataset1").split(",")
 
 
 def run_kaggle_cmd(args: List[str]) -> subprocess.CompletedProcess:

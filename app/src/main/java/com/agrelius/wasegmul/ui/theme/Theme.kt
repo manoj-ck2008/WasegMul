@@ -84,14 +84,29 @@ private val LightColorScheme = lightColorScheme(
 private val ColourColorScheme = darkColorScheme(
     primary = GrassGreenLustrous,
     onPrimary = Color.Black,
+    primaryContainer = Color(0xFF2E4A2A),
+    onPrimaryContainer = Color(0xFFE8F0D8),
     secondary = SkyBlueDeep,
     onSecondary = Color.White,
+    secondaryContainer = Color(0xFF33475B),
+    onSecondaryContainer = Color(0xFFDCE9F5),
     tertiary = OliveLight,
+    onTertiary = Color(0xFF1A2410),
+    tertiaryContainer = Color(0xFF4A5230),
+    onTertiaryContainer = Color(0xFFF0F2DF),
     surface = OliveDark,
     onSurface = Color.White,
+    surfaceVariant = Color(0xFF3A4028),
+    onSurfaceVariant = Color(0xFFCFC8B0),
     background = MossSecondary,
     onBackground = Color.White,
-    inverseSurface = EarthBrown
+    error = Color(0xFFFFB4AB),
+    onError = Color(0xFF690005),
+    outline = Color(0xFF8A8F6E),
+    outlineVariant = Color(0xFF4A4F38),
+    inverseSurface = EarthBrown,
+    inverseOnSurface = Color.White,
+    scrim = Color.Black
 )
 
 @Composable

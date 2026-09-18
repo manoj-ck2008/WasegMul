@@ -1,6 +1,7 @@
 package com.agrelius.wasegmul.ml
 
 import android.graphics.Bitmap
+import android.graphics.Matrix
 import androidx.camera.core.ImageProxy
 import android.util.Log
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
@@ -8,7 +9,9 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -59,10 +62,19 @@ class BarcodeScanner : Closeable {
      *
      * Skips scanning if:
      * - A scan operation is already in progress ([isProcessing] guard).
-     * - The scanner is within the debounce cooldown period (2000ms from last successful scan).
+     * - The scanner is within the debounce cooldown period ([DEBOUNCE_DELAY_MS] from
+     *   last successful scan).
      * - The scanner has been closed.
      *
-     * @param imageProxy The image frame to analyze.
+     * ### Throttling (documented contract, §3.36)
+     * Three independent gates: (1) [isProcessing] CAS drops overlapping frames so a
+     * slow ML Kit call cannot queue work; (2) [DEBOUNCE_DELAY_MS] cooldown suppresses
+     * repeat reads of the same code; (3) [SCAN_TIMEOUT_MS] bounds `await()` so a
+     * wedged ML Kit task cannot hold the caller's `ImageProxy` open forever (proxy
+     * close + executor lifecycle remain the CALLER's job — `BarcodeScanScreen`
+     * closes in `finally` after dispatch; verify there on CameraX changes, §3.43).
+     *
+     * @param imageProxy The image frame to analyze. NOT closed here.
      * @return The first detected [BarcodeResult], or null if no supported barcode is found,
      *         if an error occurs, or if throttled by concurrency or cooldown.
      */
@@ -85,17 +97,41 @@ class BarcodeScanner : Closeable {
         return try {
             if (isClosed.get()) return null
 
-            val inputImage = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-            val barcodes = scanner.process(inputImage).await()
+            val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+            val inputImage = InputImage.fromMediaImage(mediaImage, rotationDegrees)
+            // Bounded await (§3.36): without this a stuck ML Kit task holds the
+            // ImageProxy open and stalls the CameraX pipeline (STRATEGY_KEEP_ONLY_LATEST
+            // cannot help while the analyzer never returns).
+            val barcodes = try {
+                withTimeout(SCAN_TIMEOUT_MS) { scanner.process(inputImage).await() }
+            } catch (e: TimeoutCancellationException) {
+                Log.w(TAG, "Barcode scan timed out after ${SCAN_TIMEOUT_MS}ms; frame dropped")
+                return null
+            }
             val firstBarcode = barcodes.firstOrNull() ?: return null
 
             val rawValue = firstBarcode.rawValue ?: firstBarcode.displayValue ?: return null
             val displayValue = firstBarcode.displayValue ?: rawValue
+            if (isJunkPayload(rawValue)) {
+                Log.d(TAG, "Rejecting junk barcode payload pre-resolve")
+                return null
+            }
             val resolvedCode = extractGtinFromUrl(rawValue)
 
-            // Extract frame bitmap for visual ML fallback only when a barcode is actually detected
+            // Extract frame bitmap for visual ML fallback only when a barcode is actually detected.
+            // toBitmap() ignores sensor rotation, so rotate to upright here (§3.36) —
+            // otherwise the Tier-4 fallback classifies a sideways frame.
             val frameBitmap = try {
-                imageProxy.toBitmap()
+                val upright = imageProxy.toBitmap()
+                if (rotationDegrees % 360 != 0) {
+                    val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
+                    val rotated =
+                        Bitmap.createBitmap(upright, 0, 0, upright.width, upright.height, matrix, true)
+                    if (rotated !== upright) upright.recycle()
+                    rotated
+                } else {
+                    upright
+                }
             } catch (e: Exception) {
                 null
             }
@@ -161,6 +197,12 @@ class BarcodeScanner : Closeable {
         const val DEBOUNCE_DELAY_MS = 2000L
 
         /**
+         * Upper bound for one ML Kit `process()` call. Exceeding it drops the frame
+         * (returns null) so the CameraX pipeline never stalls on a wedged task.
+         */
+        const val SCAN_TIMEOUT_MS = 8_000L
+
+        /**
          * Validates an EAN-13 barcode string using the standard GS1 Modulo-10 checksum algorithm.
          *
          * @param code The string to validate.
@@ -185,15 +227,42 @@ class BarcodeScanner : Closeable {
         /**
          * Extracts a numeric GTIN or barcode from a GS1 Digital Link or URL if present.
          * For example, "https://id.gs1.org/01/08435111111112" returns "08435111111112".
+         *
+         * Covers: `/01/…`, `/(01)…`, `/gtin/…`, `/product/…`, `?gtin=…` / `?…gtin=…`,
+         * slash-less `…/01<14 digits>`, bare `01<14 digits>` element strings (no slash
+         * at all, e.g. QR payloads), and whitespace-padded QR payloads (trimmed
+         * first). Returns the trimmed input unchanged when no GS1 pattern matches.
          */
         fun extractGtinFromUrl(raw: String): String {
             val trimmed = raw.trim()
             val gs1Pattern = Regex("""(?:/(?:01|gtin|product)/|\(01\))(\d{8,14})""")
-            val match = gs1Pattern.find(trimmed)
-            if (match != null) {
-                return match.groupValues[1]
-            }
+            gs1Pattern.find(trimmed)?.let { return it.groupValues[1] }
+            // Query-param form: ?gtin=… or &gtin=…
+            Regex("""[?&]gtin=(\d{8,14})""").find(trimmed)?.let { return it.groupValues[1] }
+            // Slash-less GS1 element string tail: …/01<digits> without inner slash.
+            Regex("""/01(\d{14})(?:/|$)""").find(trimmed)?.let { return it.groupValues[1] }
+            // Bare element string: 01 + 14 digits not embedded in a longer digit run.
+            Regex("""(?<!\d)01(\d{14})(?!\d)""").find(trimmed)?.let { return it.groupValues[1] }
             return trimmed
+        }
+
+        /**
+         * Junk rejection pre-OFF-resolve (§3.36): drops payloads that must never reach
+         * Tier-1/3 lookup or the Room cache — blanks, `code_<timestamp>` fabricated
+         * keys, non-GTIN URLs, and payloads with no digits at all.
+         */
+        fun isJunkPayload(raw: String): Boolean {
+            val trimmed = raw.trim()
+            if (trimmed.isEmpty()) return true
+            if (trimmed.startsWith("code_")) return true
+            if (!trimmed.any { it.isDigit() }) return true
+            if (trimmed.startsWith("http://", ignoreCase = true) ||
+                trimmed.startsWith("https://", ignoreCase = true)
+            ) {
+                // URL: only worth resolving when a GS1 pattern extracts a GTIN.
+                return extractGtinFromUrl(trimmed) == trimmed
+            }
+            return false
         }
     }
 }

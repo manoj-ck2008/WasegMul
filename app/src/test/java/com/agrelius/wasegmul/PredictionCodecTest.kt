@@ -53,8 +53,7 @@ class PredictionCodecTest {
     }
 
     @Test
-    fun testNonAsciiCharactersAndNaNFiltering() {
-        val original = listOf(
+    fun testNonAsciiCharactersAndNaNFiltering() {        val original = listOf(
             "Café & Résidu" to 0.85f,
             "Battery🔋" to 0.15f,
             "InvalidNaN" to Float.NaN,
@@ -69,5 +68,25 @@ class PredictionCodecTest {
         assertEquals(0.85f, decoded[0].second, 0.001f)
         assertEquals("Battery🔋", decoded[1].first)
         assertEquals(0.15f, decoded[1].second, 0.001f)
+    }
+
+    @Test
+    fun testOutOfRangeConfidences_dropped() {
+        assertTrue(PredictionCodec.decode("Plastic|5.0").isEmpty())
+        assertTrue(PredictionCodec.decode("Plastic|-1.0").isEmpty())
+        assertEquals(listOf("Glass" to 0.2f), PredictionCodec.decode("Plastic|5.0;Glass|0.2"))
+    }
+
+    @Test
+    fun testMalformedPercentBytes_neverThrows() {
+        val decoded = PredictionCodec.decode("Plastic|0.9;%FF%FE|0.1")
+        assertEquals(2, decoded.size)
+        assertEquals("Plastic", decoded[0].first)
+    }
+
+    @Test
+    fun testSizeCaps_boundHostileInput() {
+        val huge = (1..60).joinToString(";") { "label$it|0.5" }
+        assertEquals(PredictionCodec.MAX_ENTRIES, PredictionCodec.decode(huge).size)
     }
 }

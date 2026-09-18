@@ -2,8 +2,10 @@ package com.agrelius.wasegmul.ml
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.graphics.RectF
 import android.util.Log
+import org.tensorflow.lite.DataType
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.support.common.FileUtil
 import kotlinx.coroutines.Dispatchers
@@ -25,7 +27,48 @@ data class Detection(
     val classIndex: Int
 )
 
-class YoloDetector(context: Context) : Closeable {
+/**
+ * Outcome of a YOLO inference pass. Prefer [detectResult]: unlike [detect] it
+ * distinguishes "no objects above threshold" ([Success] with an empty list) from
+ * an inference failure ([Failure]), instead of collapsing both to `emptyList()`.
+ */
+sealed interface DetectionOutcome {
+    data class Success(val detections: List<Detection>) : DetectionOutcome
+    data class Failure(val message: String, val cause: Throwable? = null) : DetectionOutcome
+}
+
+/**
+ * YOLO object detector (v8/v11, TFLite) for locating waste items in camera frames.
+ *
+ * ### Rotation contract (§3.25/§3.43)
+ * The detector does NOT read EXIF or `ImageProxy` metadata: **callers MUST pass
+ * [detect]'s [rotationDegrees] (from `imageProxy.imageInfo.rotationDegrees`) or
+ * pre-rotate the bitmap to upright**. An unrotated portrait frame is letterboxed
+ * sideways and misclassified. The CameraX analyzer in `YoloScreen` currently passes
+ * `toBitmap()` upright RGBA frames; if that pipeline ever switches to YUV without
+ * rotation, pass the degrees here.
+ *
+ * ### Coordinate contract
+ * YOLOv8/v11 TFLite exports emit CENTER-XY-WH in **pixel space** (`0..640`).
+ * [coordinatesNormalized] selects the interpretation explicitly from model metadata
+ * (pass `true` only for exports documented as `0..1`-normalized) — never the old
+ * `cx <= 1` value heuristic, which mis-scaled small near-origin pixel boxes ×640.
+ *
+ * ### Threading (§2.8)
+ * A SINGLE [stateMutex] guards init + detect + close. `close()` is synchronous
+ * ([Closeable]) so it uses `tryLock`; an in-flight `detect()` performs the cleanup
+ * in its `finally` block when close loses the race — no native SIGSEGV from
+ * use-after-close.
+ *
+ * Must be called off the Main thread for `detect` (it already confines to
+ * `Dispatchers.Default`); callers must additionally close the `ImageProxy` AFTER
+ * dispatch and recycle any `copy()` they made downstream (§3.43 — enforced at the
+ * `YoloScreen` call site, documented here as the contract).
+ */
+class YoloDetector(
+    context: Context,
+    private val coordinatesNormalized: Boolean = false
+) : Closeable {
 
     private val appContext = context.applicationContext
     private var interpreter: Interpreter? = null
@@ -35,8 +78,9 @@ class YoloDetector(context: Context) : Closeable {
     @Volatile
     private var closed = false
 
-    private val initMutex = Mutex()
-    private val detectMutex = Mutex()
+    // §2.8: ONE mutex guards init + detect + close (previously split initMutex /
+    // detectMutex let close() race inference → native SIGSEGV).
+    private val stateMutex = Mutex()
 
     private val inputSize = INPUT_SIZE
 
@@ -51,6 +95,15 @@ class YoloDetector(context: Context) : Closeable {
 
     private var labels: List<String> = emptyList()
 
+    /** User-tunable confidence threshold (Settings slider). Defaults to 0.45. */
+    @Volatile
+    var confidenceThreshold: Float = CONFIDENCE_THRESHOLD
+        private set
+
+    fun setConfidenceThreshold(value: Float) {
+        confidenceThreshold = value.coerceIn(0.10f, 0.95f)
+    }
+
     private fun findModelAndLabels(): Pair<String, String?> {
         val assetList = try {
             appContext.assets.list("")?.toList() ?: emptyList()
@@ -58,6 +111,9 @@ class YoloDetector(context: Context) : Closeable {
             emptyList()
         }
 
+        // Model candidates in preference order. The repeated `waste_yolo11n.tflite`
+        // entries are INTENTIONAL (label-fallback chain, not duplicates): the first
+        // hit wins. Pair-level exact duplicates are dropped defensively below.
         val candidates = listOf(
             "waste_yolo11n.tflite" to "waste_classes.txt",
             "waste_yolo11n.tflite" to "waste_yolo11n_classes.txt",
@@ -65,7 +121,7 @@ class YoloDetector(context: Context) : Closeable {
             "yolo11n.tflite" to "yolo11n_classes.txt",
             "yolov8n.tflite" to "waste_classes.txt",
             "yolov8n.tflite" to "yolov8n_classes.txt"
-        )
+        ).distinct()
 
         for ((mFile, lFile) in candidates) {
             if (mFile in assetList) {
@@ -79,24 +135,32 @@ class YoloDetector(context: Context) : Closeable {
 
     suspend fun ensureInitialized() {
         if (isInitialized) return
-        initMutex.withLock {
+        stateMutex.withLock {
             if (isInitialized) return
             try {
                 val (modelFilename, labelsFilename) = findModelAndLabels()
                 Log.d(TAG, "Attempting to load YOLO model: $modelFilename")
                 val model = FileUtil.loadMappedFile(appContext, modelFilename)
+                // Device-aware threads (§3.34): leave headroom for camera + UI instead
+                // of a fixed 4 (low-end 4-core devices starved the preview pipeline).
+                val threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4)
                 val options = Interpreter.Options().apply {
-                    setNumThreads(4)
+                    setNumThreads(threads)
                 }
                 val interp = Interpreter(model, options)
-                val isFloat = interp.getInputTensor(0).dataType() == org.tensorflow.lite.DataType.FLOAT32
+                val inputDtype = interp.getInputTensor(0).dataType()
+                val isFloat = inputDtype == DataType.FLOAT32
                 val bytesPerChannel = if (isFloat) 4 else 1
                 inputBuffer = ByteBuffer.allocateDirect(1 * INPUT_SIZE * INPUT_SIZE * 3 * bytesPerChannel).apply {
                     order(ByteOrder.nativeOrder())
                 }
                 val outputShape = interp.getOutputTensor(0).shape()
                 val outputSize = outputShape.fold(1) { acc, i -> acc * i }
-                outputBuffer = ByteBuffer.allocateDirect(outputSize * 4).apply {
+                // Output buffer sized by dtype: quantized UINT8 outputs are 1 byte/elem
+                // (the old code always allocated 4 bytes/elem and misread them as float).
+                val outDtype = interp.getOutputTensor(0).dataType()
+                val bytesPerOutput = if (outDtype == DataType.FLOAT32) 4 else 1
+                outputBuffer = ByteBuffer.allocateDirect(outputSize * bytesPerOutput).apply {
                     order(ByteOrder.nativeOrder())
                 }
                 pixelsBuffer = IntArray(INPUT_SIZE * INPUT_SIZE)
@@ -110,13 +174,18 @@ class YoloDetector(context: Context) : Closeable {
                     minOf(outputShape[1], outputShape[2]) - 4
                 } else 80
 
+                // Production fix: never pair an 80-class COCO model with 15 waste labels.
+                // A stock yolov8n.tflite ([1,84,8400]) MUST use the 80 COCO labels so
+                // COCO 0 (person) is not misreported as waste label 0 (battery).
+                // Only a dedicated 15-class waste model may use waste_classes.txt.
+                val fileLabels = if (labelsFilename != null) loadLabelsFromAssets(labelsFilename) else emptyList()
+                val wasteLabels = loadLabelsFromAssets("waste_classes.txt")
                 labels = when {
-                    numClassesInModel == 15 -> {
-                        loadLabelsFromAssets("waste_classes.txt").ifEmpty {
-                            if (labelsFilename != null) loadLabelsFromAssets(labelsFilename) else COCO_LABELS
-                        }
-                    }
-                    labelsFilename != null -> loadLabelsFromAssets(labelsFilename).ifEmpty { COCO_LABELS }
+                    numClassesInModel == 15 && wasteLabels.size == 15 -> wasteLabels
+                    numClassesInModel == 15 && fileLabels.size == 15 -> fileLabels
+                    numClassesInModel == 80 -> COCO_LABELS
+                    fileLabels.size == numClassesInModel && fileLabels.isNotEmpty() -> fileLabels
+                    wasteLabels.size == numClassesInModel && wasteLabels.isNotEmpty() -> wasteLabels
                     else -> COCO_LABELS
                 }
 
@@ -168,46 +237,108 @@ class YoloDetector(context: Context) : Closeable {
         return LetterboxCoords(padX, padY, scaledW.toFloat(), scaledH.toFloat())
     }
 
-    suspend fun detect(bitmap: Bitmap): List<Detection> = withContext(Dispatchers.Default) {
-        if (!isInitialized || bitmap.isRecycled || bitmap.width == 0 || bitmap.height == 0) {
-            return@withContext emptyList()
-        }
+    /**
+     * Runs detection, distinguishing inference failure from "no objects".
+     *
+     * @param rotationDegrees clockwise rotation to apply before inference
+     *   (from `imageProxy.imageInfo.rotationDegrees`). `0` = bitmap already upright.
+     */
+    suspend fun detectResult(bitmap: Bitmap, rotationDegrees: Int = 0): DetectionOutcome =
+        withContext(Dispatchers.Default) {
+            if (closed || !isInitialized) {
+                return@withContext DetectionOutcome.Failure("Detector not initialized or closed")
+            }
+            if (bitmap.isRecycled || bitmap.width == 0 || bitmap.height == 0) {
+                return@withContext DetectionOutcome.Failure("Invalid bitmap (recycled or empty)")
+            }
 
-        detectMutex.withLock {
-            if (closed) return@withContext emptyList()
-            val interp = interpreter ?: return@withContext emptyList()
-            val inBuf = inputBuffer ?: return@withContext emptyList()
-            val outBuf = outputBuffer ?: return@withContext emptyList()
-            val lbBitmap = letterboxBitmap ?: return@withContext emptyList()
+            stateMutex.withLock {
+                if (closed) return@withContext DetectionOutcome.Failure("Detector closed")
+                val interp = interpreter ?: return@withContext DetectionOutcome.Failure("No interpreter")
+                val inBuf = inputBuffer ?: return@withContext DetectionOutcome.Failure("No input buffer")
+                val outBuf = outputBuffer ?: return@withContext DetectionOutcome.Failure("No output buffer")
+                val lbBitmap = letterboxBitmap ?: return@withContext DetectionOutcome.Failure("No canvas")
 
-            val lb = letterbox(bitmap, inputSize)
-            try {
-                inBuf.rewind()
-                val isFloat = interp.getInputTensor(0).dataType() == org.tensorflow.lite.DataType.FLOAT32
-                if (isFloat) {
-                    bitmapToFloatByteBuffer(lbBitmap, inBuf)
-                } else {
-                    bitmapToByteByteBuffer(lbBitmap, inBuf)
-                }
+                var rotated: Bitmap? = null
+                try {
+                    val upright = if (rotationDegrees % 360 != 0) {
+                        rotated = rotateBitmap(bitmap, rotationDegrees)
+                        rotated
+                    } else {
+                        bitmap
+                    }
+                    val lb = letterbox(upright, inputSize)
+                    inBuf.rewind()
+                    val inputTensor = interp.getInputTensor(0)
+                    if (inputTensor.dataType() == DataType.FLOAT32) {
+                        bitmapToFloatByteBuffer(lbBitmap, inBuf)
+                    } else {
+                        // Quantized input: honor the model's scale/zero-point (§3.34).
+                        // q = (pixel/255) / scale + zeroPoint, clamped to [0,255].
+                        val qp = inputTensor.quantizationParams()
+                        bitmapToQuantizedByteBuffer(lbBitmap, inBuf, qp.scale, qp.zeroPoint)
+                    }
 
-                outBuf.rewind()
-                interp.run(inBuf, outBuf)
+                    outBuf.rewind()
+                    interp.run(inBuf, outBuf)
 
-                outBuf.rewind()
-                val outputShape = interp.getOutputTensor(0).shape()
-                val rawOutput = rawOutputArray ?: FloatArray(outputShape.fold(1) { acc, i -> acc * i })
-                outBuf.asFloatBuffer().get(rawOutput)
+                    outBuf.rewind()
+                    val outputShape = interp.getOutputTensor(0).shape()
+                    val rawOutput = readFloatOutput(interp, outBuf, outputShape)
 
-                parseDetections(rawOutput, outputShape, lb.padX, lb.padY, lb.scaledW, lb.scaledH)
-            } catch (e: Exception) {
-                Log.e(TAG, "YOLO detection failed", e)
-                emptyList()
-            } finally {
-                if (closed) {
-                    cleanupInternal()
+                    val detections = parseDetections(rawOutput, outputShape, lb.padX, lb.padY, lb.scaledW, lb.scaledH)
+                    DetectionOutcome.Success(detections)
+                } catch (e: Exception) {
+                    Log.e(TAG, "YOLO detection failed", e)
+                    DetectionOutcome.Failure("Inference failed: ${e.message}", e)
+                } finally {
+                    rotated?.recycle()
+                    if (closed) {
+                        cleanupInternal()
+                    }
                 }
             }
         }
+
+    /**
+     * Compat path: returns `emptyList()` on any failure. Prefer [detectResult],
+     * which preserves the error. Kept because the `YoloScreen` call site consumes a
+     * plain list; new callers must use [detectResult].
+     */
+    suspend fun detect(bitmap: Bitmap, rotationDegrees: Int = 0): List<Detection> =
+        when (val outcome = detectResult(bitmap, rotationDegrees)) {
+            is DetectionOutcome.Success -> outcome.detections
+            is DetectionOutcome.Failure -> {
+                Log.w(TAG, "detect() swallowing failure for compat: ${outcome.message}")
+                emptyList()
+            }
+        }
+
+    /**
+     * Reads the output tensor as floats regardless of dtype (§3.34). UINT8 outputs
+     * are dequantized via the tensor's own scale/zero-point
+     * (`f = scale * (q - zeroPoint)`); the old code reinterpreted the bytes as
+     * floats, producing garbage confidences on quantized models.
+     */
+    private fun readFloatOutput(
+        interp: Interpreter,
+        outBuf: ByteBuffer,
+        outputShape: IntArray
+    ): FloatArray {
+        val size = outputShape.fold(1) { acc, i -> acc * i }
+        if (interp.getOutputTensor(0).dataType() == DataType.FLOAT32) {
+            val cached = rawOutputArray
+            val dest = if (cached != null && cached.size == size) cached else FloatArray(size)
+            outBuf.asFloatBuffer().get(dest)
+            return dest
+        }
+        val qp = interp.getOutputTensor(0).quantizationParams()
+        val out = FloatArray(size)
+        for (i in 0 until size) {
+            val q = outBuf.get().toInt() and 0xFF
+            out[i] = qp.scale * (q - qp.zeroPoint)
+        }
+        return out
     }
 
     private fun bitmapToFloatByteBuffer(bitmap: Bitmap, buffer: ByteBuffer) {
@@ -228,6 +359,39 @@ class YoloDetector(context: Context) : Closeable {
             buffer.put(((pixel shr 8) and 0xFF).toByte())
             buffer.put((pixel and 0xFF).toByte())
         }
+    }
+
+    /**
+     * Scale/zero-point-aware quantized input writer (§3.34). Falls back to raw
+     * byte copy only when the scale is degenerate (0) to avoid divide-by-zero.
+     */
+    private fun bitmapToQuantizedByteBuffer(
+        bitmap: Bitmap,
+        buffer: ByteBuffer,
+        scale: Float,
+        zeroPoint: Int
+    ) {
+        if (scale == 0f) {
+            Log.w(TAG, "Quantized input scale is 0; falling back to raw bytes")
+            bitmapToByteByteBuffer(bitmap, buffer)
+            return
+        }
+        val pixels = pixelsBuffer ?: IntArray(inputSize * inputSize)
+        bitmap.getPixels(pixels, 0, inputSize, 0, 0, inputSize, inputSize)
+        for (pixel in pixels) {
+            val r = ((pixel shr 16) and 0xFF) / 255.0f
+            val g = ((pixel shr 8) and 0xFF) / 255.0f
+            val b = (pixel and 0xFF) / 255.0f
+            buffer.put(((r / scale + zeroPoint).toInt().coerceIn(0, 255)).toByte())
+            buffer.put(((g / scale + zeroPoint).toInt().coerceIn(0, 255)).toByte())
+            buffer.put(((b / scale + zeroPoint).toInt().coerceIn(0, 255)).toByte())
+        }
+    }
+
+    /** Rotates [src] clockwise by [degrees]; caller must recycle the result. */
+    private fun rotateBitmap(src: Bitmap, degrees: Int): Bitmap {
+        val matrix = Matrix().apply { postRotate((degrees % 360).toFloat()) }
+        return Bitmap.createBitmap(src, 0, 0, src.width, src.height, matrix, true)
     }
 
     private fun parseDetections(
@@ -301,10 +465,17 @@ class YoloDetector(context: Context) : Closeable {
             var maxScore = 0f
             var maxClassIdx = 0
             for (c in 0 until effectiveClasses) {
-                val rawScore = if (isChannelFirst) {
+                var rawScore = if (isChannelFirst) {
                     raw[(4 + c) * numDetections + d]
                 } else {
                     raw[d * valuesPerDetection + 4 + c]
+                }
+                // Pre-argmax logit handling (§3.34): normalize EACH class score
+                // before comparing. The old code picked the argmax over raw logits
+                // and sigmoided only the winner, which misranks when classes have
+                // mixed logit/probability scales.
+                if (rawScore > 1.0f || rawScore < 0.0f) {
+                    rawScore = 1.0f / (1.0f + kotlin.math.exp(-rawScore))
                 }
                 if (rawScore > maxScore) {
                     maxScore = rawScore
@@ -312,17 +483,14 @@ class YoloDetector(context: Context) : Closeable {
                 }
             }
 
-            // Apply sigmoid if output appears to be unnormalized logits
-            val score = if (maxScore > 1.0f || maxScore < 0.0f) {
-                1.0f / (1.0f + kotlin.math.exp(-maxScore))
-            } else {
-                maxScore
-            }
+            val score = maxScore
 
-            if (score < CONFIDENCE_THRESHOLD) continue
+            if (score < confidenceThreshold) continue
 
-            // Normalize coordinate scale if model output was 0..1 normalized instead of pixels
-            val (absCx, absCy, absW, absH) = if (cx <= 1.0f && cy <= 1.0f && w <= 1.0f && h <= 1.0f) {
+            // Coordinate scale is EXPLICIT via [coordinatesNormalized] (model metadata),
+            // not the old `cx <= 1` value heuristic which mis-scaled small near-origin
+            // pixel boxes by ×640 (§3.34).
+            val (absCx, absCy, absW, absH) = if (coordinatesNormalized) {
                 floatArrayOf(cx * inputSize, cy * inputSize, w * inputSize, h * inputSize)
             } else {
                 floatArrayOf(cx, cy, w, h)
@@ -350,11 +518,41 @@ class YoloDetector(context: Context) : Closeable {
         }
 
         return nonMaxSuppression(detections)
+            .filter { det ->
+                // COCO-fallback guard (KEEP — load-bearing safety, see §3.47): in
+                // 80-label mode suppress non-waste objects (person, car, …) instead of
+                // surfacing them as waste items. In particular this stops stock-COCO
+                // class 0 (person) from being misreported as waste label 0 (battery).
+                // Long-term fix belongs in scripts/export (never ship COCO as the waste
+                // model); this guard stays regardless so a mis-packaged asset degrades
+                // to fewer boxes, not wrong boxes.
+                if (labels.size == 80) {
+                    com.agrelius.wasegmul.WasteMapping.getCategory(det.label) !=
+                        com.agrelius.wasegmul.WasteMapping.UNKNOWN
+                } else true
+            }
             .take(MAX_DISPLAYED_DETECTIONS)
     }
 
+    /**
+     * Per-class NMS (documented choice, §3.34): overlapping boxes of DIFFERENT
+     * classes are intentionally kept (a bottle next to a can may legitimately
+     * overlap in a cluttered frame); same-class duplicates are suppressed.
+     * Cross-class NMS was evaluated and rejected — it deleted valid adjacent items.
+     * Exact-duplicate candidates (same class + near-identical box) are deduped first.
+     */
     private fun nonMaxSuppression(detections: List<Detection>): List<Detection> {
-        return detections.groupBy { it.classIndex }
+        if (detections.isEmpty()) return emptyList()
+        val deduped = detections.distinctBy { det ->
+            val b = det.boundingBox
+            // Quantize to ~0.5px at 640 to collapse float-identical candidates.
+            listOf(
+                det.classIndex,
+                (b.left * 1280).toInt(), (b.top * 1280).toInt(),
+                (b.right * 1280).toInt(), (b.bottom * 1280).toInt()
+            )
+        }
+        return deduped.groupBy { it.classIndex }
             .flatMap { (_, classDets) -> nmsPerClass(classDets) }
             .sortedByDescending { it.confidence }
     }
@@ -404,14 +602,15 @@ class YoloDetector(context: Context) : Closeable {
     override fun close() {
         closed = true
         isInitialized = false
-        if (detectMutex.tryLock()) {
+        // Single-mutex close (§2.8): tryLock, never block the Main thread.
+        if (stateMutex.tryLock()) {
             try {
                 cleanupInternal()
             } finally {
-                detectMutex.unlock()
+                stateMutex.unlock()
             }
         }
-        // If detectMutex is currently held, the in-flight detect()
+        // If stateMutex is currently held, the in-flight detect()/ensureInitialized()
         // will call cleanupInternal() in its finally block once inference finishes.
     }
 

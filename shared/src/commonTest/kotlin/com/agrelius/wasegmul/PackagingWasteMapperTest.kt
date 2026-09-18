@@ -47,26 +47,103 @@ class PackagingWasteMapperTest {
         assertEquals(Pair("Recyclable", "Cardboard"), mapping["en:cardboard"])
         assertEquals(Pair("Recyclable", "Cardboard"), mapping["en:corrugated-cardboard"])
 
-        // Composites
-        assertEquals(Pair("Recyclable", "Cardboard"), mapping["en:tetra-pak"])
+        // Composites (specialty mills only → curbside Trash; see mapper KDoc)
+        assertEquals(Pair("Trash", "Miscellaneous Trash"), mapping["en:tetra-pak"])
         assertEquals(Pair("Trash", "Miscellaneous Trash"), mapping["en:composite-material"])
 
-        // Natural & Bioplastics
+        // Natural & industrial-compost-only materials (PLA contaminates streams → Trash)
         assertEquals(Pair("Organic", "Organic"), mapping["en:wood"])
         assertEquals(Pair("Organic", "Organic"), mapping["en:cork"])
-        assertEquals(Pair("Organic", "Organic"), mapping["en:bioplastic"])
-        assertEquals(Pair("Organic", "Organic"), mapping["en:pla"])
+        assertEquals(Pair("Trash", "Plastic"), mapping["en:bioplastic"])
+        assertEquals(Pair("Trash", "Plastic"), mapping["en:pla"])
     }
 
     @Test
     fun testShapeFallbackMappings() {
         val fallback = PackagingWasteMapper.SHAPE_FALLBACK
 
-        assertEquals(Pair("Recyclable", "Plastic"), fallback["en:bottle"])
+        // Bottle shape alone cannot determine the melt → honest Trash (material tags
+        // resolve correctly when present).
+        assertEquals(Pair("Trash", "Miscellaneous Trash"), fallback["en:bottle"])
         assertEquals(Pair("Recyclable", "Metal"), fallback["en:can"])
         assertEquals(Pair("Recyclable", "Cardboard"), fallback["en:box"])
         assertEquals(Pair("Recyclable", "Glass"), fallback["en:jar"])
         assertEquals(Pair("Trash", "Plastic"), fallback["en:pouch"])
+        // Hazard-aware: pressurised aerosol and residue-risk barrel/drum → Trash.
+        assertEquals(Pair("Trash", "Metal"), fallback["en:aerosol"])
+        assertEquals(Pair("Trash", "Metal"), fallback["en:barrel"])
+        assertEquals(Pair("Trash", "Metal"), fallback["en:drum"])
+        // Film: store-drop-off only.
+        assertEquals(Pair("Trash", "Plastic"), fallback["en:bag"])
+    }
+
+    @Test
+    fun testNonEnglishPrefixRetry() {
+        // OFF serves the same taxonomy stem under every locale prefix.
+        assertEquals(Pair("Recyclable", "Plastic"), PackagingWasteMapper.getMaterialMapping("fr:pet-1"))
+        assertEquals(Pair("Recyclable", "Glass"), PackagingWasteMapper.getMaterialMapping("de:clear-glass"))
+        assertEquals(Pair("Recyclable", "Metal"), PackagingWasteMapper.getShapeFallback("fr:can"))
+        assertEquals(null, PackagingWasteMapper.getMaterialMapping("fr:no-such-material"))
+    }
+
+    @Test
+    fun testDisposalAction_negationsFirstAndWordBoundaries() {
+        // "do-not-recycle" contains "recycle": negations must win.
+        assertEquals("Discard", PackagingWasteMapper.mapDisposalAction("en:do-not-recycle", "Recyclable"))
+        assertEquals("Discard", PackagingWasteMapper.mapDisposalAction("en:non-recyclable", "Recyclable"))
+        assertEquals("Recycle", PackagingWasteMapper.mapDisposalAction("en:recycle", "Trash"))
+        assertEquals("Compost", PackagingWasteMapper.mapDisposalAction("en:compostable", "Trash"))
+        // "combine" contains "bin" as a substring but not as a word: must NOT discard.
+        assertEquals("Recycle", PackagingWasteMapper.mapDisposalAction("en:combine", "Recyclable"))
+        assertEquals("Discard", PackagingWasteMapper.mapDisposalAction("en:bin", "Recyclable"))
+        // Fallbacks unchanged.
+        assertEquals("Recycle", PackagingWasteMapper.mapDisposalAction(null, "Recyclable"))
+        assertEquals("Compost", PackagingWasteMapper.mapDisposalAction(null, "Organic"))
+        assertEquals("Discard", PackagingWasteMapper.mapDisposalAction(null, "Trash"))
+    }
+
+    @Test
+    fun testTagFallback_independentResolutionNoPositionalPairing() {
+        // OFF does not guarantee materials[i] ↔ shapes[i]: each list resolves alone.
+        val product = OffProductDto(
+            materialsTags = listOf("en:clear-glass", "en:pp-5"),
+            shapesTags = listOf("en:jar", "en:lid"),
+            recyclingTags = listOf("en:recycle")
+        )
+        val components = PackagingWasteMapper.resolveComponents(product)
+        // 2 material components; shapes add nothing new (Glass + Plastic already covered).
+        assertEquals(2, components.size)
+        assertEquals("Recyclable", components[0].category)
+        assertEquals("Glass", components[0].subclass)
+        assertEquals("Recycle", components[0].disposalAction)
+        assertEquals("Plastic", components[1].subclass)
+    }
+
+    @Test
+    fun testTagFallback_multipleRecyclingTags_notSmeared() {
+        val product = OffProductDto(
+            materialsTags = listOf("en:clear-glass", "en:pp-5"),
+            shapesTags = emptyList(),
+            recyclingTags = listOf("en:recycle", "en:discard")
+        )
+        val components = PackagingWasteMapper.resolveComponents(product)
+        assertEquals(2, components.size)
+        // Ambiguous alignment → category defaults, not the first tag smeared on both.
+        assertEquals("Recycle", components[0].disposalAction)
+        assertEquals("Recycle", components[1].disposalAction)
+    }
+
+    @Test
+    fun testWeightSanity_absurdAndNegativeBecomeNull() {
+        val product = OffProductDto(
+            packagings = listOf(
+                OffPackagingComponentDto(material = OffTaxonomyItemDto("en:pet-1"), weight = 1_000_000.0),
+                OffPackagingComponentDto(material = OffTaxonomyItemDto("en:pp-5"), weight = -3.0)
+            )
+        )
+        val components = PackagingWasteMapper.resolveComponents(product)
+        assertEquals(null, components[0].weightGrams)
+        assertEquals(null, components[1].weightGrams)
     }
 
     @Test

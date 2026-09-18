@@ -4,14 +4,15 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -20,26 +21,26 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.agrelius.wasegmul.R
 import kotlinx.coroutines.delay
-import kotlin.math.cos
 import kotlin.math.sin
-import kotlin.random.Random
 
-private data class LeafParticle(
-    var x: Float,
-    var y: Float,
-    var vx: Float,
-    var vy: Float,
-    var rotation: Float,
-    var rotationSpeed: Float,
-    var size: Float,
-    var alpha: Float,
-    val color: Color
+/** Immutable leaf parameters; positions are a pure function of [progress]. */
+private data class LeafParams(
+    val x0: Float,
+    val y0: Float,
+    val driftX: Float,
+    val fallDistance: Float,
+    val rotation0: Float,
+    val rotationSpeed: Float,
+    val size: Float,
+    val colorIndex: Int
 )
 
 @Composable
@@ -47,10 +48,14 @@ fun ThankYouOverlay(
     xpEarned: Int,
     co2PreventedGrams: Double,
     waterSavedMl: Double,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    // Timed auto-dismiss is optional and pauses once the user interacts
+    // (WCAG timed-content): the visible Continue button always works.
+    autoDismiss: Boolean = true
 ) {
-    var phase by remember { mutableIntStateOf(0) }
-    var visible by remember { mutableStateOf(true) }
+    var phase by rememberSaveable { mutableIntStateOf(0) }
+    var visible by rememberSaveable { mutableStateOf(true) }
+    var userInteracted by rememberSaveable { mutableStateOf(false) }
 
     val overlayAlpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
@@ -89,31 +94,29 @@ fun ThankYouOverlay(
         label = "glow_pulse_alpha"
     )
 
-    // Leaf particles state
-    val particles = remember {
-        List(30) {
-            LeafParticle(
-                x = 0.5f,
-                y = 0.4f,
-                vx = (Random.nextFloat() - 0.5f) * 0.015f,
-                vy = (Random.nextFloat() - 0.3f) * 0.012f,
-                rotation = Random.nextFloat() * 360f,
-                rotationSpeed = (Random.nextFloat() - 0.5f) * 8f,
-                size = Random.nextFloat() * 12f + 6f,
-                alpha = Random.nextFloat() * 0.5f + 0.5f,
-                color = listOf(
-                    Color(0xFF00FF94),
-                    Color(0xFF2ECC71),
-                    Color(0xFFA8C69F),
-                    Color(0xFF32CD32),
-                    Color(0xFFFFD700),
-                    Color(0xFFFFFFFF)
-                ).random()
+    // Stateless particles: immutable params + one-shot progress drive the
+    // draw pass. Nothing is mutated inside drawScope (no mutation-in-draw).
+    val leafParams = remember {
+        List(24) { i ->
+            LeafParams(
+                x0 = (i * 0.041f + (i % 5) * 0.17f) % 1f,
+                y0 = 0.30f + (i % 7) * 0.02f,
+                driftX = sin(i * 1.7f) * 0.08f,
+                fallDistance = 0.25f + (i % 4) * 0.08f,
+                rotation0 = (i * 47f) % 360f,
+                rotationSpeed = 40f + (i % 3) * 30f,
+                size = 6f + (i % 4) * 3f,
+                colorIndex = i % 4
             )
-        }.toMutableList()
+        }
     }
+    val particleProgress by animateFloatAsState(
+        targetValue = if (phase >= 2) 1f else 0f,
+        animationSpec = tween(3500, easing = LinearEasing),
+        label = "particle_progress"
+    )
 
-    // Animation sequencing
+    // Animation sequencing (rotation-safe via Saveable phase).
     LaunchedEffect(Unit) {
         delay(100)
         phase = 1 // Glow + icon
@@ -121,8 +124,23 @@ fun ThankYouOverlay(
         phase = 2 // Text appears
         delay(1200)
         phase = 3 // Stats appear
-        delay(1200)
-        visible = false // Start fade out
+        if (autoDismiss) {
+            delay(2500)
+            // Pause the timed dismiss once the user has taken over.
+            if (!userInteracted) visible = false
+        }
+    }
+
+    val primary = MaterialTheme.colorScheme.primary
+    val secondary = MaterialTheme.colorScheme.secondary
+    val tertiary = MaterialTheme.colorScheme.tertiary
+    val leafColors = remember(primary, secondary, tertiary) {
+        listOf(primary, secondary, tertiary, primary)
+    }
+
+    fun dismissByUser() {
+        userInteracted = true
+        visible = false
     }
 
     if (overlayAlpha > 0f) {
@@ -130,13 +148,7 @@ fun ThankYouOverlay(
             modifier = Modifier
                 .fillMaxSize()
                 .alpha(overlayAlpha)
-                .background(Color.Black.copy(alpha = 0.85f))
-                .clickable(
-                    indication = null,
-                    interactionSource = remember { MutableInteractionSource() }
-                ) {
-                    visible = false
-                },
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.72f)),
             contentAlignment = Alignment.Center
         ) {
             // Radial glow
@@ -148,8 +160,8 @@ fun ThankYouOverlay(
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFF00FF94).copy(alpha = 0.25f * glowPulse),
-                            Color(0xFF00FF94).copy(alpha = 0.08f * glowPulse),
+                            primary.copy(alpha = 0.25f * glowPulse),
+                            primary.copy(alpha = 0.08f * glowPulse),
                             Color.Transparent
                         ),
                         center = Offset(centerX, centerY),
@@ -160,146 +172,157 @@ fun ThankYouOverlay(
                 )
             }
 
-            // Leaf particles
-            if (phase >= 2) {
+            // Leaf particles (pure function of progress — no state mutation).
+            if (phase >= 2 && particleProgress > 0f) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
-                    particles.forEach { p ->
-                        p.x += p.vx
-                        p.y += p.vy
-                        p.vy += 0.0002f // gravity
-                        p.rotation += p.rotationSpeed
-                        p.alpha = (p.alpha - 0.003f).coerceAtLeast(0f)
-
-                        if (p.alpha > 0f) {
-                            rotate(p.rotation, pivot = Offset(p.x * size.width, p.y * size.height)) {
-                                drawOval(
-                                    color = p.color.copy(alpha = p.alpha),
-                                    topLeft = Offset(
-                                        p.x * size.width - p.size / 2,
-                                        p.y * size.height - p.size / 3
-                                    ),
-                                    size = androidx.compose.ui.geometry.Size(p.size, p.size * 0.6f)
-                                )
-                            }
+                    val fade = (1f - particleProgress).coerceIn(0f, 1f)
+                    leafParams.forEach { p ->
+                        val x = (p.x0 + p.driftX * particleProgress) * size.width
+                        val y = (p.y0 + p.fallDistance * particleProgress) * size.height
+                        val rotation = p.rotation0 + p.rotationSpeed * particleProgress
+                        rotate(rotation, pivot = Offset(x, y)) {
+                            drawOval(
+                                color = leafColors[p.colorIndex].copy(alpha = 0.7f * fade + 0.1f),
+                                topLeft = Offset(x - p.size / 2, y - p.size / 3),
+                                size = androidx.compose.ui.geometry.Size(p.size, p.size * 0.6f)
+                            )
                         }
                     }
                 }
             }
 
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(horizontal = 32.dp)
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                shape = RoundedCornerShape(28.dp),
+                modifier = Modifier
+                    .padding(24.dp)
+                    .fillMaxWidth()
             ) {
-                Spacer(modifier = Modifier.height(80.dp))
-
-                // Globe/Leaf icon
-                Box(
-                    modifier = Modifier.scale(iconScale),
-                    contentAlignment = Alignment.Center
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .padding(horizontal = 32.dp, vertical = 28.dp)
+                        .verticalScroll(rememberScrollState())
                 ) {
-                    Text(
-                        text = "\uD83C\uDF0D",
-                        fontSize = 72.sp
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // "Thank You!" text
-                AnimatedVisibility(
-                    visible = phase >= 2,
-                    enter = fadeIn(tween(600)) + scaleIn(
-                        tween(600),
-                        initialScale = 0.5f
-                    )
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "Thank You!",
-                            style = MaterialTheme.typography.displaySmall,
-                            fontWeight = FontWeight.Black,
-                            color = Color(0xFF00FF94),
-                            textAlign = TextAlign.Center,
-                            letterSpacing = 4.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Text(
-                            text = "You just saved the planet a little more",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = Color.White.copy(alpha = 0.8f),
-                            textAlign = TextAlign.Center,
-                            fontStyle = FontStyle.Italic,
-                            lineHeight = 24.sp
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(36.dp))
-
-                // Stats pills
-                AnimatedVisibility(
-                    visible = phase >= 3,
-                    enter = fadeIn(tween(500)) + slideInVertically(tween(500)) { 40 }
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    // Globe/Leaf icon
+                    Box(
+                        modifier = Modifier.scale(iconScale),
+                        contentAlignment = Alignment.Center
                     ) {
-                        // XP earned
-                        if (xpEarned > 0) {
-                            Box(
-                                modifier = Modifier
-                                    .background(
-                                        Color(0xFF00FF94).copy(alpha = 0.15f),
-                                        RoundedCornerShape(20.dp)
-                                    )
-                                    .padding(horizontal = 24.dp, vertical = 8.dp)
-                            ) {
-                                Text(
-                                    text = "+$xpEarned XP",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Black,
-                                    color = Color(0xFF00FF94)
-                                )
-                            }
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Eco,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(72.dp)
+                        )
+                    }
 
-                        // Eco stat pills row
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // "Thank You!" text
+                    AnimatedVisibility(
+                        visible = phase >= 2,
+                        enter = fadeIn(tween(600)) + scaleIn(
+                            tween(600),
+                            initialScale = 0.5f
+                        )
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = stringResource(R.string.overlay_thank_you),
+                                style = MaterialTheme.typography.displaySmall,
+                                fontWeight = FontWeight.Black,
+                                color = MaterialTheme.colorScheme.primary,
+                                textAlign = TextAlign.Center,
+                                letterSpacing = 4.sp
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = stringResource(R.string.overlay_saved_planet),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                fontStyle = FontStyle.Italic,
+                                lineHeight = 24.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(28.dp))
+
+                    // Stats pills
+                    AnimatedVisibility(
+                        visible = phase >= 3,
+                        enter = fadeIn(tween(500)) + slideInVertically(tween(500)) { 40 }
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            if (co2PreventedGrams > 0.1) {
-                                EcoStatPill(
-                                    label = "CO\u2082",
-                                    value = "-${formatGrams(co2PreventedGrams)}",
-                                    color = Color(0xFF2ECC71)
-                                )
+                            // XP earned
+                            if (xpEarned > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .background(
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                            RoundedCornerShape(20.dp)
+                                        )
+                                        .padding(horizontal = 24.dp, vertical = 8.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.gamification_xp_earned, xpEarned),
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Black,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
-                            if (waterSavedMl > 0.1) {
-                                EcoStatPill(
-                                    label = "Water",
-                                    value = "+${formatMl(waterSavedMl)}",
-                                    color = Color(0xFF3498DB)
-                                )
+
+                            // Eco stat pills row
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (co2PreventedGrams > 0.1) {
+                                    EcoStatPill(
+                                        label = "CO\u2082",
+                                        value = "-${formatGrams(co2PreventedGrams)}",
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                if (waterSavedMl > 0.1) {
+                                    EcoStatPill(
+                                        label = stringResource(R.string.impact_metric_water),
+                                        value = "+${formatMl(waterSavedMl)}",
+                                        color = MaterialTheme.colorScheme.secondary
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(60.dp))
+                    Spacer(modifier = Modifier.height(28.dp))
 
-                AnimatedVisibility(
-                    visible = phase >= 3,
-                    enter = fadeIn(tween(800, delayMillis = 300))
-                ) {
-                    Text(
-                        text = "Tap anywhere to continue",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.4f)
-                    )
+                    // Visible dismiss control (Role.Button via Button).
+                    Button(
+                        onClick = { dismissByUser() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    ) {
+                        Text(
+                            text = stringResource(R.string.overlay_continue),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
@@ -342,16 +365,16 @@ private fun EcoStatPill(
 
 private fun formatGrams(grams: Double): String {
     return if (grams >= 1000) {
-        "${"%.2f".format(java.util.Locale.US, grams / 1000)}kg"
+        "${"%.2f".format(java.util.Locale.ROOT, grams / 1000)}kg"
     } else {
-        "${"%.1f".format(java.util.Locale.US, grams)}g"
+        "${"%.1f".format(java.util.Locale.ROOT, grams)}g"
     }
 }
 
 private fun formatMl(ml: Double): String {
     return if (ml >= 1000) {
-        "${"%.1f".format(java.util.Locale.US, ml / 1000)}L"
+        "${"%.1f".format(java.util.Locale.ROOT, ml / 1000)}L"
     } else {
-        "${"%.0f".format(java.util.Locale.US, ml)}mL"
+        "${"%.0f".format(java.util.Locale.ROOT, ml)}mL"
     }
 }

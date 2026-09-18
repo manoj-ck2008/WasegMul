@@ -5,20 +5,26 @@ This script handles the full conversion pipeline:
   PyTorch (.pt) → ONNX → TFLite (.tflite)
 
 Requirements:
-    pip install ultralytics onnx2tf tensorflow
+    pip install -r scripts/requirements-train.txt  # (ultralytics, onnx2tf, tensorflow)
 
 Usage:
-    # Export best checkpoint (default)
+    # Export best checkpoint (default, FP32 — the shippable artifact)
     python scripts/export_waste_model_tflite.py
 
     # Export specific weights
     python scripts/export_waste_model_tflite.py --weights runs/train/waste-yolo11n/weights/best.pt
 
-    # Export with INT8 quantization (smaller file, slight accuracy loss)
-    python scripts/export_waste_model_tflite.py --optimize
+    # Export with INT8 quantization (REQUIRES calibration data + AP check)
+    python scripts/export_waste_model_tflite.py --optimize --calibration-data datasets/waste-yolo/data.yaml
+
+INT8 policy (audit §3.47): INT8 without a representative calibration dataset
+throws or collapses accuracy. This script FAILS with a clear error unless
+--calibration-data is given, and prints the mandatory AP-regression check
+(FP32 vs INT8 mAP@50; reject if drop > ~2pp). Never silently ship broken int8.
+The labels file (<output>_classes.txt) is ALWAYS written alongside the .tflite.
 
 Output:
-    app/src/main/assets/waste_yolo11n.tflite
+    app/src/main/assets/waste_yolo11n.tflite (+ waste_yolo11n_classes.txt)
 """
 
 import argparse
@@ -47,7 +53,8 @@ def ensure_package(name: str) -> None:
         subprocess.check_call([sys.executable, "-m", "pip", "install", name])
 
 
-def export_direct(weights: Path, output_name: str, optimize: bool) -> Path:
+def export_direct(weights: Path, output_name: str, optimize: bool,
+                  calibration_data: str | None = None) -> Path:
     """Direct TFLite export via ultralytics (Linux/macOS)."""
     from ultralytics import YOLO
 
@@ -56,8 +63,16 @@ def export_direct(weights: Path, output_name: str, optimize: bool) -> Path:
 
     export_kwargs = {"format": "tflite", "imgsz": 640}
     if optimize:
+        if not calibration_data:
+            raise SystemExit(
+                "INT8 EXPORT BLOCKED: --optimize requires --calibration-data "
+                "<data.yaml> (representative dataset for quantization calibration). "
+                "Re-run with --calibration-data datasets/waste-yolo/data.yaml. "
+                "Never ship INT8 without it + an AP regression check."
+            )
         export_kwargs["int8"] = True
-        print("Exporting with INT8 quantization...")
+        export_kwargs["data"] = calibration_data
+        print(f"Exporting with INT8 quantization (calibration: {calibration_data})...")
     else:
         print("Exporting to TFLite (float32)...")
 
@@ -78,7 +93,8 @@ def export_direct(weights: Path, output_name: str, optimize: bool) -> Path:
     return tflite_src
 
 
-def export_via_onnx(weights: Path, output_name: str, optimize: bool) -> Path:
+def export_via_onnx(weights: Path, output_name: str, optimize: bool,
+                    calibration_data: str | None = None) -> Path:
     """ONNX → TFLite conversion (Windows-compatible)."""
     ensure_package("ultralytics")
     ensure_package("onnx2tf")
@@ -97,7 +113,7 @@ def export_via_onnx(weights: Path, output_name: str, optimize: bool) -> Path:
         if not onnx_file.exists():
             onnx_file = tmpdir / "model.onnx"
             # Try default location
-            default_onnx = PROJECT_ROOT / "runs" / "train" / "waste-yolox" / "weights" / "best.onnx"
+            default_onnx = PROJECT_ROOT / "runs" / "train" / "waste-yolo11n" / "weights" / "best.onnx"
             if default_onnx.exists():
                 shutil.copy2(default_onnx, onnx_file)
             else:
@@ -112,7 +128,15 @@ def export_via_onnx(weights: Path, output_name: str, optimize: bool) -> Path:
             "-osd", "-cotof",
         ]
         if optimize:
+            if not calibration_data:
+                raise SystemExit(
+                    "INT8 EXPORT BLOCKED: --optimize requires --calibration-data "
+                    "for onnx2tf quantization. Re-run with --calibration-data "
+                    "datasets/waste-yolo/data.yaml."
+                )
             cmd.append("-oiqt")  # INT8 quantization
+            print(f"INT8 quantization with calibration data: {calibration_data} "
+                  "(AP regression check mandatory before shipping)")
         subprocess.check_call(cmd)
 
         tflite_candidates = list(output_dir.glob("*.tflite"))
@@ -126,7 +150,12 @@ def export_via_onnx(weights: Path, output_name: str, optimize: bool) -> Path:
 
 
 def generate_labels_file(output_name: str) -> Path:
-    """Generate the label file for the waste model."""
+    """Generate the label file for the waste model (ALWAYS alongside .tflite).
+
+    Single-source chain: taxonomy.yaml yolo_classes -> scripts/waste_dataset.yaml
+    names -> <output>_classes.txt. Never ship a .tflite without its labels file;
+    stale/missing labels trigger the app's COCO fallback guard.
+    """
     import yaml
     config_path = SCRIPT_DIR / "waste_dataset.yaml"
     with open(config_path) as f:
@@ -148,7 +177,9 @@ def main():
     parser.add_argument("--output-name", type=str, default="waste_yolo11n",
                         help="Output filename (without .tflite)")
     parser.add_argument("--optimize", action="store_true",
-                        help="Apply INT8 quantization (smaller file)")
+                        help="Apply INT8 quantization (REQUIRES --calibration-data + AP regression check; never ship unchecked)")
+    parser.add_argument("--calibration-data", type=str, default=None,
+                        help="Representative dataset YAML for INT8 calibration (e.g. datasets/waste-yolo/data.yaml)")
     args = parser.parse_args()
 
     weights = Path(args.weights)
@@ -163,9 +194,11 @@ def main():
 
     try:
         if IS_WINDOWS:
-            tflite_src = export_via_onnx(weights, args.output_name, args.optimize)
+            tflite_src = export_via_onnx(weights, args.output_name, args.optimize, args.calibration_data)
         else:
-            tflite_src = export_direct(weights, args.output_name, args.optimize)
+            tflite_src = export_direct(weights, args.output_name, args.optimize, args.calibration_data)
+    except SystemExit:
+        raise
     except Exception as e:
         print(f"\nERROR: Export failed: {e}")
         sys.exit(1)
@@ -177,8 +210,14 @@ def main():
     size_mb = dest.stat().st_size / (1024 * 1024)
     print(f"\nCopied: {dest} ({size_mb:.2f} MB)")
 
-    # Generate label file
+    # Generate label file (ALWAYS — never ship .tflite without labels)
     generate_labels_file(args.output_name)
+
+    if args.optimize:
+        print("\nINT8 SHIPPABILITY CHECK (mandatory, not optional):")
+        print("  1. Run val on the INT8 .tflite vs FP32 and compare mAP@50.")
+        print("  2. Reject if drop > ~2pp or any waste class collapses.")
+        print("  3. Do NOT copy INT8 into assets/ until the check passes.")
 
     # Also copy existing COCO labels as fallback
     coco_labels = ASSETS_DIR / "yolov8n_classes.txt"

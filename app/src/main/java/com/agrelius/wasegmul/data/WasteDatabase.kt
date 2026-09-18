@@ -1,6 +1,8 @@
 package com.agrelius.wasegmul.data
 
 import android.content.Context
+import android.util.Log
+import androidx.annotation.VisibleForTesting
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -17,15 +19,25 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  *  - v8: added `timestamp` index for fast history queries.
  *  - v9: added `category`, `subclass`, and `feedback` indices for fast filtering.
  *  - v10: added `barcode_products` table and indices for barcode packaging cache.
+ *  - v11: added first-class barcode provenance (`source`, `productName`, `barcode`).
  *
- * NOTE: `fallbackToDestructiveMigration()` IS enabled as a last-resort safety net so a
- * future schema change or an old v1..v5 install never crashes on launch. Every intentional
- * schema change MUST still ship with an explicit [Migration] entry below; destructive
- * fallback only triggers when no migration path exists (documented wipe, not crash).
+ * NOTE (§2.7): `fallbackToDestructiveMigration()` was REMOVED. Any schema change or
+ * old-install upgrade without a matching [Migration] now throws loudly instead of
+ * silently wiping `waste_history` + the barcode cache. In debug builds the failure
+ * surfaces immediately at [getDatabase] time (see below); in release it is a loud
+ * crash rather than silent data loss — that is the intended tradeoff.
+ * `fallbackToDestructiveMigrationOnDowngrade()` is kept so a version-code rollback
+ * (downgrade) recreates rather than crash-loops; downgrades are expected to be rare
+ * and developer-driven.
+ *
+ * Schema exports: app/schemas/.../WasteDatabase/ JSON files
+ * (verified present for v8/v9/v10/v11; older version JSONs were never exported and
+ * are not required — Room only needs the current schema plus the [Migration] chain).
+ * Every future version bump MUST add its export + a migration + a migration test.
  */
 @Database(
     entities = [WasteRecord::class, BarcodeProduct::class],
-    version = 10,
+    version = 11,
     exportSchema = true
 )
 abstract class WasteDatabase : RoomDatabase() {
@@ -34,6 +46,17 @@ abstract class WasteDatabase : RoomDatabase() {
     abstract fun barcodeProductDao(): BarcodeProductDao
 
     companion object {
+        private const val TAG = "WasteDatabase"
+
+        /**
+         * Historical database file name. The `industrial` infix predates the neutral
+         * domain language and is misleading, but the name is RETAINED deliberately:
+         * renaming the file would orphan every installed user's existing database
+         * (Room would create a fresh empty DB = silent data loss, the very failure
+         * §2.7 eliminates). Do not rename without a file-move migration.
+         */
+        const val DATABASE_NAME = "wasegmul_industrial_v1.db"
+
         @Volatile
         private var INSTANCE: WasteDatabase? = null
 
@@ -87,17 +110,46 @@ abstract class WasteDatabase : RoomDatabase() {
             }
         }
 
+        /** v10 -> v11: first-class barcode provenance columns on waste_history. */
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE waste_history ADD COLUMN source TEXT NOT NULL DEFAULT 'camera'")
+                db.execSQL("ALTER TABLE waste_history ADD COLUMN productName TEXT")
+                db.execSQL("ALTER TABLE waste_history ADD COLUMN barcode TEXT")
+            }
+        }
+
         fun getDatabase(context: Context): WasteDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     WasteDatabase::class.java,
-                    "wasegmul_industrial_v1.db"
+                    DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
-                    .fallbackToDestructiveMigration()
+                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+                    // §2.7: destructive fallback REMOVED (data-loss risk). OnDowngrade only.
+                    // A missing migration path now throws IllegalStateException. Fail loudly
+                    // in debug so schema slips are caught before release.
+                    .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
-                    .also { INSTANCE = it }
+                    .also {
+                        INSTANCE = it
+                        if (com.agrelius.wasegmul.BuildConfig.DEBUG) {
+                            Log.d(TAG, "Opened $DATABASE_NAME v11 (destructive migration disabled)")
+                        }
+                    }
+            }
+        }
+
+        /**
+         * Test hook: closes the singleton so instrumented migration/schema tests start
+         * from a clean state. Unit tests should prefer an in-memory instance instead.
+         */
+        @VisibleForTesting
+        fun closeForTest() {
+            synchronized(this) {
+                runCatching { INSTANCE?.close() }
+                INSTANCE = null
             }
         }
     }

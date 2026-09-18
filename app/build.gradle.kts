@@ -8,9 +8,9 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-// Version from gradle.properties (single source of truth).
-val appVersionName = (project.findProperty("VERSION_NAME") as String?) ?: "1.1.0"
-val appVersionCode = (project.findProperty("VERSION_CODE") as String?)?.toIntOrNull() ?: 2
+// Version from gradle.properties (single source of truth; fallbacks mirror it).
+val appVersionName = (project.findProperty("VERSION_NAME") as String?) ?: "2.0.0"
+val appVersionCode = (project.findProperty("VERSION_CODE") as String?)?.toIntOrNull() ?: 3
 
 // Reads optional release signing credentials from the project root (keystore.properties).
 // This file is NOT committed to VCS: see README for the expected keys.
@@ -68,6 +68,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // java.time (LocalDate/Clock in SettingsManager, DailyImpactWorker) on minSdk 29
+        // requires desugaring — without this, API 29-25 devices crash at runtime.
+        isCoreLibraryDesugaringEnabled = true
     }
     kotlinOptions {
         jvmTarget = "11"
@@ -112,6 +115,7 @@ tasks.configureEach {
 }
 
 dependencies {
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(project(":shared"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)

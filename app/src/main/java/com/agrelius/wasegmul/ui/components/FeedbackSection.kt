@@ -23,9 +23,15 @@ fun FeedbackSection(
     initialCorrection: String?,
     onFeedbackSelected: (String) -> Unit,
     onCorrectionSelected: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    hapticsEnabled: Boolean = true
 ) {
     val haptic = LocalHapticFeedback.current
+    fun tap() {
+        // Single tap confirmation. (HapticFeedbackType has no dedicated tap
+        // constant on this Compose version; LongPress is the supported key.)
+        if (hapticsEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+    }
 
     var showResults by remember { mutableStateOf(initialFeedback != null) }
     var step by remember { mutableIntStateOf(if (initialFeedback == "incorrect") 1 else 0) }
@@ -81,17 +87,17 @@ fun FeedbackSection(
                         0 -> {
                             InitialFeedbackView(
                                 onCorrect = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    tap()
                                     onFeedbackSelected("correct")
                                     showResults = true
                                 },
                                 onIncorrect = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    tap()
                                     onFeedbackSelected("incorrect")
                                     step = 1
                                 },
                                 onNotSure = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    tap()
                                     onFeedbackSelected("not_sure")
                                     showResults = true
                                 }
@@ -101,7 +107,7 @@ fun FeedbackSection(
                             CorrectionView(
                                 initialCorrection = initialCorrection,
                                 onSelected = { choice ->
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    tap()
                                     onCorrectionSelected(choice)
                                     step = 0
                                     showResults = true
@@ -148,7 +154,10 @@ private fun CorrectionView(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val options = remember(context) { context.resources.getStringArray(R.array.material_options).toList() }
+    // Subclass-only list: Categories must never be offered as corrections.
+    val options = remember(context) {
+        context.resources.getStringArray(R.array.correction_material_options).toList()
+    }
     
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -188,7 +197,7 @@ private fun FeedbackButton(
             onClick = onClick,
             modifier = Modifier.size(48.dp)
         ) {
-            Icon(imageVector = icon, contentDescription = null)
+            Icon(imageVector = icon, contentDescription = label)
         }
         Text(
             text = label,

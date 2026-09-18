@@ -6,14 +6,14 @@ import android.util.Log
 import com.agrelius.wasegmul.PredictionResult
 import com.agrelius.wasegmul.ml.classifiers.CategoryClassifier
 import com.agrelius.wasegmul.ml.classifiers.SubclassClassifier
-import com.google.android.gms.tflite.java.TfLite
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 sealed class ClassificationOutcome {
     data class Success(val prediction: PredictionResult) : ClassificationOutcome()
@@ -34,6 +34,18 @@ enum class FailureReason {
  * Supports **degraded classification**: if one classifier fails at inference time,
  * the other's output is still used. The [MLArbitrator] downstream handles the
  * reduced-confidence result. Both models must fail for a total [ClassificationOutcome.Failure].
+ *
+ * ### Abstain contract
+ * A `Success` carrying `category (or subcategory) = "Unknown"` with confidence `0f`
+ * is an explicit ABSTAIN, not a prediction: exactly one model failed and the
+ * downstream arbitrator must treat that side as absent (low-confidence / uncertain
+ * path), never as a voted label. Callers must not award full XP or persist such
+ * halves as ground truth.
+ *
+ * ### Threading
+ * A SINGLE [stateMutex] guards init + classify + close (split mutexes previously
+ * let `close()` race inference). `close()` is synchronous so it uses `tryLock`;
+ * the in-flight `classify()` cleans up in `finally` when close loses the race.
  */
 class ModelManager(private val context: Context) {
 
@@ -47,23 +59,31 @@ class ModelManager(private val context: Context) {
     @Volatile
     private var closed = false
 
-    private val initMutex = Mutex()
-    private val classifyMutex = Mutex()
+    private val stateMutex = Mutex()
 
+    /** Bounded init: mmap of two EfficientNets must not hang launch forever. */
     suspend fun ensureInitialized() {
         if (isInitialized) return
-        initMutex.withLock {
+        stateMutex.withLock {
             if (isInitialized) return
             try {
-                // Heavy mmap + init MUST NOT run on Main.
-                withContext(Dispatchers.IO) {
-                    // Play Services TFLite init removed: classifiers use bundled
-                    // org.tensorflow.lite.Interpreter, not InterpreterApi.
-                    categoryClassifier = CategoryClassifier(context.applicationContext)
-                    subclassClassifier = SubclassClassifier(context.applicationContext)
+                // Heavy mmap + init MUST NOT run on Main; bounded so a corrupt asset
+                // fails fast instead of stalling the app.
+                withTimeout(INIT_TIMEOUT_MS) {
+                    withContext(Dispatchers.IO) {
+                        // Play Services TFLite init removed: classifiers use bundled
+                        // org.tensorflow.lite.Interpreter, not InterpreterApi.
+                        categoryClassifier = CategoryClassifier(context.applicationContext)
+                        subclassClassifier = SubclassClassifier(context.applicationContext)
+                    }
                 }
                 isInitialized = true
                 Log.d(TAG, "Classifiers initialised successfully")
+            } catch (e: CancellationException) {
+                // Structured-concurrency contract: never wrap cancellation — clean up
+                // and rethrow so the caller's Job actually cancels.
+                cleanup()
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to initialise classifiers", e)
                 cleanup()
@@ -86,7 +106,7 @@ class ModelManager(private val context: Context) {
             )
         }
 
-        classifyMutex.withLock {
+        stateMutex.withLock {
             if (closed) {
                 return@withLock ClassificationOutcome.Failure(
                     FailureReason.NOT_INITIALIZED,
@@ -103,10 +123,25 @@ class ModelManager(private val context: Context) {
                 var catError: String? = null
                 var subError: String? = null
 
+                // Single shared pre-process: both EfficientNets take identical 224x224 input.
+                // Saves one center-crop + resize + 602KB buffer alloc per frame (~30-50% latency).
+                val sharedInput = try {
+                    com.agrelius.wasegmul.ml.preprocessing.ImagePreprocessor.preprocess(bitmap)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e(TAG, "Shared preprocessing failed", e)
+                    return@withLock ClassificationOutcome.Failure(
+                        FailureReason.UNKNOWN,
+                        "Image preprocessing failed: ${e.message}. Please try another photo.",
+                        e
+                    )
+                }
+
                 coroutineScope {
                     val catJob = async {
                         try {
-                            if (catClassifier != null) catClassifier.classify(bitmap) to null
+                            if (catClassifier != null) catClassifier.classifyTensor(sharedInput) to null
                             else null to "Category classifier not available (closed)"
                         } catch (e: Exception) {
                             Log.e(TAG, "Category classifier threw", e)
@@ -115,7 +150,7 @@ class ModelManager(private val context: Context) {
                     }
                     val subJob = async {
                         try {
-                            if (subClassifier != null) subClassifier.classify(bitmap) to null
+                            if (subClassifier != null) subClassifier.classifyTensor(sharedInput) to null
                             else null to "Subclass classifier not available (closed)"
                         } catch (e: Exception) {
                             Log.e(TAG, "Subclass classifier threw", e)
@@ -128,17 +163,14 @@ class ModelManager(private val context: Context) {
                     subResult = subRes; subError = subErr
                 }
 
-                // Both failed -> total failure.
+                // Both failed -> total failure. (Dead branches removed: reaching here
+                // with exactly one error set is impossible — both results are null —
+                // so the reason is always UNKNOWN with the combined detail.)
                 if (catResult == null && subResult == null) {
                     val detail = listOfNotNull(catError, subError).joinToString("; ")
                     Log.e(TAG, "Both classifiers failed: $detail")
-                    val reason = when {
-                        catError != null && subError == null -> FailureReason.CATEGORY_INFERENCE_FAILED
-                        subError != null && catError == null -> FailureReason.SUBCLASS_INFERENCE_FAILED
-                        else -> FailureReason.UNKNOWN
-                    }
                     return@withLock ClassificationOutcome.Failure(
-                        reason,
+                        FailureReason.UNKNOWN,
                         "Classification failed: $detail. Please try again.",
                         null
                     )
@@ -168,14 +200,14 @@ class ModelManager(private val context: Context) {
     fun close() {
         closed = true
         isInitialized = false
-        if (classifyMutex.tryLock()) {
+        if (stateMutex.tryLock()) {
             try {
                 cleanup()
             } finally {
-                classifyMutex.unlock()
+                stateMutex.unlock()
             }
         }
-        // If classifyMutex is currently held, the in-flight classify()
+        // If stateMutex is currently held, the in-flight classify()
         // will call cleanup() in its finally block once inference finishes.
     }
 
@@ -191,7 +223,15 @@ class ModelManager(private val context: Context) {
         isInitialized = false
     }
 
-    companion object { private const val TAG = "ModelManager" }
+    companion object {
+        private const val TAG = "ModelManager"
+
+        /**
+         * Upper bound for the two-model mmap + warmup in [ensureInitialized].
+         * Exceeding it means a corrupt/partial asset, not a slow device.
+         */
+        const val INIT_TIMEOUT_MS = 60_000L
+    }
 }
 
 class ModelInitException(message: String, cause: Throwable? = null) : Exception(message, cause)

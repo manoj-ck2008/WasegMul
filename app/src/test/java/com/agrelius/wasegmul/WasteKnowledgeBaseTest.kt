@@ -75,4 +75,18 @@ class WasteKnowledgeBaseTest {
         val trashInfo = WasteKnowledgeBase.getInfo("Trash", "Unknown")
         assertTrue("Category-level fallback should be used for trash", trashInfo.disposalGuide.contains("CATEGORY-LEVEL"))
     }
+
+    @Test
+    fun testHazardousAndResidual_haveCategoryGuidance() {
+        val hz = WasteKnowledgeBase.getInfo("Hazardous", "Uncertain")
+        assertTrue(hz.disposalGuide.contains("CATEGORY-LEVEL"))
+        val residual = WasteKnowledgeBase.getInfo("Residual", "Unknown")
+        assertTrue(residual.disposalGuide.contains("CATEGORY-LEVEL"))
+    }
+
+    @Test
+    fun testCapitalisedExtendedLabel_hitsSpecificBranch() {
+        val info = WasteKnowledgeBase.getInfo("Recyclable", "Bottle")
+        assertTrue("Should be specific Plastic guidance", info.disposalGuide.contains("RINSE"))
+    }
 }

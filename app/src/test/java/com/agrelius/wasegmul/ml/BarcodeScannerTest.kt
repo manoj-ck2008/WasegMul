@@ -11,13 +11,15 @@ class BarcodeScannerTest {
     fun isValidEan13_withValidCodes_returnsTrue() {
         val scanner = BarcodeScanner()
 
-        // Known valid standard EAN-13 codes
+        // Known valid standard EAN-13 codes (real-world GS1 prefixes —
+        // all-zero codes like "0000000000000" pass Modulo-10 but are GS1-reserved
+        // and must NOT be locked in as "valid product" fixtures).
         val validCodes = listOf(
             "4006381333931", // Stabilo Boss
             "9780201379624", // Book ISBN-13
             "6291041500213", // GS1 official sample
-            "0000000000000", // All zeroes
-            "0000000000017"  // Single 1 with check digit 7
+            "5901234123457", // GS1 Poland sample
+            "5012345678900"  // GS1 UK sample
         )
 
         for (code in validCodes) {
@@ -92,6 +94,26 @@ class BarcodeScannerTest {
         assertEquals("08435111111112", BarcodeScanner.extractGtinFromUrl("https://id.gs1.org/01/08435111111112"))
         assertEquals("04006381333931", BarcodeScanner.extractGtinFromUrl("https://example.com/gtin/04006381333931/lot/99"))
         assertEquals("1234567890", BarcodeScanner.extractGtinFromUrl("1234567890"))
+    }
+
+    @Test
+    fun extractGtinFromUrl_handlesQueryParamAndBareElementString() {
+        assertEquals("12345678", BarcodeScanner.extractGtinFromUrl("https://example.com/p?gtin=12345678"))
+        // Bare GS1 element string with no slashes at all (QR payload form).
+        val bare = "01" + "08435111111112"
+        assertEquals("08435111111112", BarcodeScanner.extractGtinFromUrl(bare))
+        assertEquals("08435111111112", BarcodeScanner.extractGtinFromUrl("  $bare  "))
+    }
+
+    @Test
+    fun isJunkPayload_rejectsJunk_acceptsGtin() {
+        assertTrue(BarcodeScanner.isJunkPayload(""))
+        assertTrue(BarcodeScanner.isJunkPayload("   "))
+        assertTrue(BarcodeScanner.isJunkPayload("code_1726598400000"))
+        assertTrue(BarcodeScanner.isJunkPayload("no digits here!"))
+        assertTrue(BarcodeScanner.isJunkPayload("https://example.com/no-gtin-here"))
+        assertFalse(BarcodeScanner.isJunkPayload("4006381333931"))
+        assertFalse(BarcodeScanner.isJunkPayload("https://id.gs1.org/01/08435111111112"))
     }
 
     @Test

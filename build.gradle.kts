@@ -1,9 +1,10 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
+// Plugin versions are single-sourced from gradle/libs.versions.toml via the version catalog.
 plugins {
-    id("com.android.application") version "8.7.3" apply false
-    id("com.android.library") version "8.7.3" apply false
-    id("org.jetbrains.kotlin.plugin.compose") version "2.1.0" apply false
-    id("org.jetbrains.kotlin.android") version "2.1.0" apply false
-    id("org.jetbrains.kotlin.multiplatform") version "2.1.0" apply false
-    id("com.google.devtools.ksp") version "2.1.0-1.0.29" apply false
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.android.library) apply false
+    alias(libs.plugins.kotlin.compose) apply false
+    alias(libs.plugins.kotlin.android) apply false
+    alias(libs.plugins.kotlin.multiplatform) apply false
+    alias(libs.plugins.ksp) apply false
 }

@@ -9,25 +9,43 @@ package com.agrelius.wasegmul
  * through to a generic message.
  *
  * Sources are cited per-entry so the UI can surface provenance to the user.
+ *
+ * ## i18n status (documented tech debt)
+ * All copy below is hard-coded English, grouped one `when` branch per canonical label so
+ * extraction to platform string resources is mechanical (branch → string key, bullets →
+ * format args). Until extracted, non-English locales receive English guidance — tracked.
  */
 object WasteKnowledgeBase {
 
     /**
+     * Canonical label lookup over BOTH [WasteMapping.MAPPING] and
+     * [WasteMapping.EXTENDED_MAPPING] (case-insensitive). The old code only canonicalised
+     * MAPPING, so every lowercase EXTENDED label (e.g. a capitalised `"Bottle"`) fell
+     * through to the generic `else` branch — fixed here.
+     */
+    private val CANONICAL_LABELS: Map<String, String> =
+        (WasteMapping.MAPPING.keys + WasteMapping.EXTENDED_MAPPING.keys)
+            .associateBy { it.lowercase() }
+
+    /** Canonicalises [raw] to the stored label form (case-insensitive, trimmed). */
+    fun canonicalLabel(raw: String): String {
+        val needle = raw.trim().lowercase()
+        return CANONICAL_LABELS[needle] ?: raw.trim()
+    }
+
+    /**
      * @param category resolved category ("E-Waste", "Recyclable", "Organic", "Trash",
-     *                  "Uncertain", or "Unknown").
+     *                  "Hazardous", "Residual" (= Trash, CONTEXT.md name), "Uncertain", or "Unknown").
      * @param subclass  raw label emitted by the subclass model.
      */
     fun getInfo(category: String, subclass: String): WasteInfo {
         val cat = category.trim()
-        val rawSub = subclass.trim()
-        val canonicalKey = WasteMapping.MAPPING.keys.firstOrNull { it.equals(rawSub, ignoreCase = true) }
-        val sub = canonicalKey ?: rawSub
+        val sub = canonicalLabel(subclass)
 
         // Category-level fallback: arbitrator uses UNCERTAIN subclass when only the
         // broad category is reliable. Give honest category guidance instead of generic.
         if (sub.equals(WasteMapping.UNCERTAIN, ignoreCase = true) ||
             sub.equals(WasteMapping.UNKNOWN, ignoreCase = true) ||
-            sub.equals(cat, ignoreCase = true) ||
             sub.isEmpty()
         ) {
             getCategoryLevelInfo(cat)?.let { return it }
@@ -89,10 +107,10 @@ object WasteKnowledgeBase {
                 sources = "Earth911; R2 Recycling Standard"
             )
             "Television" -> WasteInfo(
-                disposalGuide = "• HAZARD: CRT TVs contain leaded glass; flat-screens contain mercury lamps: handle as e-waste.\n" +
+                disposalGuide = "• HAZARD: CRT TVs contain leaded glass; CCFL-backlit LCDs (older flat panels) contain mercury lamps — handle as e-waste. Modern LED/OLED panels contain no mercury but still require e-waste handling.\n" +
                     "• DATA: Remove any streaming sticks / accounts before disposal.\n" +
                     "• DROP-OFF: Take to an R2/e-Stewards recycler or a retailer TV take-back event.",
-                environmentalImpact = "Prevents lead, mercury and flame retardants from contaminating soil and water.",
+                environmentalImpact = "Prevents lead, mercury (CCFL units) and flame retardants from contaminating soil and water.",
                 recyclingBenefits = "Glass, plastics and precious metals are recovered; reduces demand for virgin materials.",
                 sources = "UN Global E-waste Monitor; EPA eCycling"
             )
@@ -106,13 +124,16 @@ object WasteKnowledgeBase {
             )
 
             // ── Consumer electronics (personal compute devices) ────────────────────
+            // NOTE: reconciled with WasteMapping hazard flags — every branch member below
+            // carries a Li-ion cell (Mobile/Laptop/Player/Electronic Device/cell phone) and
+            // is hazardous=true there. The guide therefore leads with fire handling.
             "Mobile", "Laptop", "Electronic Device", "Player", "electronic", "cell phone" -> WasteInfo(
-                disposalGuide = "• DATA: Back up and then securely wipe all personal storage (factory reset / disk wipe).\n" +
-                    "• ACCESSORIES: Keep chargers and cables with the device if possible.\n" +
-                    "• CERTIFIED RECYCLER: Take to an R2 or e-Stewards certified facility, or a retailer trade-in program.",
-                environmentalImpact = "Electronics contain heavy metals and flame retardants that contaminate groundwater if landfilled.",
+                disposalGuide = "• FIRE SAFETY FIRST: Contains a lithium-ion battery: never puncture, crush or bin it — damaged cells ignite in trucks and sorting plants.\n" +
+                    "• DATA: Back up and then securely wipe all personal storage (factory reset / disk wipe).\n" +
+                    "• CERTIFIED RECYCLER: Take to an R2 or e-Stewards certified facility, a retailer trade-in, or a household battery/e-waste drop-off.",
+                environmentalImpact = "Electronics contain heavy metals and flame retardants that contaminate groundwater if landfilled; battery fires release toxic fumes.",
                 recyclingBenefits = "Recovers gold, silver, copper and rare-earth elements, reducing destructive mining.",
-                sources = "UN Global E-waste Monitor; e-Stewards / R2 Certification"
+                sources = "UN Global E-waste Monitor; e-Stewards / R2 Certification; EPA Used Lithium-Ion Battery guidance"
             )
             // ── Peripherals & accessories ──────────────────────────────────────────
             "Keyboard", "Mouse" -> WasteInfo(
@@ -133,9 +154,11 @@ object WasteKnowledgeBase {
             )
 
             // ── Recyclables ────────────────────────────────────────────────────────
+            // NOTE: reconciled with PackagingWasteMapper — PVC (#3) and PS (#6) map to
+            // Trash/Plastic there, so this bin-recyclable branch explicitly EXCLUDES them.
             "Plastic", "bottle", "plastic_container" -> WasteInfo(
                 disposalGuide = "• RINSE: Remove food residue and let dry.\n" +
-                    "• CHECK: Confirm the Resin Identification Code: #1 (PET), #2 (HDPE) and #5 (PP) are the most widely accepted.\n" +
+                    "• CHECK: Confirm the Resin Identification Code: #1 (PET), #2 (HDPE) and #5 (PP) are the most widely accepted. #3 (PVC) and #6 (PS) are NOT curbside recyclable — bin them as trash.\n" +
                     "• BINS: Place in your yellow/blue recycling bin; keep caps on unless local rules say otherwise.",
                 environmentalImpact = "Diverts material from a 450-year landfill decomposition cycle and keeps it out of waterways.",
                 recyclingBenefits = "Cuts petroleum demand for virgin plastic and uses far less energy than producing new resin.",
@@ -153,24 +176,46 @@ object WasteKnowledgeBase {
                 disposalGuide = "• CLEAN: Rinse out food, paint or chemical residue.\n" +
                     "• TYPES: Aluminum and steel are infinitely recyclable: a magnet will tell them apart (steel sticks).\n" +
                     "• SORT: In single-stream systems, keep loose metal from tangling in sorting machines.",
-                environmentalImpact = "Mining ore is up to 95% more energy-intensive than recycling existing metal.",
+                environmentalImpact = "Recycling aluminium saves up to ~95% of the energy needed for primary production from ore — i.e. mining and refining virgin ore uses roughly 20× more energy (International Aluminium Institute).",
                 recyclingBenefits = "Metals retain their structural quality through unlimited recycling loops.",
-                sources = "International Aluminum Institute; Institute of Scrap Recycling Industries"
+                sources = "International Aluminium Institute (IAI); Institute of Scrap Recycling Industries"
             )
-            "Glass", "glass_container", "wine glass" -> WasteInfo(
+            // Container glass ONLY. Drinkware (wine glass), Pyrex, ceramics and mirrors
+            // contaminate glass-melt batches and are Trash — see the "wine glass" branch.
+            "Glass", "glass_container" -> WasteInfo(
                 disposalGuide = "• RINSE: Wash away sugars or oils.\n" +
                     "• SORT: Separate by color where your municipality requires it.\n" +
-                    "• NO CERAMICS: Pyrex, ceramics and mirrors contaminate glass-melt batches: bin them as trash.",
+                    "• CONTAINERS ONLY: Bottles and jars. Wine glasses, Pyrex, ceramics and mirrors contaminate glass-melt batches: bin them as trash.",
                 environmentalImpact = "Glass takes up to a million years to decompose; recycling is the only sustainable path.",
                 recyclingBenefits = "Cullet (crushed glass) lowers furnace temperatures, saving energy and cutting CO₂ emissions.",
                 sources = "Glass Packaging Institute (GPI)"
             )
-            "clothing", "shoes" -> WasteInfo(
+            // Drinkware truth (reconciled with WasteMapping: wine glass → Trash): lead/crystal
+            // content and a different melt point contaminate container-glass recycling.
+            "wine glass" -> WasteInfo(
+                disposalGuide = "• TRASH: Drinking glasses are NOT container glass: bin with general waste.\n" +
+                    "• WRAP: Wrap shards in paper to protect handlers.\n" +
+                    "• REUSE: Intact glasses are ideal for donation or reuse — never the recycling bin.",
+                environmentalImpact = "One drinking glass in a container-glass batch can spoil the melt and landfill the whole load.",
+                recyclingBenefits = "Keeping drinkware out preserves the recyclability of true container glass.",
+                sources = "Glass Packaging Institute (GPI)"
+            )
+            "shoes" -> WasteInfo(
                 disposalGuide = "• REUSE: Donate wearable items to charity shops or textile banks.\n" +
                     "• RETAILER: Many fashion brands now accept old textiles for recycling in-store.\n" +
                     "• RAGS: Even worn-out textiles can be recycled into insulation or cleaning cloths: don't bin them.",
                 environmentalImpact = "Keeps textiles out of landfill where they release methane during decomposition.",
                 recyclingBenefits = "Reduces water and pesticide demand of virgin cotton and lowers synthetic fiber production.",
+                sources = "Council for Textile Recycling; Ellen MacArthur Foundation"
+            )
+            // Curbside truth (reconciled with WasteMapping: clothing → Trash): NOT curbside
+            // recyclable — but donation/textile-bank specialty streams keep it out of landfill.
+            "clothing" -> WasteInfo(
+                disposalGuide = "• NOT CURBSIDE: Clothing is not accepted in curbside recycling: use general waste OR a specialty stream below.\n" +
+                    "• DONATE: Give wearable items to charity shops or textile banks.\n" +
+                    "• RETAILER: Many fashion brands accept old textiles for recycling in-store.",
+                environmentalImpact = "Keeps textiles out of landfill where synthetics shed microplastics and organics release methane.",
+                recyclingBenefits = "Reuse beats recycling: extends garment life; unwearable fibres become insulation or rags.",
                 sources = "Council for Textile Recycling; Ellen MacArthur Foundation"
             )
 
@@ -259,7 +304,7 @@ object WasteKnowledgeBase {
             )
 
             // ── Fallback (should no longer trigger for the 30 known labels) ─────────
-            else -> getGeneralInfo("Follow local municipal guidelines for '$subclass'.")
+            else -> getGeneralInfo("Follow local municipal guidelines for '$sub'.")
         }
     }
 
@@ -268,7 +313,9 @@ object WasteKnowledgeBase {
         disposalGuide = customGuide,
         environmentalImpact = "Correct identification is the first step in the Circular Economy.",
         recyclingBenefits = "Individual action scales to global environmental resilience.",
-        sources = "agrelius Sustainability Research"
+        // Real provenance: no self-citation. The generic fallback carries no material
+        // claims, so it cites the programme it derives from rather than inventing authority.
+        sources = "EPA Sustainable Materials Management (SMM)"
     )
 
     private fun getCategoryLevelInfo(category: String): WasteInfo? = when (category) {
@@ -297,6 +344,21 @@ object WasteKnowledgeBase {
             environmentalImpact = "Landfill minimized by correct sorting.",
             recyclingBenefits = "Avoids contaminating recyclables.",
             sources = "EPA Sustainable Materials Management"
+        )
+        // CONTEXT.md name for Trash — identical guidance, so Residual callers never get null.
+        "Residual" -> WasteInfo(
+            disposalGuide = "• CATEGORY-LEVEL: Place in general (residual) waste.\n• Double-check it is not recyclable first.",
+            environmentalImpact = "Landfill minimized by correct sorting.",
+            recyclingBenefits = "Avoids contaminating recyclables.",
+            sources = "EPA Sustainable Materials Management"
+        )
+        "Hazardous" -> WasteInfo(
+            disposalGuide = "• CATEGORY-LEVEL: HAZARDOUS — never place in trash or recycling bins.\n" +
+                "• CONTAIN: Seal, label, and keep dry and away from heat.\n" +
+                "• DROP-OFF: Take to a household hazardous-waste facility or certified collection event.",
+            environmentalImpact = "Hazardous waste leaches toxics and starts collection fires when binned.",
+            recyclingBenefits = "Specialist channels recover materials that curbside streams cannot handle safely.",
+            sources = "EPA Household Hazardous Waste; Call2Recycle"
         )
         else -> null
     }

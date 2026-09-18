@@ -1,10 +1,37 @@
 # WasegMul Waste Taxonomy: Single Source of Truth
 #
 # This file defines the complete mapping chain:
-#   TACO (52 mapped + 3 excluded raw classes) → YOLO (15 visual detector classes) → EfficientNet (30 semantic subclasses)
+#   TACO (50 mapped + 3 excluded raw classes; 53 raw total) → YOLO (15 visual detector classes) → EfficientNet (30 semantic subclasses)
 #
 # Both the training pipeline AND the Android app read from this taxonomy.
 # When you add a new dataset, update ONLY this file.
+# training scripts (kaggle_train.py / prepare_dataset.py) REQUIRE this file and
+# fail loudly if missing — there is no built-in fallback dict (it drifted).
+#
+# Counts: YOLO n=15, EfficientNet n=30 (see generate_taxonomy_md.py — headers
+# are computed from these dicts, never hardcoded).
+#
+# Other-plastic policy (single source — do NOT fork):
+#   "Other plastic" (misc rigid fragments) and "Other plastic container" ARE
+#   included → plastic_container. Only Painter tape / Pen / Unlabeled litter
+#   are excluded (genuinely ambiguous). An older kaggle_train fallback dict
+#   wrongly excluded "Other plastic" — that dict is deleted; this file wins.
+#
+# detection_to_subclass overlap rationale (intentional, not drift):
+#   - paper → [Cardboard(2), Paper(15)]: flat corrugated sheets vs office paper
+#     are visually identical at detection scale; EfficientNet disambiguates.
+#   - cup ↔ plastic_container share [Plastic(16), disposable_plastic_cutlery(25),
+#     styrofoam_cups(28), styrofoam_food_containers(29)]: open vessels, cutlery
+#     tubs and foam boxes share rigid-plastic visuals; crop-level classifier
+#     resolves material/function.
+#   - bottle → [Glass(5), Plastic(16)]: shape-identical, material differs.
+#   - glass_container → [Glass(5), light bulbs(26)]: squat glass forms.
+#   - metal → [Metal(8), automobile wastes(23)]: amorphous metal fragments.
+#   - textile → [Textile Trash(21), clothing(24), shoes(27)]: fibrous visuals.
+#
+# custom.classes note (datasets_manifest.yaml): custom `classes: 30` counts
+# EfficientNet SUBCLASSES for user-collected classification data — NOT the 15
+# YOLO detection classes. YOLO labels for custom data still use the 15 above.
 #
 # Design principles:
 #   - YOLO classes are grouped by VISUAL APPEARANCE (shape, texture, silhouette)
@@ -72,7 +99,7 @@ efficientnet_classes:
 # Every TACO category → YOLO detector class.
 # TACO categories marked excluded=true are NOT used for training.
 #
-# Source: https://github.com/pedropro/TACO (52 mapped categories + 3 excluded; upstream lists ~60 incl. super-categories)
+# Source: https://github.com/pedropro/TACO (50 mapped categories + 3 excluded; 53 raw total; upstream lists ~60 incl. super-categories)
 
 taco_mapping:
 

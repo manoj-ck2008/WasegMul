@@ -12,7 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Energy Metric**: Added `energySavedKwh` (kWh) to `EcoImpactCalculator` (Recyclables: 4.2 kWh/kg, E-Waste: 6.5 kWh/kg, Organic: 0.3 kWh/kg).
 - **Material 3 Dynamic Color**: Support for Android 12+ Material You dynamic color palettes with toggle in Settings.
 - **Frosted Glass Blur**: Background blur on Android 12+ (API 31+) in `GlassCard` without blurring card content.
-- **Room Migration 8 to 9**: Compound indices on `category`, `subclass`, and `feedback` columns in `waste_history`.
+- **Room Migration 8 to 9**: Single-column indices on `category`, `subclass`, and `feedback` columns in `waste_history` (one index per column, not composite).
+- **Room Migration 9 to 10**: New `barcode_products` offline cache table with indices on `category` and `lastAccessed` for barcode resolution.
+- **Room Migration 10 to 11**: Barcode provenance columns on `waste_history` (`source`, `productName`, `barcode`); destructive migration removed (fail-closed `fallbackToDestructiveMigrationOnDowngrade` only).
 - **History Management**: Individual item deletion with confirmation dialog, sorting chips (Newest, Oldest, Confidence), and background CSV export with cache file cleanup.
 - **Result Screen Thumbnail**: Display of captured waste image alongside classification metrics, with a "Scan Another" action.
 - **Compose Previews**: Comprehensive `@Preview` composables across screens and UI components.

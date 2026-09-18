@@ -3,12 +3,15 @@ package com.agrelius.wasegmul.navigation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.navigation.navDeepLink
+import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.ui.barcode.BarcodeScanScreen
 import com.agrelius.wasegmul.ui.barcode.BarcodeScanViewModel
 import com.agrelius.wasegmul.ui.classify.ClassificationViewModel
@@ -29,14 +32,16 @@ fun AppNavigation() {
     val app = context.applicationContext as? com.agrelius.wasegmul.WasegMulApp
     if (app == null) {
         android.util.Log.e("AppNavigation", "WasegMulApp missing in manifest: check android:name")
-        androidx.compose.material3.Text("App failed to start (bad Application class).")
+        androidx.compose.material3.Text(stringResource(R.string.home_app_error))
         return
     }
     val repository = app.repository
     val settingsManager = app.settingsManager
 
+    // Shared app-scoped ModelManager: one TFLite residency for camera,
+    // barcode Tier-4 and YOLO-adjacent flows (no duplicate instances).
     val classificationViewModel: ClassificationViewModel = viewModel(
-        factory = ClassificationViewModel.Factory(repository, settingsManager)
+        factory = ClassificationViewModel.Factory(repository, settingsManager, app.modelManager)
     )
     val homeViewModel: HomeViewModel = viewModel(
         factory = HomeViewModel.Factory(repository)
@@ -75,6 +80,10 @@ fun AppNavigation() {
                 },
                 onNavigateToBarcode = {
                     navController.navigate(Screen.BarcodeScan.route) { launchSingleTop = true }
+                },
+                // Home recent-taps were dead (default {}). Wire to Result.
+                onNavigateToResult = { recordId ->
+                    navController.navigate(Screen.Result.createRoute(recordId))
                 }
             )
         }
@@ -86,11 +95,15 @@ fun AppNavigation() {
             )
         }
 
+        // Navigation policy (single rule): top-level destinations use
+        // launchSingleTop; Result ALWAYS pushes a fresh entry (no
+        // launchSingleTop) so a new recordId can never be swallowed and show
+        // a stale record.
         composable(Screen.Classify.route) {
             ClassifyScreen(
                 viewModel = classificationViewModel,
                 onNavigateToResult = { recordId ->
-                    navController.navigate(Screen.Result.createRoute(recordId)) { launchSingleTop = true }
+                    navController.navigate(Screen.Result.createRoute(recordId))
                 },
                 onBack = {
                     classificationViewModel.releaseBitmap()
@@ -115,6 +128,9 @@ fun AppNavigation() {
             
             ResultScreen(
                 viewModel = classificationViewModel,
+                // recordId == -1 (no args): render the timeout/error state
+                // instead of an indeterminate spinner.
+                invalidRecordId = recordId == -1L,
                 onNavigateToHome = {
                     classificationViewModel.releaseBitmap()
                     navController.navigate(Screen.Home.route) {
@@ -122,7 +138,9 @@ fun AppNavigation() {
                     }
                 },
                 onBack = {
-                    classificationViewModel.releaseBitmap()
+                    // Do NOT release the bitmap here: back-to-Classify must
+                    // restore the captured image (fixes the empty-Classify
+                    // dead end). Classify's own onBack releases it.
                     navController.popBackStack()
                 }
             )
@@ -154,19 +172,22 @@ fun AppNavigation() {
             )
         }
 
-        composable(Screen.BarcodeScan.route) {
+        composable(Screen.BarcodeScan.route,
+            deepLinks = listOf(navDeepLink { uriPattern = "wasegmul://barcode" })
+        ) {
             val barcodeViewModel: BarcodeScanViewModel = viewModel(
                 factory = BarcodeScanViewModel.Factory(
                     barcodeRepository = app.barcodeRepository,
                     wasteRepository = app.repository,
-                    modelManager = app.modelManager
+                    modelManager = app.modelManager,
+                    settingsManager = app.settingsManager
                 )
             )
             BarcodeScanScreen(
                 viewModel = barcodeViewModel,
                 onBack = { navController.popBackStack() },
                 onNavigateToResult = { recordId ->
-                    navController.navigate(Screen.Result.createRoute(recordId)) { launchSingleTop = true }
+                    navController.navigate(Screen.Result.createRoute(recordId))
                 },
                 onFallbackToCamera = {
                     navController.navigate(Screen.Yolo.route) { launchSingleTop = true }

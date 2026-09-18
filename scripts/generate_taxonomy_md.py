@@ -87,7 +87,7 @@ def main() -> None:
     # ── Detection Classes ──────────────────────────────────────────────────────
     w("---")
     w("")
-    w("## YOLO Detection Classes (15 visual categories)")
+    w(f"## YOLO Detection Classes ({n_yolo} visual categories)")
     w("")
     w("YOLO detects WHERE objects are based on visual appearance.")
     w("")
@@ -104,7 +104,7 @@ def main() -> None:
     # ── EfficientNet Classes ───────────────────────────────────────────────────
     w("---")
     w("")
-    w("## EfficientNet Classification Classes (30 final subclasses)")
+    w(f"## EfficientNet Classification Classes ({n_effnet} final subclasses)")
     w("")
     w("After YOLO crops a detection, EfficientNet classifies into these subclasses.")
     w("")

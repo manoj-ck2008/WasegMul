@@ -68,18 +68,33 @@ import yaml
 from pathlib import Path
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
+# Overrides via env (keep defaults for Kaggle; document local reruns):
+#   WASEGMUL_KAGGLE_INPUT, WASEGMUL_OUTPUT_DIR, WASEGMUL_DATASET_DIR,
+#   WASEGMUL_RUNS_DIR, WASEGMUL_TAXONOMY, WASEGMUL_EPOCHS, WASEGMUL_PATIENCE,
+#   WASEGMUL_BATCH, WASEGMUL_CACHE (0/1, default 0: opt-in, OOM risk on T4),
+#   WASEGMUL_RESUME (.pt checkpoint for session-to-session resume),
+#   WASEGMUL_SEED, PYTHONHASHSEED=0 (shell-level determinism).
+# Local rerun example:
+#   PYTHONHASHSEED=0 WASEGMUL_EPOCHS=50 WASEGMUL_PATIENCE=15 python scripts/kaggle_train.py
 
-KAGGLE_INPUT = Path("/kaggle/input")
-OUTPUT_DIR = Path("./waste-yolo-output")
-DATASET_DIR = Path("./datasets/waste-yolo")
-RUNS_DIR = Path("./runs")
+KAGGLE_INPUT = Path(os.environ.get("WASEGMUL_KAGGLE_INPUT", "/kaggle/input"))
+OUTPUT_DIR = Path(os.environ.get("WASEGMUL_OUTPUT_DIR", "./waste-yolo-output"))
+DATASET_DIR = Path(os.environ.get("WASEGMUL_DATASET_DIR", "./datasets/waste-yolo"))
+RUNS_DIR = Path(os.environ.get("WASEGMUL_RUNS_DIR", "./runs"))
 TACO_DIR: Optional[Path] = None  # Auto-detected in Section 4
-TAXONOMY_PATH = Path(__file__).resolve().parent.parent / "taxonomy.yaml"
+TAXONOMY_PATH = Path(os.environ.get("WASEGMUL_TAXONOMY", str(Path(__file__).resolve().parent.parent / "taxonomy.yaml")))
 
 # ─── Load Taxonomy ────────────────────────────────────────────────────────────
 
 def _load_taxonomy(path: Path) -> dict:
-    """Load taxonomy.yaml with comprehensive search fallbacks for standalone Kaggle runs."""
+    """Load taxonomy.yaml — the SINGLE source of truth.
+
+    No built-in fallback dictionary: silently training on a forked taxonomy
+    is worse than failing. If taxonomy.yaml is missing (e.g. Kaggle kernel
+    without the file attached), this raises a clear error telling the user
+    to attach/copy taxonomy.yaml. See also: Other plastic include-vs-exclude
+    and detection_to_subclass rationale are documented in taxonomy.yaml.
+    """
     candidates = [
         path,
         Path("taxonomy.yaml"),
@@ -98,76 +113,14 @@ def _load_taxonomy(path: Path) -> dict:
             with open(candidate, "r", encoding="utf-8") as f:
                 return yaml.safe_load(f)
 
-    # Built-in fallback dictionary if running standalone without taxonomy.yaml file
-    return {
-        "yolo_classes": {
-            0: "battery", 1: "bottle", 2: "can", 3: "cardboard", 4: "cigarette",
-            5: "cup", 6: "electronic", 7: "food_waste", 8: "glass_container",
-            9: "metal", 10: "paper", 11: "plastic_bag", 12: "plastic_container",
-            13: "plastic_wrapper", 14: "textile"
-        },
-        "efficientnet_classes": {
-            0: "Air-Conditioner", 1: "Battery", 2: "Cardboard", 3: "Electronic Component",
-            4: "Electronic Device", 5: "Glass", 6: "Keyboard", 7: "Laptop", 8: "Metal",
-            9: "Microwave", 10: "Miscellaneous Trash", 11: "Mobile", 12: "Mouse",
-            13: "Organic", 14: "PCB", 15: "Paper", 16: "Plastic", 17: "Player",
-            18: "Printer", 19: "Refrigerator", 20: "Television", 21: "Textile Trash",
-            22: "Washing Machine", 23: "automobile wastes", 24: "clothing",
-            25: "disposable_plastic_cutlery", 26: "light bulbs", 27: "shoes",
-            28: "styrofoam_cups", 29: "styrofoam_food_containers"
-        },
-        "taco_mapping": {
-            "Aluminium blister pack": {"detector": "metal"},
-            "Battery": {"detector": "battery"},
-            "Cardboard": {"detector": "cardboard"},
-            "Corrugated carton": {"detector": "cardboard"},
-            "Drink carton": {"detector": "cardboard"},
-            "Meal carton": {"detector": "cardboard"},
-            "Cigarette": {"detector": "cigarette"},
-            "Glass bottle": {"detector": "bottle"},
-            "Glass jar": {"detector": "glass_container"},
-            "Broken glass": {"detector": "glass_container"},
-            "Food waste": {"detector": "food_waste"},
-            "Aerosol": {"detector": "metal"},
-            "Drink can": {"detector": "can"},
-            "Food can": {"detector": "can"},
-            "Metal bottle cap": {"detector": "metal"},
-            "Scrap metal": {"detector": "metal"},
-            "Aluminium foil": {"detector": "metal"},
-            "Other plastic bottle": {"detector": "bottle"},
-            "Clear plastic bottle": {"detector": "bottle"},
-            "Plastic bottle cap": {"detector": "plastic_container"},
-            "Plastic cup": {"detector": "cup"},
-            "Disposable plastic cup": {"detector": "cup"},
-            "Plastic lid": {"detector": "plastic_container"},
-            "Polypropylene bag": {"detector": "plastic_bag"},
-            "Plastic film": {"detector": "plastic_wrapper"},
-            "Garbage bag": {"detector": "plastic_bag"},
-            "Single-use carrier bag": {"detector": "plastic_bag"},
-            "Crisp packet": {"detector": "plastic_wrapper"},
-            "Spread tub": {"detector": "plastic_container"},
-            "Tupperware": {"detector": "plastic_container"},
-            "Disposable food container": {"detector": "plastic_container"},
-            "Other plastic container": {"detector": "plastic_container"},
-            "Plastic gloves": {"detector": "plastic_wrapper"},
-            "Plastic utensils": {"detector": "plastic_container"},
-            "Pop tab": {"detector": "metal"},
-            "Rope & strings": {"detector": "textile"},
-            "Shoe": {"detector": "textile"},
-            "Squeezable tube": {"detector": "plastic_container"},
-            "Styrofoam piece": {"detector": "plastic_container"},
-            "Normal paper": {"detector": "paper"},
-            "Paper bag": {"detector": "paper"},
-            "Tissues": {"detector": "paper"},
-            "Wrapping paper": {"detector": "paper"},
-            "Magazine paper": {"detector": "paper"},
-            "Paper cup": {"detector": "cup"},
-            "Disposable paper cup": {"detector": "cup"},
-            "Unlabeled litter": {"excluded": True},
-            "Other plastic": {"excluded": True},
-            "Other plastic wrapper": {"detector": "plastic_wrapper"}
-        }
-    }
+    raise FileNotFoundError(
+        "taxonomy.yaml not found. taxonomy.yaml is the single source of truth — "
+        "the training script no longer ships a built-in fallback dictionary "
+        "(it drifted: omitted blister/foam/straws/rings and disagreed on "
+        "Other-plastic include-vs-exclude). Fix: copy taxonomy.yaml next to "
+        "kaggle_train.py (the Kaggle pipeline stages it automatically), or set "
+        "WASEGMUL_TAXONOMY=/path/to/taxonomy.yaml."
+    )
 
 _taxonomy = _load_taxonomy(TAXONOMY_PATH)
 
@@ -203,14 +156,26 @@ EFFICIENTNET_CLASSES: list[str] = [
 ]
 
 # ─── Training Hyperparameters ────────────────────────────────────────────────
+# Quota note (Kaggle free tier): 300 epochs / patience 50 rarely finishes in
+# one ~9h T4 session. Early stopping usually exits sooner; for smoke runs set
+# WASEGMUL_EPOCHS=50 WASEGMUL_PATIENCE=15, and resume across sessions with
+# WASEGMUL_RESUME=<last.pt>. cache= is OPT-IN (OOM risk on T4 — see below).
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, str(default)))
+    except ValueError:
+        return default
+
 
 CONFIG: dict = {
     # Model
-    "model": "yolo11n.pt",
-    "epochs": 300,
-    "batch": -1,              # -1 = auto single-GPU; multi-GPU sets explicit batch
+    "model": os.environ.get("WASEGMUL_MODEL", "yolo11n.pt"),
+    "resume": os.environ.get("WASEGMUL_RESUME", ""),
+    "epochs": _env_int("WASEGMUL_EPOCHS", 300),
+    "batch": _env_int("WASEGMUL_BATCH", -1) if "WASEGMUL_BATCH" in os.environ else -1,
     "img_size": 640,
-    "patience": 50,           # Early stopping patience
+    "patience": _env_int("WASEGMUL_PATIENCE", 50),           # Early stopping patience
 
     # Optimizer
     "lr0": 0.001,
@@ -239,7 +204,10 @@ CONFIG: dict = {
     "device": 0,
     "workers": 2,
     "amp": True,
-    "seed": 42,
+    "seed": _env_int("WASEGMUL_SEED", 42),
+    # cache=True pins decoded images in RAM — OOM-kills T4/laptops on TACO.
+    # OPT-IN only: set WASEGMUL_CACHE=1 if you have headroom, else leave off.
+    "cache": os.environ.get("WASEGMUL_CACHE", "0") == "1",
 
     # Dataset split
     "train_ratio": 0.8,
@@ -260,6 +228,22 @@ print()
 # ═══════════════════════════════════════════════════════════════════════════════
 
 import torch
+
+# Determinism: PYTHONHASHSEED=0 must be set in the shell (documented in
+# requirements-train.txt). Workers inherit torch seeds; cudnn.benchmark stays
+# False so convolution autotuning cannot introduce run-to-run variance.
+if os.environ.get("PYTHONHASHSEED") != "0":
+    print("NOTE: set PYTHONHASHSEED=0 in the environment for fully reproducible splits.")
+import random as _random
+_random.seed(CONFIG["seed"])
+try:
+    import numpy as _np
+    _np.random.seed(CONFIG["seed"])
+except ImportError:
+    pass
+torch.manual_seed(CONFIG["seed"])
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(CONFIG["seed"])
 
 print("=" * 60)
 print("Environment")
@@ -284,7 +268,10 @@ if torch.cuda.is_available():
         torch.backends.cudnn.allow_tf32 = True
         print("  Accelerations: TensorFloat-32 (TF32) enabled for matmul and cuDNN")
 
-    torch.backends.cudnn.benchmark = True
+    # Deterministic dataloader behavior: benchmark=False (no autotuner
+    # nondeterminism). TF32 may still add tiny numeric variance on Ampere+;
+    # that is expected and documented, not a bug.
+    torch.backends.cudnn.benchmark = False
 
     # Check CUDA compute capability compatibility
     if capability < 70:
@@ -554,7 +541,13 @@ def _load_taco(taco_dir: Path) -> list[dict]:
 
 
 def _deduplicate(records: list[dict]) -> list[dict]:
-    """Remove duplicate images by content hash."""
+    """Remove duplicates: MD5 exact always; pHash near-dedup when available.
+
+    LIMITATION (documented): MD5 alone misses burst-frame near-duplicates.
+    If Pillow+imagehash are installed, a pHash stage (Hamming<=5) runs;
+    otherwise a filename-group + resolution fallback runs and logs its drops.
+    Install with: pip install pillow imagehash
+    """
     seen: set[str] = set()
     unique: list[dict] = []
     dupes = 0
@@ -567,8 +560,54 @@ def _deduplicate(records: list[dict]) -> list[dict]:
             dupes += 1
 
     if dupes:
-        print(f"  Removed {dupes} duplicate images")
-    return unique
+        print(f"  Removed {dupes} duplicate images (MD5 exact)")
+
+    try:
+        from PIL import Image
+        import imagehash
+        _has_phash = True
+    except ImportError:
+        _has_phash = False
+
+    if _has_phash:
+        seen_ph: list = []
+        kept: list[dict] = []
+        near = 0
+        for r in unique:
+            try:
+                with Image.open(r["path"]) as im:
+                    ph = imagehash.phash(im)
+            except Exception:
+                kept.append(r)
+                continue
+            if any((ph - h) <= 5 for h in seen_ph):
+                near += 1
+                continue
+            seen_ph.append(ph)
+            kept.append(r)
+        if near:
+            print(f"  Removed {near} near-duplicate images (pHash Hamming<=5)")
+        return kept
+
+    print("  NOTE: Pillow/imagehash absent — filename-group + resolution fallback "
+          "for near-dedup (MD5 exact already applied).")
+    import re
+    seen_groups: set = set()
+    kept = []
+    grouped = 0
+    for r in unique:
+        stem = Path(r.get("name", "")).stem
+        prefix = re.sub(r"[_-]?\d+$", "", stem).lower()[:32]
+        key = (prefix, r.get("path", ""))
+        # Resolution proxy unavailable here (no w/h stored) — group by prefix only.
+        if prefix and key in seen_groups:
+            grouped += 1
+            continue
+        seen_groups.add(key)
+        kept.append(r)
+    if grouped:
+        print(f"  Removed {grouped} suspected burst-frame dupes (filename-group fallback)")
+    return kept
 
 
 def _stratified_split(
@@ -576,12 +615,13 @@ def _stratified_split(
     train_r: float = 0.8,
     val_r: float = 0.1,
     seed: int = 42,
+    allow_rare: bool = False,
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """Stratified split ensuring every class appears in all splits.
 
-    Strategy: group images by their most frequent class, then split each
-    group proportionally. This prevents rare classes from disappearing
-    from validation or test sets.
+    Minimum-val enforcement: classes with <3 images cannot cover
+    train/val/test. FAILS loudly unless WASEGMUL_ALLOW_RARE=1, in which case
+    rare singles are redistributed into train and logged (never silent).
     """
     random.seed(seed)
 
@@ -595,6 +635,17 @@ def _stratified_split(
         primary = max(counts, key=counts.get) if counts else NUM_CLASSES - 1
         groups[primary].append(r)
 
+    rare = {c: len(g) for c, g in groups.items() if len(g) < 3}
+    if rare:
+        detail = ", ".join(f"{YOLO_CLASSES[c]} (n={n})" for c, n in sorted(rare.items()))
+        if not allow_rare:
+            raise SystemExit(
+                f"STRATIFIED SPLIT BLOCKED: {detail} have <3 images. Collect more "
+                f"images or set WASEGMUL_ALLOW_RARE=1 to redistribute rare singles "
+                f"into train (logged, not silent)."
+            )
+        print(f"  WARNING (WASEGMUL_ALLOW_RARE=1): rare groups into train: {detail}")
+
     train: list[dict] = []
     val: list[dict] = []
     test: list[dict] = []
@@ -602,6 +653,9 @@ def _stratified_split(
     for cls_id, group in groups.items():
         random.shuffle(group)
         n = len(group)
+        if n < 3 and allow_rare:
+            train.extend(group)
+            continue
         n_train = int(n * train_r)
         n_val = max(1, int(n * val_r)) if n > 2 else 0
 
@@ -752,11 +806,13 @@ else:
     all_records = [r for r in all_records if r["n_obj"] >= 1]
     print(f"  After filter: {len(all_records)}")
 
-    # Stratified split
+    # Stratified split (rare-class policy via WASEGMUL_ALLOW_RARE=1 to redistribute instead of fail)
     train, val, test = _stratified_split(
         all_records,
         train_r=CONFIG["train_ratio"],
         val_r=CONFIG["val_ratio"],
+        seed=CONFIG["seed"],
+        allow_rare=os.environ.get("WASEGMUL_ALLOW_RARE", "0") == "1",
     )
     print(f"  Split: {len(train)} train / {len(val)} val / {len(test)} test")
 
@@ -798,7 +854,10 @@ print()
 
 from ultralytics import YOLO
 
-model = YOLO(CONFIG["model"])
+_resume = CONFIG.get("resume") or CONFIG["model"]
+if CONFIG.get("resume"):
+    print(f"  Resuming from checkpoint: {_resume}")
+model = YOLO(_resume)
 
 results = model.train(
     data=str(DATASET_DIR / "data.yaml"),
@@ -821,7 +880,7 @@ results = model.train(
     warmup_bias_lr=CONFIG["warmup_bias_lr"],
     close_mosaic=CONFIG["close_mosaic"],
     amp=CONFIG["amp"],
-    cache=True,
+    cache=CONFIG["cache"],  # OPT-IN via WASEGMUL_CACHE=1; True OOMs T4 on TACO
     exist_ok=True,
     pretrained=True,
     optimizer="AdamW",
@@ -955,12 +1014,26 @@ if best_weights.exists():
         tflite_fp32 = None
 
     # ── TFLite INT8 ───────────────────────────────────────────────────────────
-    print("\n  [2/5] TFLite INT8 quantized...")
+    # NEVER silently ship broken int8: requires a calibration dataset (data=)
+    # and a manual AP regression check. If calibration/export fails, this
+    # FAILS with a clear error and leaves tflite_int8=None (FP32 remains the
+    # shippable artifact). Before shipping any *_int8.tflite, compare val
+    # mAP@50 FP32 vs INT8; reject if drop > ~2pp or any class collapses.
+    print("\n  [2/5] TFLite INT8 quantized (requires calibration data)...")
     try:
-        tflite_int8 = model.export(format="tflite", imgsz=640, int8=True)
+        tflite_int8 = model.export(
+            format="tflite",
+            imgsz=640,
+            int8=True,
+            data=str(DATASET_DIR / "data.yaml"),
+        )
         print(f"    -> {tflite_int8}")
+        print("    WARNING: INT8 artifact is NOT shippable until you run val on it "
+              "and confirm AP regression is acceptable. See note above.")
     except Exception as e:
-        print(f"    FAILED: {e}")
+        print(f"    INT8 EXPORT BLOCKED (not silent): {e}")
+        print("    FP32 remains the shippable artifact. Provide a representative "
+              "calibration dataset via data= and re-run; do not ship INT8 without it.")
         tflite_int8 = None
 
     # ── ONNX ──────────────────────────────────────────────────────────────────

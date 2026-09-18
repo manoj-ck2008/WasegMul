@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.agrelius.wasegmul.MLArbitrator
 import com.agrelius.wasegmul.PackagingWasteMapper
+import com.agrelius.wasegmul.PredictionCodec
 import com.agrelius.wasegmul.ResolvedPackagingComponent
 import com.agrelius.wasegmul.WasteMapping
 import com.agrelius.wasegmul.WasteRecord
@@ -23,8 +24,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.agrelius.wasegmul.ml.classifiers.normalizeCategoryLabel
 import kotlinx.serialization.json.Json
 
 /**
@@ -72,7 +77,8 @@ class BarcodeScanViewModel(
     private val barcodeRepository: BarcodeRepository,
     private val wasteRepository: WasteRepository,
     private val modelManager: ModelManager? = null,
-    val barcodeScanner: BarcodeScanner = BarcodeScanner()
+    val barcodeScanner: BarcodeScanner = BarcodeScanner(),
+    private val settingsManager: com.agrelius.wasegmul.utils.SettingsManager? = null
 ) : ViewModel() {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -82,6 +88,13 @@ class BarcodeScanViewModel(
 
     private val _navigateToResult = Channel<Long>(Channel.BUFFERED)
     val navigateToResult: Flow<Long> = _navigateToResult.receiveAsFlow()
+
+    private val _lastXpGain = MutableStateFlow<com.agrelius.wasegmul.gamification.XpGainResult?>(null)
+    val lastXpGain: StateFlow<com.agrelius.wasegmul.gamification.XpGainResult?> = _lastXpGain.asStateFlow()
+
+    // Last awarded scan for XP dedup (spam-scanning the same item earns 0 XP).
+    private var lastAwardedSubclass: String? = null
+    private var lastAwardedAtMs: Long? = null
 
     /**
      * Handles detection of a barcode symbol from the camera frame analysis pipeline.
@@ -122,7 +135,7 @@ class BarcodeScanViewModel(
                     val outcome = modelManager.classify(frameBitmap)
                     if (outcome is ClassificationOutcome.Success) {
                         val arbitrated = MLArbitrator.arbitrate(outcome.prediction)
-                        val category = arbitrated.category
+                        val category = normalizeCategoryLabel(arbitrated.category)
                         val subclass = arbitrated.subcategory
                         val weight = WasteMapping.getWeight(subclass) * 1000.0
                         val primaryComponent = ResolvedPackagingComponent(
@@ -146,7 +159,9 @@ class BarcodeScanViewModel(
                             source = "visual_ml",
                             packagingsComplete = true
                         )
-                        barcodeRepository.saveUserIdentifiedProduct(product)
+                        // Do NOT persist Tier-4 visual guesses to the product cache:
+                        // an unverified ML guess must never become ground truth for
+                        // future scans. It lives in-memory only (this Resolved state).
                         _uiState.value = BarcodeScanState.Resolved(
                             product = product,
                             components = listOf(primaryComponent),
@@ -182,10 +197,17 @@ class BarcodeScanViewModel(
             isComplete = product.packagingsComplete
         )
         val arbitrated = com.agrelius.wasegmul.MLArbitrator.arbitrateWithBarcode(null, evidence)
+        val category = normalizeCategoryLabel(arbitrated.category)
 
-        val estimatedWeightKg = (product.weightGrams ?: 50.0) / 1000.0
+        // Weight chain (single source): measured product grams -> canonical
+        // per-subclass estimate (WasteMapping) -> 0.0 (unknown, never fabricated).
+        // Zero-weight records earn no Eco credit and no celebration (same policy
+        // as uncertain camera scans).
+        val estimatedWeightKg = (product.weightGrams
+            ?: (WasteMapping.getWeight(arbitrated.subcategory) * 1000.0)) / 1000.0
         val name = product.productName?.trim()
         val brand = product.brand?.trim()
+        // Legacy compat tag (kept for old history rows); new rows use first-class columns.
         val vectorTag = buildString {
             append("barcode:${product.barcode}")
             if (!name.isNullOrBlank()) append("|$name")
@@ -193,16 +215,50 @@ class BarcodeScanViewModel(
         }
 
         val record = WasteRecord(
-            category = arbitrated.category,
+            category = category,
             subclass = arbitrated.subcategory,
             confidence = arbitrated.categoryConfidence,
             estimatedWeight = estimatedWeightKg,
             featureVector = vectorTag,
-            topPredictions = arbitrated.topSubcategories.joinToString(",") { "${it.first}|${it.second}" },
-            timestamp = System.currentTimeMillis()
+            topPredictions = PredictionCodec.encode(arbitrated.topSubcategories),
+            timestamp = System.currentTimeMillis(),
+            source = "barcode",
+            productName = name?.takeIf { it.isNotBlank() },
+            barcode = product.barcode
         )
-        val id = wasteRepository.insert(record)
-        _navigateToResult.send(id)
+        // Room I/O off-Main (ANR guard); unbounded throws would otherwise wedge
+        // the Save button with no error UI.
+        val id = withContext(Dispatchers.IO) { wasteRepository.insert(record) }
+        // Parity with camera pipeline: barcode scans earn XP + daily streak.
+        val now = System.currentTimeMillis()
+        try {
+            val sm = settingsManager
+            if (sm != null) {
+                val impact = com.agrelius.wasegmul.EcoImpactCalculator.calculate(listOf(record))
+                val co2Grams = impact.co2PreventedKg * 1000.0
+                val dailyCount = withContext(Dispatchers.IO) { sm.incrementDailyScanCount() }
+                val currentXp = withContext(Dispatchers.IO) { sm.totalXp.first() }
+                val xpResult = com.agrelius.wasegmul.gamification.GamificationManager.processNewScan(
+                    currentTotalXp = currentXp,
+                    category = category,
+                    confidence = arbitrated.categoryConfidence,
+                    co2PreventedGrams = co2Grams,
+                    dailyScanCount = dailyCount,
+                    subclass = arbitrated.subcategory,
+                    scanTimestampMs = now,
+                    lastSubclass = lastAwardedSubclass,
+                    lastScanTimestampMs = lastAwardedAtMs
+                )
+                lastAwardedSubclass = arbitrated.subcategory
+                lastAwardedAtMs = now
+                withContext(Dispatchers.IO) { sm.setTotalXp(xpResult.newTotalXp) }
+                _lastXpGain.value = xpResult
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("BarcodeScanViewModel", "XP award failed", e)
+        }
+        // trySend (BUFFERED channel): never suspends if the screen already popped.
+        _navigateToResult.trySend(id)
         return id
     }
 
@@ -212,27 +268,32 @@ class BarcodeScanViewModel(
      *
      * @param barcode The scanned barcode or QR code string.
      * @param productName User-provided or inferred product name (e.g. "Uno Card Box", "Laptop").
-     * @param category WasegMul waste category (e.g. "Recyclable", "E-Waste", "Trash", "Organic").
+     * @param category WasegMul waste category (e.g. "Recyclable", "E-Waste", "Residual", "Organic").
      * @param subclass WasegMul waste subclass (e.g. "Cardboard", "Electronics", "Plastic", "Metal").
+     * @param persistCache False for pseudo-codes (e.g. error-state "code_..." stand-ins)
+     * that must never pollute the barcode cache as junk keys.
      */
     fun quickClassifyAndSave(
         barcode: String,
         productName: String,
         category: String,
-        subclass: String
+        subclass: String,
+        persistCache: Boolean = true
     ) {
         viewModelScope.launch {
             val name = productName.ifBlank { "Scanned Item ($barcode)" }
-            val weight = when (category) {
-                "E-Waste" -> 1500.0
-                "Recyclable" -> if (subclass == "Metal" || subclass == "Glass") 250.0 else 50.0
-                else -> 50.0
-            }
+            // Canonical per-subclass estimate (WasteMapping, grams) — never the old
+            // coarse buckets (E-Waste 1500 g / Metal 250 g / else 50 g) that
+            // fabricated CO2/water/energy figures. confirmAndSave derives Eco/XP
+            // from the same source, so history stays consistent.
+            val normalizedCategory = normalizeCategoryLabel(category)
+            val weight = WasteMapping.getWeight(subclass) * 1000.0
+            val isPseudoCode = barcode.startsWith("code_")
             val product = BarcodeProduct(
                 barcode = barcode,
                 productName = name,
                 brand = null,
-                category = category,
+                category = normalizedCategory,
                 subclass = subclass,
                 materials = subclass,
                 componentsJson = null,
@@ -241,10 +302,14 @@ class BarcodeScanViewModel(
                 source = "user_identified",
                 packagingsComplete = true
             )
-            try {
-                barcodeRepository.saveUserIdentifiedProduct(product)
-            } catch (e: Exception) {
-                // Non-fatal if cache write fails
+            if (persistCache && !isPseudoCode) {
+                try {
+                    withContext(Dispatchers.IO) {
+                        barcodeRepository.saveUserIdentifiedProduct(product)
+                    }
+                } catch (e: Exception) {
+                    // Non-fatal if cache write fails
+                }
             }
             confirmAndSave(product)
         }
@@ -337,7 +402,8 @@ class BarcodeScanViewModel(
         private val barcodeRepository: BarcodeRepository,
         private val wasteRepository: WasteRepository,
         private val modelManager: ModelManager? = null,
-        private val barcodeScanner: BarcodeScanner? = null
+        private val barcodeScanner: BarcodeScanner? = null,
+        private val settingsManager: com.agrelius.wasegmul.utils.SettingsManager? = null
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -346,7 +412,8 @@ class BarcodeScanViewModel(
                     barcodeRepository = barcodeRepository,
                     wasteRepository = wasteRepository,
                     modelManager = modelManager,
-                    barcodeScanner = barcodeScanner ?: BarcodeScanner()
+                    barcodeScanner = barcodeScanner ?: BarcodeScanner(),
+                    settingsManager = settingsManager
                 ) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")

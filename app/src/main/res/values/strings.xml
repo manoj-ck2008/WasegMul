@@ -3,11 +3,31 @@
 
     <!-- Home Screen -->
     <string name="home_subtitle">Waste Segregation Multi-model AI</string>
+    <string name="home_app_error">App failed to start (bad Application class).</string>
+    <string name="home_image_load_failed">Couldn\'t load that image. Please try another.</string>
+    <string name="home_photo_expired">That photo is no longer available. Please capture or pick again.</string>
+    <string name="home_camera_title">Camera Permission Required</string>
+    <string name="home_camera_text">Camera access is needed to scan and classify waste items. Please grant the permission to use the scanner.</string>
+    <string name="home_camera_denied_perm">Camera permission was permanently denied. Open Settings to enable it, or use the gallery instead.</string>
+    <string name="home_open_settings">Open Settings</string>
+    <string name="home_use_gallery">Use Gallery Instead</string>
+    <string name="home_try_again">Try Again</string>
+    <string name="home_material_breakdown">MATERIAL BREAKDOWN</string>
+    <string name="home_cd_scans">Total waste records</string>
+    <string name="home_cd_live_detect">Open live detection</string>
+    <string name="home_cd_guide">Open disposal guide</string>
+    <string name="home_cd_camera">Launch scanner</string>
+    <string name="home_cd_barcode">Barcode scan</string>
+    <string name="home_cd_feedback_correct">User verified correct</string>
+    <string name="home_cd_feedback_incorrect">User marked incorrect</string>
+    <string name="time_just_now">Just now</string>
+    <string name="time_minutes_ago">%1$dm ago</string>
+    <string name="time_hours_ago">%1$dh ago</string>
     <string name="home_carbon_offset">CARBON OFFSET</string>
-    <string name="home_neural_scans">NEURAL SCANS</string>
+    <string name="home_neural_scans">WASTE RECORDS</string>
     <string name="home_yolo_title">Real-time YOLO Detect</string>
     <string name="home_yolo_subtitle">Launch live multi-object tracking</string>
-    <string name="home_description">Industrial material analysis powered by EfficientNet architecture. Identify material signatures with precise chemical confidence.</string>
+    <string name="home_description">On-device visual AI estimates of waste materials. Point the camera at an item to identify its material and get disposal guidance with Eco Impact insights.</string>
     <string name="home_launch_scanner">Launch Scanner</string>
     <string name="home_scan_barcode">Scan Product Barcode</string>
     <string name="home_import_device">Import from Device</string>
@@ -18,20 +38,37 @@
     <string name="app_version_info">V %1$s \u2022 agrelius industrial AI</string>
 
     <!-- Classify Screen -->
-    <string name="classify_title">SCAN INTERFACE</string>
+    <string name="classify_title">Classification</string>
     <string name="classify_awaiting">Awaiting Visual Input</string>
+    <string name="classify_pick_image">Pick an Image</string>
     <string name="classify_retake">Retake Image</string>
+    <string name="classify_cancel">Cancel</string>
+    <string name="classify_model_error">The AI models failed to load. Check storage space and retry.</string>
 
     <!-- YOLO Screen -->
-    <string name="yolo_title">YOLO LIVE DETECT</string>
+    <string name="yolo_title">Live Detection</string>
     <string name="yolo_camera_permission">Camera permission required for live detection</string>
+    <string name="yolo_camera_rationale">Live detection needs camera access. Grant it to continue, or open Settings if it was permanently denied.</string>
+    <string name="yolo_no_objects_hint">Point the camera at a waste item to detect it</string>
+    <string name="yolo_target_format">Target: %1$s (%2$d%%)</string>
+    <string name="yolo_deselect">Clear selection</string>
     <string name="yolo_fps_format">%1$.1f FPS</string>
     <string name="yolo_detected_count">DETECTED: %1$d object%2$s</string>
     <string name="yolo_more">+%1$d more</string>
     <string name="yolo_model_error">YOLO model not available. Place yolov8n.tflite in assets/.</string>
 
     <!-- Result Screen -->
-    <string name="result_title">ANALYSIS REPORT</string>
+    <string name="result_title">Analysis Report</string>
+    <string name="result_share_title">Share Waste Analysis</string>
+    <string name="result_share_header">WasegMul Waste Analysis Report</string>
+    <string name="result_share_footer">Classified on-device with WasegMul AI.</string>    <string name="result_share_hazard">Hazardous material: requires specialist drop-off. Do not place in household garbage.</string>
+    <string name="result_invalid_record">This Waste Record is missing or was deleted.</string>
+    <string name="result_load_timeout">Still loading… the record may have been deleted. Go back and try again.</string>
+    <string name="result_default_location">Showing the default location. Enable location access for nearest results.</string>
+    <string name="result_location_denied">Location permission denied. Showing the default location instead.</string>
+    <string name="result_enable_location">Enable Location</string>
+    <string name="result_cd_hazard">Hazardous material warning</string>
+    <string name="result_cd_confidence">Classification confidence</string>
     <string name="result_acknowledge_close">Acknowledge &amp; Close</string>
     <string name="result_environmental_insights">Environmental Insights</string>
     <string name="result_disposal_protocol">Disposal Protocol</string>
@@ -42,11 +79,11 @@
     <string name="result_validation">Validation</string>
     <string name="result_low_confidence_match">LOW CONFIDENCE MATCH</string>
     <string name="result_neural_variance">Neural Variance: The visual signature is outside standard thresholds. Manual verification required.</string>
-    <string name="result_storage_image">Storage: Image saved for review</string>
-    <string name="result_storage_metadata">Storage: Metadata only</string>
+    <string name="result_storage_image">Image saved for review</string>
+    <string name="result_storage_metadata">Details saved</string>
 
     <!-- History Screen -->
-    <string name="history_title">Neural History</string>
+    <string name="history_title">History</string>
     <string name="history_clear_title">Clear All Records?</string>
     <string name="history_clear_message">This will permanently delete all classification history from this device. This action cannot be undone.</string>
     <string name="history_empty">No classification records found.</string>
@@ -68,7 +105,7 @@
     </string-array>
 
     <!-- Settings Screen -->
-    <string name="settings_title">Neural Configuration</string>
+    <string name="settings_title">Settings</string>
     <string name="settings_interface_preference">INTERFACE PREFERENCE</string>
     <string name="settings_dark_mode">Dark Mode (Emerald Neon)</string>
     <string name="settings_light_mode">Light Mode (Clean Eco)</string>
@@ -76,11 +113,11 @@
     <string name="settings_system_default">System Default</string>
     <string name="settings_theme_note">Tip: Dark and Nature modes optimize OLED energy efficiency and lower device carbon footprint.</string>
     <string name="settings_data_archive">DATA ARCHIVE</string>
-    <string name="settings_purge_history">Purge Neural History</string>
+    <string name="settings_purge_history">Delete History</string>
     <string name="settings_purge_title">Purge Database?</string>
     <string name="settings_purge_message">All local classification logs and impact metrics will be permanently erased from this device.</string>
     <string name="settings_execute_purge">Execute Purge</string>
-    <string name="settings_purged_snackbar">Neural history purged</string>
+    <string name="settings_purged_snackbar">History deleted</string>
     <string name="settings_off_attribution_title">PRODUCT DATA ATTRIBUTION</string>
     <string name="settings_off_attribution_body">Product data provided by Open Food Facts (world.openfoodfacts.org), licensed under ODbL.</string>
     <string name="settings_off_visit_button">Visit Open Food Facts</string>
@@ -130,14 +167,25 @@
     <string name="common_retry">Retry</string>
     <string name="common_grant_permission">Grant Permission</string>
     <string name="common_processing">Processing&#8230;</string>
+    <string name="common_delete">Delete</string>
     <string name="common_delete_all">Delete All</string>
+    <string name="common_dismiss">Dismiss</string>
     <string name="common_abort">Abort</string>
     <string name="common_settings">Settings</string>
     <string name="common_home">Home</string>
     <string name="common_go_back">Go back</string>
     <string name="common_edit_feedback">Edit Feedback</string>
 
+    <!-- History extras -->
+    <string name="history_loading">Loading history…</string>
+    <string name="history_clear_search">Clear search</string>
+    <string name="history_delete_record">Delete record</string>
+    <string name="history_export_done">History exported</string>
+    <string name="history_export_failed">Export failed. Please try again.</string>
+    <string name="history_correction_invalid">Please choose a specific material (Subclass), not a Category.</string>
+
     <!-- Eco Guide & Encyclopedia -->
+    <string name="guide_no_results">No Knowledge Base entries match your search.</string>
     <string name="guide_title">Eco Encyclopedia</string>
     <string name="guide_subtitle">Authoritative disposal rules &amp; impact for 30+ items</string>
     <string name="guide_search_hint">Search material, e-waste, item&#8230;</string>
@@ -176,6 +224,10 @@
     <string name="history_sort_confidence">Confidence</string>
 
     <!-- Advanced Settings -->
+    <string name="settings_detection_accuracy">DETECTION &amp; ACCURACY</string>
+    <string name="settings_reset_defaults">Reset to Defaults</string>
+    <string name="settings_reset_done">Settings reset to defaults</string>
+    <string name="settings_purge_failed">Failed to clear history. Please try again.</string>
     <string name="settings_dynamic_color">Dynamic Material You Color</string>
     <string name="settings_dynamic_color_desc">Match app palette with device wallpaper (Android 12+)</string>
     <string name="settings_haptics">Haptic Feedback</string>
@@ -187,6 +239,46 @@
     <string name="settings_licenses_title">Licenses &amp; Attribution</string>
     <string name="settings_close">Close</string>
 
+    <!-- Barcode scanner -->
+    <string name="barcode_scanner_title">Barcode Scanner</string>
+    <string name="barcode_manual_title">Manual Barcode Entry</string>
+    <string name="barcode_manual_label">Enter Barcode (e.g., 12 or 13 digits)</string>
+    <string name="barcode_manual_invalid">Enter a valid barcode (8–14 digits).</string>
+    <string name="barcode_manual_search">Search</string>
+    <string name="barcode_manual_entry">Enter manually</string>
+    <string name="barcode_manual_search_cd">Enter barcode manually</string>
+    <string name="barcode_resolving">Resolving Product…</string>
+    <string name="barcode_looking_up">Looking up barcode: %1$s</string>
+    <string name="barcode_cancel">Cancel</string>
+    <string name="barcode_packaging_breakdown">Packaging Component breakdown</string>
+    <string name="barcode_weight_fmt">Weight: %1$.1f g</string>
+    <string name="barcode_confirm_guide">Confirm &amp; View Disposal Guide</string>
+    <string name="barcode_saving">Saving…</string>
+    <string name="barcode_save_failed">Couldn\'t save. Please try again.</string>
+    <string name="barcode_scan_another">Scan Another</string>
+    <string name="barcode_camera">Analyze with Camera</string>
+    <string name="barcode_quick_title">Quick Product Classifier</string>
+    <string name="barcode_select_category">SELECT WASTE CATEGORY</string>
+    <string name="barcode_name_required">Please enter a product name.</string>
+    <string name="barcode_select_required">Please select a waste category.</string>
+    <string name="barcode_permission_rationale">Barcode scanning needs camera access. Grant it to continue, or open Settings if it was permanently denied.</string>
+    <string name="barcode_point_hint">Point camera at product barcode</string>
+    <string name="barcode_code_full">Code: %1$s</string>
+    <string name="network_online">Online</string>
+    <string name="network_offline">Offline</string>
+
+    <!-- Splash -->
+    <string name="splash_skip">Skip</string>
+    <string name="splash_cd_logo">WasegMul logo</string>
+
+    <!-- Insight cards -->
+    <string name="insight_show_more">Show more</string>
+    <string name="insight_show_less">Show less</string>
+
+    <!-- Gamification extras -->
+    <string name="gamification_xp_progress">%1$d / %2$d XP</string>
+    <string name="gamification_co2_fmt">%1$.3f kg</string>
+
     <!-- History Dashboard -->
     <string name="dashboard_total_scans">Total Scans</string>
     <string name="dashboard_total_weight">Total Weight</string>
@@ -196,18 +288,46 @@
     <!-- Gamification -->
     <string name="gamification_level_up">LEVEL UP!</string>
     <string name="gamification_xp_earned">+%1$d XP</string>
-    <string name="gamification_carbon_offset">CARBON OFFSET</string>
+    <string name="gamification_carbon_offset">ECO IMPACT</string>
     <string name="gamification_congrats">Thank you for protecting our planet!</string>
 
     <!-- Bengaluru Disposal Locator & Civic Reporting -->
     <string name="disposal_nearest_facilities">Nearest Disposal Facilities</string>
+    <string name="disposal_nearest_for_category">Nearest %1$s Facilities</string>
+    <string name="disposal_empty">No %1$s facilities found nearby yet.</string>
+    <string name="disposal_distance_km">%1$.1f km</string>
+    <string name="disposal_no_maps">No maps app available.</string>
+    <string name="disposal_cannot_call">No dialer app available.</string>
     <string name="disposal_navigate">Navigate</string>
     <string name="disposal_call">Call</string>
-    <string name="civic_report_title">Report Waste Issue in Bengaluru</string>
+    <string name="civic_report_title_fmt">Report Waste Issue in %1$s</string>
+    <string name="civic_tap_to_report">Tap to report an issue</string>
     <string name="civic_report_desc">Notice garbage piled up or a waste blackspot? Report directly to civic authorities.</string>
+    <string name="civic_whatsapp">WhatsApp BSWML</string>
+    <string name="civic_call_gba">Call GBA Helpline (1533)</string>
+    <string name="civic_bbmp">BBMP Control Room</string>
+    <string name="civic_saahas">Saahas E-Waste Helpline</string>
+    <string name="civic_hasiru">Hasiru Dala</string>
+    <string name="civic_more_cities">Default contacts shown for %1$s. More cities coming soon.</string>
+    <string name="civic_no_location">Location unavailable: enable location to include GPS in the report.</string>
+    <string name="civic_cannot_open">No app available to handle this action.</string>
+
+    <!-- Celebration overlays -->
+    <string name="overlay_thank_you">Thank You!</string>
+    <string name="overlay_saved_planet">You just saved the planet a little more</string>
+    <string name="overlay_continue">Continue</string>
+    <string name="overlay_tap_to_continue">Tap anywhere to continue</string>
 
     <!-- Decay Time Display -->
     <string name="decay_time_header">TIME TO DECOMPOSE</string>
     <string name="decay_environmental_warning">Environmental Impact</string>
+    <string name="decay_persistence_fmt">Persistence: %1$s</string>
+    <string name="decay_sev_low">Low</string>
+    <string name="decay_sev_moderate">Moderate</string>
+    <string name="decay_sev_high">High</string>
+    <string name="decay_sev_extreme">Extreme</string>
+    <string name="decay_toggle_warning">Toggle environmental warning</string>
+    <string name="decay_expand">Expand</string>
+    <string name="decay_collapse">Collapse</string>
 </resources>
 

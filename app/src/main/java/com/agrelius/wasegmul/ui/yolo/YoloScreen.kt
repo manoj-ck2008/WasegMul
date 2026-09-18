@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -41,101 +42,23 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.agrelius.wasegmul.R
+import com.agrelius.wasegmul.WasteMapping
 import com.agrelius.wasegmul.ml.Detection
-import com.agrelius.wasegmul.ml.YoloDetector
-import com.agrelius.wasegmul.ml.ModelInitException
+import com.agrelius.wasegmul.ui.result.humanizeLabel
 import com.agrelius.wasegmul.ui.theme.*
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-
-class YoloViewModel : ViewModel() {
-    @Volatile
-    private var detector: YoloDetector? = null
-    private val initGuard = kotlinx.coroutines.sync.Mutex()
-    private val detectMutex = kotlinx.coroutines.sync.Mutex()
-    private val _detections = MutableStateFlow<List<Detection>>(emptyList())
-    val detections: StateFlow<List<Detection>> = _detections
-    private val _fps = MutableStateFlow(0f)
-    val fps: StateFlow<Float> = _fps
-    private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error
-
-    @Volatile
-    private var frameCount = 0
-    @Volatile
-    private var lastFpsTime = System.currentTimeMillis()
-
-    suspend fun initDetector(context: android.content.Context) {
-        initGuard.withLock {
-            if (detector != null) return
-            try {
-                val d = YoloDetector(context.applicationContext)
-                d.ensureInitialized()
-                detector = d
-                _error.value = null
-            } catch (e: Exception) {
-                detector = null
-                _error.value = "YOLO model not available. Check bundled models and storage."
-                Log.w("YoloVM", "YOLO init failed: ${e.message}")
-            }
-        }
-    }
-
-    suspend fun detectFrame(bitmap: Bitmap) {
-        // Drop frames when busy instead of queueing (prevents multi-second lag/OOM).
-        if (!detectMutex.tryLock()) return
-        try {
-            val d = detector ?: return
-            try {
-                val results = d.detect(bitmap)
-                _detections.value = results
-
-                frameCount++
-                val now = System.currentTimeMillis()
-                val elapsed = now - lastFpsTime
-                if (elapsed >= 1000) {
-                    _fps.value = frameCount * 1000f / elapsed
-                    frameCount = 0
-                    lastFpsTime = now
-                }
-            } catch (e: Exception) {
-                Log.e("YoloVM", "Detection failed", e)
-            }
-        } finally {
-            detectMutex.unlock()
-        }
-    }
-
-    fun clearError() {
-        _error.value = null
-        detector?.close()
-        detector = null
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        detector?.close()
-        detector = null
-    }
-
-    class Factory : ViewModelProvider.Factory {
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            @Suppress("UNCHECKED_CAST")
-            return YoloViewModel() as T
-        }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -144,26 +67,59 @@ fun YoloScreen(
     onCaptureAndClassify: (Bitmap) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val app = context.applicationContext as? com.agrelius.wasegmul.WasegMulApp
     val scope = rememberCoroutineScope()
     val yoloViewModel: YoloViewModel = viewModel(factory = YoloViewModel.Factory())
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
     val detections by yoloViewModel.detections.collectAsState()
     val fps by yoloViewModel.fps.collectAsState()
     val error by yoloViewModel.error.collectAsState()
+    // Wire the user-tuned confidence threshold into the detector.
+    val userThreshold by app?.settingsManager?.confidenceThreshold?.collectAsState(initial = 0.45f)
+        ?: remember { mutableStateOf(0.45f) }
+    LaunchedEffect(userThreshold) {
+        yoloViewModel.applyConfidenceThreshold(userThreshold)
+    }
     val captureRequested = remember { AtomicBoolean(false) }
     var cameraFrameWidth by remember { mutableIntStateOf(0) }
     var cameraFrameHeight by remember { mutableIntStateOf(0) }
-    var selectedDetection by remember { mutableStateOf<Detection?>(null) }
+    // Camera-frame-relative selection cannot meaningfully survive rotation
+    // (frames reset); the stable key restores the same label when present.
+    var selectedKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val selectedDetection = remember(detections, selectedKey) {
+        selectedKey?.let { key -> detections.firstOrNull { detectionKey(it) == key } }
+    }
+    fun selectDetection(det: Detection?) {
+        selectedKey = det?.let { detectionKey(it) }
+    }
 
-    var hasCameraPermission by remember { mutableStateOf(false) }
+    // Permission check-first: never blind-fire the system dialog, and offer
+    // the Settings deep-link on permanent denial.
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED
+        )
+    }
+    var showPermissionRationale by rememberSaveable { mutableStateOf(false) }
     var isTorchOn by remember { mutableStateOf(false) }
     var hasFlash by remember { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { granted -> hasCameraPermission = granted }
+    ) { granted ->
+        hasCameraPermission = granted
+        if (!granted) showPermissionRationale = true
+    }
 
     LaunchedEffect(Unit) {
-        permissionLauncher.launch(Manifest.permission.CAMERA)
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            permissionLauncher.launch(Manifest.permission.CAMERA)
+        } else {
+            hasCameraPermission = true
+        }
     }
 
     LaunchedEffect(hasCameraPermission) {
@@ -214,14 +170,42 @@ fun YoloScreen(
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             if (!hasCameraPermission) {
                 Column(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(stringResource(R.string.yolo_camera_permission), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        stringResource(R.string.yolo_camera_permission),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    if (showPermissionRationale) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            stringResource(R.string.yolo_camera_rationale),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
                         Text(stringResource(R.string.common_grant_permission))
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(onClick = {
+                        try {
+                            context.startActivity(
+                                Intent(
+                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    Uri.fromParts("package", context.packageName, null)
+                                )
+                            )
+                        } catch (_: Exception) { }
+                    }) {
+                        Text(stringResource(R.string.home_open_settings))
                     }
                 }
             } else if (error != null) {
@@ -246,25 +230,34 @@ fun YoloScreen(
                     isTorchOn = isTorchOn,
                     onFlashSupported = { hasFlash = it },
                     onFrameCaptured = { bitmap ->
-                        if (cameraFrameWidth != bitmap.width || cameraFrameHeight != bitmap.height) {
-                            cameraFrameWidth = bitmap.width
-                            cameraFrameHeight = bitmap.height
+                        // Snapshot writes MUST happen on Main (this callback
+                        // runs on the analyzer executor).
+                        val w = bitmap.width
+                        val h = bitmap.height
+                        if (cameraFrameWidth != w || cameraFrameHeight != h) {
+                            mainHandler.post {
+                                cameraFrameWidth = w
+                                cameraFrameHeight = h
+                            }
                         }
+                        // Snapshot the current selection for the capture path
+                        // (avoids racing the next detection update).
+                        val targetAtCapture = selectedKey?.let { key ->
+                            detections.firstOrNull { detectionKey(it) == key }
+                        } ?: detections.maxByOrNull { it.confidence }
                         if (captureRequested.compareAndSet(true, false)) {
-                            val target = selectedDetection ?: detections.maxByOrNull { it.confidence }
-                            val finalBitmap = if (target != null) {
-                                cropRoi(bitmap, target.boundingBox)
+                            val finalBitmap = if (targetAtCapture != null) {
+                                cropRoi(bitmap, targetAtCapture.boundingBox)
                             } else {
                                 bitmap.copy(Bitmap.Config.ARGB_8888, true)
                             }
-                            scope.launch(Dispatchers.Main) {
-                                onCaptureAndClassify(finalBitmap)
-                            }
+                            mainHandler.post { onCaptureAndClassify(finalBitmap) }
                         }
                         // Ownership stays with CameraX pipeline; YoloDetector copies
                         // internally via createScaledBitmap. NEVER recycle here:
                         // detect() reads pixels async and recycling causes native crash.
-                        scope.launch {
+                        // Inference dispatched off-Main (Dispatchers.Default).
+                        scope.launch(Dispatchers.Default) {
                             yoloViewModel.detectFrame(bitmap)
                         }
                     }
@@ -275,11 +268,27 @@ fun YoloScreen(
                     frameWidth = cameraFrameWidth,
                     frameHeight = cameraFrameHeight,
                     selectedDetection = selectedDetection,
-                    onDetectionTapped = { selectedDetection = it },
+                    onDetectionTapped = { selectDetection(it) },
                     modifier = Modifier.fillMaxSize()
                 )
 
-                if (detections.isNotEmpty()) {
+                if (detections.isEmpty()) {
+                    // No-objects hint (previously a blank viewfinder).
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(16.dp)
+                            .padding(bottom = 80.dp)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), RoundedCornerShape(12.dp))
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            stringResource(R.string.yolo_no_objects_hint),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else if (detections.isNotEmpty()) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomStart)
@@ -290,24 +299,31 @@ fun YoloScreen(
                     ) {
                         Column {
                             Text(
-                                "DETECTED: ${detections.size} object${if (detections.size > 1) "s" else ""}",
+                                stringResource(
+                                    R.string.yolo_detected_count,
+                                    detections.size,
+                                    if (detections.size > 1) "s" else ""
+                                ),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             detections.take(3).forEach { det ->
-                                val isSel = det == selectedDetection
+                                val isSel = detectionKey(det) == selectedKey
                                 Text(
-                                    "${if (isSel) "★ " else ""}${det.label} ${(det.confidence * 100).toInt()}%",
+                                    "${if (isSel) "★ " else ""}${humanizeLabel(det.label)} ${(det.confidence * 100).toInt()}%",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 10.sp,
                                     fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
                                 )
                             }
                             if (detections.size > 3) {
-                                Text("+${detections.size - 3} more", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
+                                Text(
+                                    stringResource(R.string.yolo_more, detections.size - 3),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }
@@ -323,17 +339,26 @@ fun YoloScreen(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "Target: ${selectedDetection?.label} (${((selectedDetection?.confidence ?: 0f) * 100).toInt()}%)",
+                                stringResource(
+                                    R.string.yolo_target_format,
+                                    humanizeLabel(selectedDetection?.label.orEmpty()),
+                                    ((selectedDetection?.confidence ?: 0f) * 100).toInt()
+                                ),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.width(6.dp))
+                            // 48dp minimum dismiss target (was 16dp).
                             IconButton(
-                                onClick = { selectedDetection = null },
-                                modifier = Modifier.size(16.dp)
+                                onClick = { selectDetection(null) },
+                                modifier = Modifier.size(48.dp)
                             ) {
-                                Icon(Icons.Default.Close, contentDescription = "Deselect", modifier = Modifier.size(12.dp))
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = stringResource(R.string.yolo_deselect),
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
                         }
                     }
@@ -349,7 +374,7 @@ fun YoloScreen(
                         shape = RoundedCornerShape(24.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = Color.Black
+                            contentColor = MaterialTheme.colorScheme.onPrimary
                         ),
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
                     ) {
@@ -360,7 +385,7 @@ fun YoloScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (selectedDetection != null) "Classify ${selectedDetection?.label}" else stringResource(R.string.yolo_capture_classify),
+                            text = if (selectedDetection != null) "Classify ${humanizeLabel(selectedDetection?.label.orEmpty())}" else stringResource(R.string.yolo_capture_classify),
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.labelMedium
                         )
@@ -402,7 +427,8 @@ private fun CameraPreviewWithDetection(
 
     LaunchedEffect(focusPoint) {
         if (focusPoint != null) {
-            delay(1200)
+            // Matches the AF auto-cancel duration (3s) below.
+            delay(3000)
             focusPoint = null
         }
     }
@@ -471,8 +497,11 @@ private fun CameraPreviewWithDetection(
                                 Log.e("YoloScreen", "Frame capture failed", e)
                                 null
                             } finally {
-                                isProcessing.set(false)
+                                // Guard released AFTER the proxy is closed:
+                                // releasing first lets the next frame overlap
+                                // and defeats KEEP_ONLY_LATEST backpressure.
                                 imageProxy.close()
+                                isProcessing.set(false)
                             }
                             if (bitmap != null) {
                                 onFrameCaptured(bitmap)
@@ -532,6 +561,20 @@ private fun FocusRing(center: Offset) {
     }
 }
 
+/** Stable selection key for a detection (label + quantized box). */
+private fun detectionKey(det: Detection): String {
+    val b = det.boundingBox
+    return "${det.label}|${(b.left * 100).toInt()},${(b.top * 100).toInt()}," +
+        "${(b.right * 100).toInt()},${(b.bottom * 100).toInt()}"
+}
+
+/**
+ * Crops a region of interest for handoff to classification.
+ *
+ * Contract: [box] MUST be normalized [0,1] coordinates relative to [src]
+ * (as emitted by [com.agrelius.wasegmul.ml.YoloDetector]). Pixel-space boxes
+ * would be mis-scaled here — callers must normalize first.
+ */
 private fun cropRoi(src: Bitmap, box: RectF, padFrac: Float = 0.08f): Bitmap {
     val padX = (box.right - box.left) * padFrac
     val padY = (box.bottom - box.top) * padFrac
@@ -555,10 +598,12 @@ private fun DetectionOverlay(
     onDetectionTapped: (Detection?) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val labelPaint = remember {
+    // sp-based overlay text (was a fixed 28px paint, density-ignorant).
+    val density = LocalContext.current.resources.displayMetrics.density
+    val labelPaint = remember(density) {
         android.graphics.Paint().apply {
             color = android.graphics.Color.argb(200, 0, 0, 0)
-            textSize = 28f
+            textSize = 12 * density
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             isAntiAlias = true
         }
@@ -569,10 +614,19 @@ private fun DetectionOverlay(
         }
     }
 
-    val overlayColors = listOf(
-        MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary, MintAccent, MaterialTheme.colorScheme.tertiary,
-        Color(0xFFE74C3C), Color(0xFF3498DB), Color(0xFFF39C12), Color(0xFF9B59B6)
+    // Per-Category colors via the single category-color map (was a
+    // classIndex rainbow with no waste semantics). Resolved with a plain
+    // for-loop in composition (map/remember lambdas are not @Composable
+    // contexts).
+    val fallbackPalette = listOf(
+        MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary,
+        MintAccent, MaterialTheme.colorScheme.tertiary
     )
+    val categoryPalette = mutableListOf<androidx.compose.ui.graphics.Color?>()
+    for (det in detections) {
+        val cat = runCatching { WasteMapping.getCategory(det.label) }.getOrNull()
+        categoryPalette.add(if (cat != null) categoryColor(cat) else null)
+    }
 
     Canvas(
         modifier = modifier.pointerInput(detections, frameWidth, frameHeight) {
@@ -611,7 +665,7 @@ private fun DetectionOverlay(
         val offsetX = (size.width - scaledW) / 2f
         val offsetY = (size.height - scaledH) / 2f
 
-        detections.forEach { detection ->
+        detections.forEachIndexed { index, detection ->
             val isSelected = detection == selectedDetection
             val box = detection.boundingBox
             val left = offsetX + box.left * scaledW
@@ -619,7 +673,9 @@ private fun DetectionOverlay(
             val w = (box.right - box.left) * scaledW
             val h = (box.bottom - box.top) * scaledH
 
-            val color = if (isSelected) Color(0xFF00FFB2) else overlayColors[detection.classIndex % overlayColors.size]
+            val color = if (isSelected) Color(0xFF00FFB2) else
+                (categoryPalette.getOrNull(index)
+                    ?: fallbackPalette[detection.classIndex % fallbackPalette.size])
 
             drawRect(
                 color = color,
@@ -629,9 +685,9 @@ private fun DetectionOverlay(
             )
 
             val label = if (isSelected) {
-                "★ ${detection.label} ${(detection.confidence * 100).toInt()}%"
+                "★ ${humanizeLabel(detection.label)} ${(detection.confidence * 100).toInt()}%"
             } else {
-                "${detection.label} ${(detection.confidence * 100).toInt()}%"
+                "${humanizeLabel(detection.label)} ${(detection.confidence * 100).toInt()}%"
             }
             val textWidth = labelPaint.measureText(label)
 

@@ -16,24 +16,40 @@ import com.agrelius.wasegmul.WasteKnowledgeBase
 import com.agrelius.wasegmul.WasteMapping
 import com.agrelius.wasegmul.WasteRecord
 import com.agrelius.wasegmul.ml.ModelManager
+import com.agrelius.wasegmul.ml.classifiers.normalizeCategoryLabel
 import com.agrelius.wasegmul.repository.WasteRepository
 import com.agrelius.wasegmul.utils.SettingsManager
 import com.agrelius.wasegmul.gamification.GamificationManager
 import com.agrelius.wasegmul.gamification.XpGainResult
 import com.agrelius.wasegmul.EcoImpactCalculator
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 class ClassificationViewModel(
     private val repository: WasteRepository,
-    private val settingsManager: SettingsManager
+    private val settingsManager: SettingsManager,
+    // Shared app-scoped ModelManager (WasegMulApp.modelManager). Must be
+    // injected so camera + barcode + YOLO do not each hold a TFLite residency
+    // (duplicate residency = OOM). Only closed here when we created it.
+    private var modelManager: ModelManager? = null
 ) : ViewModel() {
 
-    private var modelManager: ModelManager? = null
+    private var ownsModelManager = false
+    private var classifyJob: Job? = null
+    // Serializes the read-modify-write XP sequence (daily count + total XP).
+    private val xpMutex = Mutex()
+    // Last awarded scan for XP dedup (spam-scanning the same item earns 0 XP).
+    private var lastAwardedSubclass: String? = null
+    private var lastAwardedAtMs: Long? = null
 
     private val _capturedBitmap = MutableStateFlow<Bitmap?>(null)
     val capturedBitmap: StateFlow<Bitmap?> = _capturedBitmap
@@ -53,15 +69,51 @@ class ClassificationViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
+    // Model warm-up failures surface here so ClassifyScreen can render a
+    // dedicated error UI instead of failing only on Classify press.
+    private val _modelInitError = MutableStateFlow<String?>(null)
+    val modelInitError: StateFlow<String?> = _modelInitError
+
     private val _currentRecord = MutableStateFlow<WasteRecord?>(null)
     val currentRecord: StateFlow<WasteRecord?> = _currentRecord
 
     private val _navigateToResult = Channel<Long>(Channel.CONFLATED)
     val navigateToResult = _navigateToResult.receiveAsFlow()
 
-    fun initModel(context: Context) {
+    fun initModel(context: Context, shared: ModelManager? = null) {
         if (modelManager == null) {
-            modelManager = ModelManager(context.applicationContext)
+            if (shared != null) {
+                modelManager = shared
+                ownsModelManager = false
+            } else {
+                modelManager = ModelManager(context.applicationContext)
+                ownsModelManager = true
+            }
+        }
+        // Pre-warm off-Main; surface failures for the model-init error UI.
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                modelManager?.ensureInitialized()
+                _modelInitError.value = null
+            } catch (e: Exception) {
+                Log.e(TAG, "Model pre-warm failed", e)
+                _modelInitError.value =
+                    "The AI models failed to load. Check storage space and retry."
+            }
+        }
+    }
+
+    fun retryInitModel() {
+        _modelInitError.value = null
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                modelManager?.ensureInitialized()
+                _modelInitError.value = null
+            } catch (e: Exception) {
+                Log.e(TAG, "Model retry failed", e)
+                _modelInitError.value =
+                    "The AI models failed to load. Check storage space and retry."
+            }
         }
     }
 
@@ -69,6 +121,10 @@ class ClassificationViewModel(
         // Do NOT manually recycle: Compose may still be drawing the old bitmap
         // during navigation transitions (native crash). Just drop the reference
         // and let GC reclaim. Callers pass a fresh bitmap each time.
+        // A new image also invalidates any in-flight inference on the old one.
+        classifyJob?.cancel()
+        classifyJob = null
+        _isLoading.value = false
         _capturedBitmap.value = bitmap
         _classificationResult.value = null
         _error.value = null
@@ -85,31 +141,49 @@ class ClassificationViewModel(
             return
         }
         if (_isLoading.value) return
-        viewModelScope.launch {
+        classifyJob?.cancel()
+        classifyJob = viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
             try {
-                // Ensure models are loaded before inference.
-                modelManager?.ensureInitialized()
+                // Ensure models are loaded before inference (IO: mmap/init).
+                withContext(Dispatchers.IO) { modelManager?.ensureInitialized() }
 
-                val outcome = modelManager?.classify(bitmap)
-                    ?: run {
-                        _error.value = "Models not initialised. Please restart the app."
-                        _isLoading.value = false
-                        return@launch
-                    }
+                val outcome = withContext(Dispatchers.Default) {
+                    modelManager?.classify(bitmap)
+                } ?: run {
+                    _error.value = "Models not initialised. Please restart the app."
+                    _isLoading.value = false
+                    return@launch
+                }
 
                 when (outcome) {
                     is ClassificationOutcome.Success -> {
                         val prediction = outcome.prediction
-                        val finalPrediction = MLArbitrator.arbitrate(prediction)
-                        val info = WasteKnowledgeBase.getInfo(finalPrediction.category, finalPrediction.subcategory)
+                        // Honor user-tuned confidence threshold from Settings (IO).
+                        val userThreshold = try {
+                            withContext(Dispatchers.IO) {
+                                settingsManager.confidenceThreshold.first()
+                            }
+                        } catch (e: Exception) {
+                            MLArbitrator.LOW_CONFIDENCE_THRESHOLD
+                        }
+                        val finalPrediction = MLArbitrator.arbitrate(prediction, userThreshold)
+                        // Normalize model labels to CONTEXT.md vocabulary (Trash -> Residual)
+                        // before KB lookup, persistence, and Eco/XP crediting.
+                        val normalizedCategory = normalizeCategoryLabel(finalPrediction.category)
+                        val info = withContext(Dispatchers.IO) {
+                            WasteKnowledgeBase.getInfo(
+                                normalizedCategory,
+                                finalPrediction.subcategory
+                            )
+                        }
                         val isUncertain =
-                            finalPrediction.category == WasteMapping.UNCERTAIN ||
-                                finalPrediction.category == WasteMapping.UNKNOWN
+                            normalizedCategory == WasteMapping.UNCERTAIN ||
+                                normalizedCategory == WasteMapping.UNKNOWN
 
                         val result = ClassificationResult(
-                            category = finalPrediction.category,
+                            category = normalizedCategory,
                             subclass = finalPrediction.subcategory,
                             confidence = if (isUncertain) finalPrediction.categoryConfidence
                             else finalPrediction.subcategoryConfidence,
@@ -138,29 +212,55 @@ class ClassificationViewModel(
                         )
                         // Insert FIRST, then navigate: ResultScreen needs the row ID
                         // for feedback/corrections. Navigating before insert loses data.
-                        val id = repository.insert(record)
+                        // Room I/O off-Main.
+                        val id = withContext(Dispatchers.IO) { repository.insert(record) }
                         _currentRecord.value = record.copy(id = id)
 
-                        // Gamification: calculate XP earned from this scan
+                        // Gamification: calculate XP earned from this scan.
+                        // Serialized: daily-count + total-XP is read-modify-write.
                         try {
-                            val impact = EcoImpactCalculator.calculate(listOf(record))
+                            val impact = withContext(Dispatchers.Default) {
+                                EcoImpactCalculator.calculate(listOf(record))
+                            }
                             val co2Grams = impact.co2PreventedKg * 1000.0
-                            val dailyCount = settingsManager.incrementDailyScanCount()
-                            val currentXp = settingsManager.totalXp.first()
-                            val xpResult = GamificationManager.processNewScan(
-                                currentTotalXp = currentXp,
-                                category = result.category,
-                                confidence = result.confidence,
-                                co2PreventedGrams = co2Grams,
-                                dailyScanCount = dailyCount
-                            )
-                            settingsManager.setTotalXp(xpResult.newTotalXp)
-                            _lastXpGain.value = xpResult
+                            xpMutex.withLock {
+                                val dailyCount = withContext(Dispatchers.IO) {
+                                    settingsManager.incrementDailyScanCount()
+                                }
+                                val currentXp = withContext(Dispatchers.IO) {
+                                    settingsManager.totalXp.first()
+                                }
+                                val xpResult = GamificationManager.processNewScan(
+                                    currentTotalXp = currentXp,
+                                    category = result.category,
+                                    confidence = result.confidence,
+                                    co2PreventedGrams = co2Grams,
+                                    dailyScanCount = dailyCount,
+                                    subclass = result.subclass,
+                                    scanTimestampMs = now,
+                                    lastSubclass = lastAwardedSubclass,
+                                    lastScanTimestampMs = lastAwardedAtMs
+                                )
+                                lastAwardedSubclass = result.subclass
+                                lastAwardedAtMs = now
+                                withContext(Dispatchers.IO) {
+                                    settingsManager.setTotalXp(xpResult.newTotalXp)
+                                }
+                                _lastXpGain.value = xpResult
+                            }
                         } catch (e: Exception) {
                             Log.w(TAG, "XP calculation failed", e)
+                            // No fake fallback: a failed XP write surfaces as no
+                            // celebration (consume-once flags stay null/false).
+                            _lastXpGain.value = null
                         }
 
-                        _isFreshScan.value = true
+                        // Uncertain / zero-impact scans never celebrate: the
+                        // overlay would otherwise reward an unidentified item.
+                        _isFreshScan.value = !isUncertain && estimatedWeight > 0.0
+                        if (!_isFreshScan.value) {
+                            _lastXpGain.value = null
+                        }
                         _navigateToResult.trySend(id)
                     }
                     is ClassificationOutcome.Failure -> {
@@ -192,18 +292,26 @@ class ClassificationViewModel(
         }
     }
 
+    /** Cancels an in-flight classification (Cancel button / system back). */
+    fun cancelClassification() {
+        classifyJob?.cancel()
+        classifyJob = null
+        _isLoading.value = false
+    }
+
     fun clearError() {
         _error.value = null
     }
 
     fun releaseBitmap() {
         // Drop reference only; do not recycle (Compose may still hold it).
+        cancelClassification()
         _capturedBitmap.value = null
     }
 
     fun setFeedback(feedback: String) {
         val recordId = _currentRecord.value?.id ?: return
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 val rows = repository.updateFeedback(recordId, feedback)
                 if (rows > 0) {
@@ -218,15 +326,20 @@ class ClassificationViewModel(
         }
     }
 
-    fun setCorrection(correction: String) {
+    fun setCorrection(correctedSubclass: String) {
+        // Taxonomy guard: Categories must never land in correctedSubclass.
+        if (com.agrelius.wasegmul.ui.result.isCategoryName(correctedSubclass)) {
+            _error.value = "Please choose a specific material (Subclass), not a Category."
+            return
+        }
         val recordId = _currentRecord.value?.id ?: return
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
-                val rows = repository.updateCorrectionWithCategory(recordId, correction)
+                val rows = repository.updateCorrectionWithCategory(recordId, correctedSubclass)
                 if (rows > 0) {
-                    val correctedCategory = WasteMapping.getCategory(correction)
+                    val correctedCategory = WasteMapping.getCategory(correctedSubclass)
                     _currentRecord.value = _currentRecord.value?.copy(
-                        correctedSubclass = correction,
+                        correctedSubclass = correctedSubclass,
                         category = if (correctedCategory != WasteMapping.UNKNOWN) correctedCategory
                                    else _currentRecord.value?.category ?: ""
                     )
@@ -241,7 +354,7 @@ class ClassificationViewModel(
     }
 
     fun loadRecord(recordId: Long) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             _classificationResult.value = null
             _currentRecord.value = null
             // Drop any large camera bitmap while viewing history to halve memory.
@@ -255,16 +368,17 @@ class ClassificationViewModel(
                     return@launch
                 }
                 val info = WasteKnowledgeBase.getInfo(record.category, record.subclass)
-                val isBarcode = record.featureVector?.startsWith("barcode:") == true
-                val classificationMsg = if (isBarcode) {
-                    val raw = record.featureVector?.removePrefix("barcode:") ?: ""
-                    val parts = raw.split("|", limit = 2)
-                    val code = parts.getOrNull(0) ?: ""
-                    val prodName = parts.getOrNull(1)?.takeIf { it.isNotBlank() }
+                // Single-parser parity with Result/Home/History: first-class
+                // source/barcode/productName columns win, legacy vector fallback.
+                val display = com.agrelius.wasegmul.ui.result.parseBarcodeDisplay(
+                    record.source, record.barcode, record.productName, record.featureVector
+                )
+                val classificationMsg = if (display != null) {
+                    val prodName = display.productName
                     if (prodName != null) {
-                        "Product verified via barcode: $prodName ($code). Packaging classification: ${record.subclass} (${record.category})."
+                        "Product verified via barcode: $prodName (${display.code}). Packaging classification: ${record.subclass} (${record.category})."
                     } else {
-                        "Product verified via barcode ($code). Ground-truth packaging classification: ${record.subclass} (${record.category})."
+                        "Product verified via barcode (${display.code}). Ground-truth packaging classification: ${record.subclass} (${record.category})."
                     }
                 } else {
                     "Historical record: originally classified as ${record.subclass} (${record.category})."
@@ -290,7 +404,12 @@ class ClassificationViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        modelManager?.close()
+        // Only close a manager we created; the app singleton outlives us.
+        if (ownsModelManager) {
+            modelManager?.close()
+            modelManager = null
+        }
+        classifyJob?.cancel()
         _capturedBitmap.value = null
     }
 
@@ -298,14 +417,20 @@ class ClassificationViewModel(
         _lastXpGain.value = null
     }
 
+    /** Consume-once: overlays must call this on dismiss so rotation cannot replay them. */
+    fun consumeFreshScan() {
+        _isFreshScan.value = false
+    }
+
     class Factory(
         private val repository: WasteRepository,
-        private val settingsManager: SettingsManager
+        private val settingsManager: SettingsManager,
+        private val modelManager: ModelManager? = null
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(ClassificationViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return ClassificationViewModel(repository, settingsManager) as T
+                return ClassificationViewModel(repository, settingsManager, modelManager) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

@@ -14,23 +14,56 @@ import kotlin.random.Random
  * Messages are category-aware: the wording references the specific material type
  * (e.g. "this lithium battery" vs. "this cardboard packaging") rather than using
  * generic placeholder text.
+ *
+ * ## i18n status (documented tech debt, not silently ignored)
+ * All pools below are hard-coded English. They are intentionally kept as private,
+ * enumerated template lists (one list per [ClassificationMode]) so extraction to
+ * `strings.xml` / iOS `Localizable.strings` is mechanical: each lambda becomes one
+ * format string with positional args (cat/sub/best/conf). Until that extraction lands,
+ * non-English locales still receive English copy — tracked, not presented as translated.
  */
 object MessageGenerator {
 
     // Injectable for tests; defaults to Random.Default for production.
+    // Kept for backward compat — prefer the `random` parameter on generate()/generateBarcode().
     var rng: Random = Random.Default
 
+    /**
+     * Acronyms that must survive title-casing (key = lowercase input, value = display form).
+     * Prevents "PET" → "Pet" / "HDPE" → "Hdpe" mangling in user-visible messages.
+     */
+    private val ACRONYMS = mapOf(
+        "pet" to "PET", "rpet" to "rPET", "hdpe" to "HDPE", "ldpe" to "LDPE",
+        "pvc" to "PVC", "pp" to "PP", "ps" to "PS", "eps" to "EPS",
+        "pla" to "PLA", "pcb" to "PCB", "crt" to "CRT", "led" to "LED",
+        "pe" to "PE", "abs" to "ABS"
+    )
+
+    /**
+     * Humanises a model label for display. Preserves hyphenation (`Air-Conditioner` stays
+     * hyphenated with both parts capitalised) and known acronyms ([ACRONYMS]).
+     * NOTE: Kotlin common `lowercase()`/`uppercaseChar()` have no locale parameter; they
+     * follow platform-default Unicode mappings (NOT Turkish-dotted-I safe). Machine-side
+     * keys must use [WasteMapping.canonicalKey], never this display helper.
+     */
     fun humanizeLabel(raw: String): String {
         val s = raw.trim().replace('_', ' ')
         if (s.isEmpty()) return s
-        return s.split(' ').joinToString(" ") { w ->
-            if (w.isEmpty()) w else w[0].uppercaseChar() + w.drop(1).lowercase()
+        return s.split(' ').filter { it.isNotEmpty() }.joinToString(" ") { word ->
+            word.split('-').filter { it.isNotEmpty() }.joinToString("-") { part ->
+                ACRONYMS[part.lowercase()] ?: (part[0].uppercaseChar() + part.drop(1).lowercase())
+            }
         }
     }
 
-    private fun pct(conf: Float): Int = ((conf.coerceIn(0f, 1f)) * 100f).roundToInt()
+    /** NaN/infinite confidence renders as 0% (never throws, never claims certainty). */
+    private fun pct(conf: Float): Int =
+        if (!conf.isFinite()) 0 else ((conf.coerceIn(0f, 1f)) * 100f).roundToInt()
 
-    // ── Case 1: Both models agree ────────────────────────────────────────────
+    // ── Case 1a: Both models agree, HIGH confidence (BOTH_AGREE_HIGH only) ──────
+    // Strong wording is reserved for dual ≥0.80 consensus (see MLArbitrator
+    // BOTH_AGREE_HIGH_THRESHOLD rationale); moderate agreement MUST use
+    // agreeStandardConfidence below so 0.55/0.55 never claims "highly dependable".
 
     private val agreeHighConfidence = listOf(
         { cat: String, sub: String ->
@@ -52,6 +85,29 @@ object MessageGenerator {
         { cat: String, sub: String ->
             "Strong dual-model consensus detected. The broad classifier identifies $cat, " +
                 "and the specialist model narrows it to $sub. Classification confidence: high."
+        }
+    )
+
+    // ── Case 1b: Both models agree, MODERATE confidence (BOTH_AGREE) ──────────
+    // Deliberately hedged: no "high-confidence", "highly dependable" or "high
+    // reliability" claims. A 0.55/0.55 agreement is a lead, not a verdict.
+
+    private val agreeStandardConfidence = listOf(
+        { cat: String, sub: String ->
+            "Both models point to $sub ($cat), though neither is fully certain. " +
+                "Treat this as a likely match and double-check before disposing."
+        },
+        { cat: String, sub: String ->
+            "The category model suggests $cat and the subclass model leans toward $sub. " +
+                "Moderate agreement: plausible, but verify against the item in hand."
+        },
+        { cat: String, sub: String ->
+            "Preliminary consensus: $sub within the $cat family. " +
+                "Confidence is moderate, so a quick manual check is recommended."
+        },
+        { cat: String, sub: String ->
+            "Both classifiers lean the same way ($sub, $cat) without strong conviction. " +
+                "Good enough for sorting guidance, not a guarantee."
         }
     )
 
@@ -258,6 +314,10 @@ object MessageGenerator {
 
     // ── Public API ───────────────────────────────────────────────────────────
 
+    /**
+     * @param random source of variation; defaults to [rng] (kept for compat). Pass a seeded
+     *   instance in tests for determinism.
+     */
     fun generate(
         category: String,
         subcategory: String,
@@ -265,57 +325,91 @@ object MessageGenerator {
         subConfidence: Float,
         topSubcategories: List<Pair<String, Float>>,
         topCategories: List<Pair<String, Float>>,
-        mode: ClassificationMode
+        mode: ClassificationMode,
+        random: Random = rng
     ): String {
         val hSub = humanizeLabel(subcategory)
         val hCat = category.trim()
         return when (mode) {
-            ClassificationMode.BOTH_AGREE_HIGH, ClassificationMode.BOTH_AGREE ->
-                rng.nextFrom(agreeHighConfidence)(hCat, hSub)
+            ClassificationMode.BOTH_AGREE_HIGH ->
+                random.nextFrom(agreeHighConfidence)(hCat, hSub)
+            ClassificationMode.BOTH_AGREE ->
+                random.nextFrom(agreeStandardConfidence)(hCat, hSub)
             ClassificationMode.CATEGORY_OVERRIDE_MATCH -> {
                 val best = findBestSubclassMatch(category, topSubcategories)
                 if (best != null) {
                     val hBest = humanizeLabel(best.first)
-                    rng.nextFrom(categoryOverrideMatch)(hCat, hSub, hBest, best.second)
+                    random.nextFrom(categoryOverrideMatch)(hCat, hSub, hBest, best.second)
                 } else {
-                    rng.nextFrom(categoryOverrideNoMatch)(hCat, hSub)
+                    random.nextFrom(categoryOverrideNoMatch)(hCat, hSub)
                 }
             }
             ClassificationMode.CATEGORY_OVERRIDE_NO_MATCH ->
-                rng.nextFrom(categoryOverrideNoMatch)(hCat, hSub)
+                random.nextFrom(categoryOverrideNoMatch)(hCat, hSub)
             ClassificationMode.CATEGORY_ONLY ->
-                rng.nextFrom(categoryOnlyDegraded)(hCat)
+                random.nextFrom(categoryOnlyDegraded)(hCat)
             ClassificationMode.SUBCLASS_ONLY -> {
-                val mappedCat = WasteMapping.getCategory(subcategory)
-                rng.nextFrom(subclassOnlyDegraded)(hSub, mappedCat)
+                // Preserve the caller's category when it is a real taxonomy value instead
+                // of blindly re-deriving from the mapping. Single match source with
+                // MLArbitrator (which passes the already-resolved category); this only
+                // changes behaviour for direct callers such as the iOS flat bridge.
+                val callerCat = category.trim()
+                val effectiveCat =
+                    if (WasteMapping.isKnownCategory(callerCat) && !WasteMapping.isSentinel(callerCat)) {
+                        callerCat
+                    } else {
+                        WasteMapping.getCategory(subcategory)
+                    }
+                random.nextFrom(subclassOnlyDegraded)(hSub, effectiveCat)
             }
             ClassificationMode.BOTH_UNCERTAIN ->
-                rng.nextFrom(bothUncertain)()
+                random.nextFrom(bothUncertain)()
             ClassificationMode.UNMAPPED_SUBCLASS ->
-                rng.nextFrom(unmappedSubclass)(hSub)
+                random.nextFrom(unmappedSubclass)(hSub)
             ClassificationMode.BARCODE_GROUND_TRUTH,
             ClassificationMode.BARCODE_PARTIAL,
             ClassificationMode.BARCODE_VISUAL_CONSENSUS ->
-                generateBarcode("", category, subcategory, mode)
+                // No product name is known at this layer: use a neutral determiner phrase.
+                // Callers WITH a product name must use generateBarcode() (which requires one).
+                barcodeMessage(productName = "this product", category = category, subclass = subcategory, mode = mode, random = random)
         }
     }
 
+    /**
+     * Barcode-grounded message. [productName] is REQUIRED (non-blank): the API never
+     * invents names — a blank name throws [IllegalArgumentException] and the UI layer must
+     * show its own localized "unknown product" fallback string instead.
+     */
     fun generateBarcode(
         productName: String,
         category: String,
         subclass: String,
-        mode: ClassificationMode
+        mode: ClassificationMode,
+        random: Random = rng
+    ): String {
+        require(productName.isNotBlank()) {
+            "productName must be non-blank: MessageGenerator never synthesises product names; " +
+                "the UI must render its own fallback for unresolved names."
+        }
+        return barcodeMessage(productName = productName, category = category, subclass = subclass, mode = mode, random = random)
+    }
+
+    private fun barcodeMessage(
+        productName: String,
+        category: String,
+        subclass: String,
+        mode: ClassificationMode,
+        random: Random
     ): String {
         val hSub = humanizeLabel(subclass)
         val hCat = category.trim()
-        val hProduct = productName.takeIf { it.isNotBlank() } ?: "Unknown Product"
         return when (mode) {
             ClassificationMode.BARCODE_GROUND_TRUTH ->
-                rng.nextFrom(barcodeGroundTruth)(hProduct, hSub, hCat)
+                random.nextFrom(barcodeGroundTruth)(productName, hSub, hCat)
             ClassificationMode.BARCODE_PARTIAL ->
-                rng.nextFrom(barcodePartial)(hProduct, hSub, hCat)
+                random.nextFrom(barcodePartial)(productName, hSub, hCat)
             ClassificationMode.BARCODE_VISUAL_CONSENSUS ->
-                rng.nextFrom(barcodeVisualConsensus)(hProduct, hSub, hCat)
+                random.nextFrom(barcodeVisualConsensus)(productName, hSub, hCat)
             else -> generate(
                 category = category,
                 subcategory = subclass,
@@ -323,26 +417,34 @@ object MessageGenerator {
                 subConfidence = 0.95f,
                 topSubcategories = emptyList(),
                 topCategories = emptyList(),
-                mode = mode
+                mode = mode,
+                random = random
             )
         }
     }
 
     /**
      * Finds the best subclass prediction that maps to [targetCategory].
-     * Returns null if no prediction matches.
+     * Returns null if no prediction matches — including when [targetCategory] itself is
+     * blank or a sentinel ([WasteMapping.UNKNOWN]/[WasteMapping.UNCERTAIN]), so an UNKNOWN
+     * target can never elect a garbage "best" match.
      */
     private fun findBestSubclassMatch(
         targetCategory: String,
         topSubcategories: List<Pair<String, Float>>
     ): Pair<String, Float>? {
         val trimmedTarget = targetCategory.trim()
+        if (trimmedTarget.isBlank() || WasteMapping.isSentinel(trimmedTarget)) return null
+        if (topSubcategories.isEmpty()) return null
         return topSubcategories
             .filter { WasteMapping.getCategory(it.first).equals(trimmedTarget, ignoreCase = true) }
             .maxByOrNull { it.second }
     }
 
-    private fun <T> Random.nextFrom(list: List<T>): T = list.random(this)
+    private fun <T> Random.nextFrom(list: List<T>): T {
+        require(list.isNotEmpty()) { "message pool must not be empty" }
+        return list.random(this)
+    }
 }
 
 /**

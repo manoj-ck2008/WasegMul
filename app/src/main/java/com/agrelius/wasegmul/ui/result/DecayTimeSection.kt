@@ -14,16 +14,21 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agrelius.wasegmul.DecayTimeData
+import com.agrelius.wasegmul.R
 import com.agrelius.wasegmul.ui.components.GlassCard
+import java.util.Locale
 import kotlinx.coroutines.delay
 
 @Composable
@@ -37,30 +42,29 @@ fun DecayTimeSection(
     }
 
     var isVisible by remember { mutableStateOf(false) }
-    var isWarningExpanded by remember { mutableStateOf(false) }
-    var currentYear by remember { mutableIntStateOf(0) }
+    var isWarningExpanded by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         delay(300)
         isVisible = true
     }
-    
-    val targetYear = remember(decayInfo.minYears) {
-        if (decayInfo.minYears >= 1000000.0) 1000000
-        else decayInfo.minYears.toInt()
-    }
 
-    val animatedYear by animateIntAsState(
-        targetValue = if (isVisible) targetYear else 0,
-        animationSpec = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
-        label = "YearCountAnimation"
+    // Severity is encoded as color AND an explicit text label (color-blind
+    // safe: labels/patterns, never color alone). Tones are readable on both
+    // light and dark surfaces.
+    val severityLabel = stringResource(
+        when (decayInfo.severityLevel) {
+            0 -> R.string.decay_sev_low
+            1 -> R.string.decay_sev_moderate
+            2 -> R.string.decay_sev_high
+            else -> R.string.decay_sev_extreme
+        }
     )
-
     val severityColor = when (decayInfo.severityLevel) {
-        0 -> Color(0xFF2ECC71)
-        1 -> Color(0xFFF1C40F)
-        2 -> Color(0xFFE67E22)
-        3 -> Color(0xFFE74C3C)
+        0 -> Color(0xFF1E8E4D)
+        1 -> Color(0xFF9A7B0A)
+        2 -> Color(0xFFC2570B)
+        3 -> Color(0xFFC0392B)
         else -> Color.Gray
     }
 
@@ -84,7 +88,7 @@ fun DecayTimeSection(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "⏳ TIME TO DECOMPOSE",
+                text = stringResource(R.string.decay_time_header),
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.5.sp
@@ -102,7 +106,7 @@ fun DecayTimeSection(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -111,29 +115,35 @@ fun DecayTimeSection(
                             .background(severityColor.copy(alpha = glowAlpha))
                     )
 
+                    // Truthful throughout the entrance animation: always the
+                    // Knowledge Base display text (no "0 YEARS" flash for
+                    // sub-year items, no truncation mid-count).
                     Text(
-                        text = if (decayInfo.minYears >= 1000000.0) {
-                            "1,000,000+ YEARS"
-                        } else if (animatedYear == targetYear) {
-                            decayInfo.displayText.uppercase()
-                        } else {
-                            "$animatedYear YEARS"
-                        },
+                        text = decayInfo.displayText.uppercase(Locale.ROOT),
                         style = MaterialTheme.typography.headlineLarge.copy(
                             fontWeight = FontWeight.Black,
                             fontSize = 32.sp
                         ),
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    
+
                     Text(
-                        text = DecayTimeData.getComparison(decayInfo.minYears),
+                        text = stringResource(
+                            R.string.decay_persistence_fmt,
+                            severityLabel
+                        ),
                         style = MaterialTheme.typography.bodyLarge.copy(
                             fontStyle = FontStyle.Italic
                         ),
-                        color = severityColor
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    
+
+                    Text(
+                        text = DecayTimeData.getComparison(decayInfo.minYears),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
                     DecayTimeScaleBar(decayInfo.minYears)
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
@@ -142,7 +152,11 @@ fun DecayTimeSection(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
-                            .clickable { isWarningExpanded = !isWarningExpanded }
+                            .clickable(
+                                role = Role.Button,
+                                onClickLabel = stringResource(R.string.decay_environmental_warning),
+                                onClick = { isWarningExpanded = !isWarningExpanded }
+                            )
                             .padding(8.dp)
                     ) {
                         Row(
@@ -151,20 +165,20 @@ fun DecayTimeSection(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Warning,
-                                contentDescription = null,
+                                contentDescription = stringResource(R.string.result_cd_hazard),
                                 tint = severityColor,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Environmental Impact",
+                                text = stringResource(R.string.decay_environmental_warning),
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.weight(1f)
                             )
                             Icon(
                                 imageVector = if (isWarningExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                contentDescription = "Toggle warning",
+                                contentDescription = stringResource(R.string.decay_toggle_warning),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -187,7 +201,7 @@ fun DecayTimeSection(
 @Composable
 private fun DecayTimeScaleBar(minYears: Double) {
     val barColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
-    
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -205,7 +219,7 @@ private fun DecayTimeScaleBar(minYears: Double) {
                 minYears < 4500.0 -> 0.3 + ((minYears - 80) / (4500 - 80)) * 0.4
                 else -> 0.7 + (minYears.coerceAtMost(1000000.0) / 1000000.0) * 0.3
             }.toFloat().coerceIn(0f, 1f)
-            
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth(fraction)
@@ -214,7 +228,7 @@ private fun DecayTimeScaleBar(minYears: Double) {
                     .background(MaterialTheme.colorScheme.primary)
             )
         }
-        
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()

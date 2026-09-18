@@ -4,7 +4,16 @@
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-permission android:name="android.permission.CAMERA" />
-    <!-- Gallery import (photo picker). Required on API 33+ / 32- for reads outside picker. -->
+    <!-- Barcode resolution (Open Food Facts) + connectivity checks require network access -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- VIBRATE: justified — NotificationHelper enables vibration on the daily eco-impact
+        notification channel (NotificationHelper.kt). No other haptic/vibration use. If that
+        channel stops using vibration, remove this permission. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Gallery import (photo picker). Required on API 33+ / 32- for reads outside picker.
+        Scoped: only READ_MEDIA_IMAGES (no audio/video), plus legacy READ_EXTERNAL_STORAGE
+        capped at maxSdkVersion 32 for pre-photo-picker devices. -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <!-- Disposal locator: nearby recycling centres -->
@@ -12,6 +21,24 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- Daily eco impact notifications (API 33+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Package visibility for API 30+: Maps, Browser, Phone dialer, WhatsApp civic reporting -->
+    <queries>
+        <package android:name="com.google.android.apps.maps" />
+        <package android:name="com.whatsapp" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="geo" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
+        </intent>
+    </queries>
 
     <application
         android:name=".WasegMulApp"
@@ -34,6 +61,13 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Deep link backing AppNavigation's wasegmul://barcode route. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="wasegmul" android:host="barcode" />
             </intent-filter>
         </activity>
 
