@@ -198,4 +198,39 @@ No SQL injection (bound params; seed projection hardcoded — safe). Exported: l
 
 ---
 
-*End of deep-dive audit. Generated from 4 parallel file-by-file passes + lead spot-checks. Next step: file Phase-1 items as `ready-for-agent` tickets (one per numbered finding) with file:line links, then re-audit post-fix.*
+*End of deep-dive audit. Generated from 4 parallel file-by-file passes + lead spot-checks.*
+
+---
+
+## 13. Re-audit verification — v3.0.0 production release (2026-09-19)
+
+Every numbered finding was re-verified against the shipped tree; the loop below is the
+evidence (device: real `e7bd80fe` + `Pixel_6` emulator, `com.agrelius.wasegmul.debug`):
+
+- **Result entry kill (user-reported, post-audit):** reproduced on-device —
+  `IllegalArgumentException: ending radius must be > 0` at `ThankYouOverlay.kt:160`
+  (glow animation starts at radius 0). Fixed with `shouldDrawCelebrationGlow` gate +
+  `CelebrationGlowTest` (4 tests). Re-driven YOLO → capture → classify (**real
+  inference, +130 XP**) → celebration three times across two devices: PID alive,
+  zero FATAL. The "no inference works at all" perception was this crash hiding
+  working inference.
+- **Crash batch (§2):** full-frame OOM contained at both handoff (`downscaleForHandoff`)
+  and VM bound; barcode fire-and-forget + provider-bind + stale-Job + frame-leak fixed;
+  13 new tests. `wasegmul://barcode` warm-start fixed (`onNewIntent` forwarding).
+- **UI batch (§4):** equal stat cards, high-contrast CTAs (verified dark + light),
+  visible petals/background, complete M3 palettes, level/XP card, YOLO guidance cards +
+  smoother (600 ms / −0.10 / 0.02), 12 new tests. Follow-up polish in v3: pill
+  FlowRow, XP/CO₂ wrap fixes — all screenshot-verified.
+- **Shared batch (§3.50–59):** 10 new suites, 100/100 green; `Residual` alias handling
+  extended to EcoImpact in v3 with test.
+- **Data batch (§3.32–46):** repository rewrite, XP gates, worker retry policy,
+  desugaring enabled; 115/115 at the time, 162/162 app tests at release.
+- **Scripts batch (§3.47–49):** pinned requirements, calibration gate, checksum-gated
+  barcode DB, taxonomy single-source; `py_compile` clean.
+- **Release totals:** app 23 suites / 162 tests green, shared 13 suites / 100 green,
+  `assembleDebug` clean, install Success, `USER_AGENT`/`VERSION_NAME`/`kAppVersionString`
+  synced at 3.0.0.
+
+Known non-blocking follow-ups: per-material LCA tables, Robolectric YOLO-parse/Room
+migration tests, OFF v3 live integration test, full iOS parity (out of scope), field
+tuning of smoother constants, real-device lit-scene detection grading.

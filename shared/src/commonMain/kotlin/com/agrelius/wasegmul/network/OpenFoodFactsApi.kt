@@ -78,8 +78,8 @@ class OpenFoodFactsApi private constructor(
         const val BASE_URL_PRODUCTS = "https://world.openproductsfacts.org/api/v3/product"
         const val BASE_URL_BEAUTY = "https://world.openbeautyfacts.org/api/v3/product"
         const val BASE_URL = BASE_URL_FOOD
-        /** Single-sourced with gradle.properties VERSION_NAME (2.0.0); bump together. */
-        const val USER_AGENT = "WasegMul/2.0.0 (Android; support@wasegmul.app)"
+        /** Single-sourced with gradle.properties VERSION_NAME (3.0.0); bump together. */
+        const val USER_AGENT = "WasegMul/3.0.0 (Android; support@wasegmul.app)"
 
         /**
          * Requested fields. Includes `product_name_en` + `lang` alongside `product_name`

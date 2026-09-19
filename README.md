@@ -17,7 +17,7 @@
   <img src="https://img.shields.io/badge/Kotlin-2.1.0-7F52FF" alt="Kotlin">
   <img src="https://img.shields.io/badge/TensorFlow%20Lite-2.17.0-FF6F00" alt="TFLite">
   <img src="https://img.shields.io/badge/Compose%20BOM-2024.11.00-4285F4" alt="Compose">
-   <img src="https://img.shields.io/badge/Tests-27%20Suites%20Passing-success" alt="Tests">
+   <img src="https://img.shields.io/badge/Tests-36%20Suites%20Passing-success" alt="Tests">
 </p>
 
 <p align="center">
@@ -95,10 +95,13 @@ flowchart TD
 
 - **On-Device Waste Classification**: Dual EfficientNet neural networks classify items into 4 categories and 30 subclasses in milliseconds per model on modern devices (reference figures in Model Specifications — device-dependent, not a guarantee).
 - **Zero-Allocation Tensor Pipelines**: Reusable preallocated direct native `ByteBuffer` instances eliminate GC churn during continuous camera streaming.
-- **YOLO Real-Time Object Detection**: Live CameraX object detection with bounding boxes, labels, and interactive tap-to-classify ROI cropping.
+- **YOLO Real-Time Object Detection**: Live CameraX object detection with bounding boxes, labels, interactive tap-to-classify ROI cropping, per-detection disposal guidance cards, and temporal smoothing (600 ms hold, confidence hysteresis, shake deadband) for stable tracking.
 - **Multi-Model ML Arbitrator**: Cross-validates category and subclass predictions, detects conflicts, and quantifies uncertainty using Shannon entropy.
 - **Actionable Disposal Guidance**: EPA-aligned disposal instructions, environmental hazards, and preparation steps across all 30 subclasses.
 - **Eco Impact Dashboard**: Tracks cumulative diverted landfill waste, avoided CO2 emissions, conserved water, and saved energy.
+- **Planet Hero Celebration**: Every classification opens an appreciative full-screen moment — eco badge, XP award, CO2/water impact pills, and a "View Analysis Report" action.
+- **Gamification & Levels**: Level badge, level title, XP progress to the next level, and daily streaks, with barcode scans earning XP at parity with camera scans and same-item spam earning nothing.
+- **Deep Linking**: `wasegmul://barcode` opens the scanner cold or warm (singleTask-safe `onNewIntent` forwarding + manifest intent-filter).
 - **Room Database v11**: Schema with single-column indices on `waste_history(timestamp, category, subclass, feedback)`, a `barcode_products` cache table (v9→v10), and barcode provenance columns on `waste_history` (v10→v11) for high-performance querying.
 - **Data Integrity & Consistency**: Re-derives canonical category automatically upon user feedback correction.
 - **Material Design 3 & Expressive UI**: Glassmorphism cards with Android 12+ RenderEffect frosted blur, animated organic backgrounds, and falling petals.
@@ -208,7 +211,7 @@ stateDiagram-v2
 
 ## Test Verification Matrix
 
-All test suites execute against the Kotlin Multiplatform shared library and Android application modules — 14 app suites (127 tests) + 13 shared suites (100 tests):
+All test suites execute against the Kotlin Multiplatform shared library and Android application modules — 23 app suites (162 tests) + 13 shared suites (100 tests):
 
 | Test Suite | File Path | Test Cases | Seam / Coverage |
 |---|---|---|---|
@@ -226,6 +229,15 @@ All test suites execute against the Kotlin Multiplatform shared library and Andr
 | **BarcodeDisplayTest** | `app/src/test/.../ui/BarcodeDisplayTest.kt` | 8 tests | Barcode display parsing, CSV cell sanitize |
 | **GamificationManagerTest** | `app/src/test/.../gamification/GamificationManagerTest.kt` | 10 tests | XP/state computation seams |
 | **DisposalDatabaseTest** | `app/src/test/.../data/disposal/DisposalDatabaseTest.kt` | 8 tests | Disposal data loading/filtering seams |
+| **ImagePreprocessorRangeTest** | `app/src/test/.../ml/ImagePreprocessorRangeTest.kt` | 2 tests | Raw-[0,255] preprocessing contract pin |
+| **NotificationHelperTest** | `app/src/test/.../notification/NotificationHelperTest.kt` | 1 test | Level-up notification builder seam |
+| **BarcodeSanitizeTest** | `app/src/test/.../repository/BarcodeSanitizeTest.kt` | 7 tests | Barcode junk gate, GS1 extract, UPC-A pad |
+| **ClassificationDownscaleTest** | `app/src/test/.../ui/classify/ClassificationDownscaleTest.kt` | 4 tests | 1024 long-edge handoff bound (OOM guard) |
+| **HistoryGroupingTest** | `app/src/test/.../ui/history/HistoryGroupingTest.kt` | 4 tests | History grouping seams |
+| **CelebrationGlowTest** | `app/src/test/.../ui/result/CelebrationGlowTest.kt` | 4 tests | RadialGradient zero-radius crash regression |
+| **DetectionSmootherTest** | `app/src/test/.../ui/yolo/DetectionSmootherTest.kt` | 6 tests | Track matching, hold, hysteresis, deadband |
+| **YoloGuidanceTest** | `app/src/test/.../ui/yolo/YoloGuidanceTest.kt` | 5 tests | Per-detection disposal guidance mapping |
+| **YoloViewModelTest** | `app/src/test/.../ui/yolo/YoloViewModelTest.kt` | 2 tests | YOLO ViewModel seams |
 | **Shared commonTest** | `shared/src/commonTest/...` (13 suites) | 100 tests | CommonModels, DecayTime, EcoImpact, IOSBridge, MessageGenerator, MLArbitrator (+barcode), network GTIN/lenient-JSON, PackagingWasteMapper, PredictionCodec, WasteKnowledgeBase, WasteMapping |
 
 Execute the complete test suite locally:
@@ -395,8 +407,8 @@ Then invoke:
 
 ### Versioning
 
-The app version is single-sourced from `gradle.properties` (`VERSION_NAME=2.0.0`,
-`VERSION_CODE=3`). The iOS shell's `kAppVersionString` (`ContentView.swift`) and
+The app version is single-sourced from `gradle.properties` (`VERSION_NAME=3.0.0`,
+`VERSION_CODE=4`). The iOS shell's `kAppVersionString` (`ContentView.swift`) and
 the shared `IOSBridge` surface must be bumped in the same commit — there is no
 automatic cross-platform version propagation.
 

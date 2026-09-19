@@ -3,10 +3,10 @@ import shared
 
 // MARK: - Version
 // Keep in sync with the Android single source of truth:
-// gradle.properties VERSION_NAME (currently 2.0.0) and the :shared framework
+// gradle.properties VERSION_NAME (currently 3.0.0) and the :shared framework
 // consumed via the KMP Gradle build. There is no auto-read of the Gradle
 // version from Swift; bump this string in the same commit as VERSION_NAME.
-private let kAppVersionString = "2.0.0"
+private let kAppVersionString = "3.0.0"
 
 struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
