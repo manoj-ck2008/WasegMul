@@ -8,6 +8,7 @@ import android.util.Log
 import org.tensorflow.lite.DataType
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.support.common.FileUtil
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -191,10 +192,11 @@ class YoloDetector(
 
                 isInitialized = true
                 Log.d(TAG, "YOLO detector initialized: $modelFilename (${labels.size} classes, shape=${outputShape.contentToString()})")
-            } catch (e: Exception) {
-                Log.w(TAG, "YOLO model initialization error: ${e.message}")
+            } catch (t: Throwable) {
+                if (t is CancellationException) throw t
+                Log.w(TAG, "YOLO model initialization error: ${t.message}", t)
                 isInitialized = false
-                throw ModelInitException("YOLO model could not be initialized from assets.", e)
+                throw ModelInitException("YOLO model could not be initialized from assets.", t)
             }
         }
     }
@@ -288,9 +290,10 @@ class YoloDetector(
 
                     val detections = parseDetections(rawOutput, outputShape, lb.padX, lb.padY, lb.scaledW, lb.scaledH)
                     DetectionOutcome.Success(detections)
-                } catch (e: Exception) {
-                    Log.e(TAG, "YOLO detection failed", e)
-                    DetectionOutcome.Failure("Inference failed: ${e.message}", e)
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    Log.e(TAG, "YOLO detection failed", t)
+                    DetectionOutcome.Failure("Inference failed: ${t.message}", t)
                 } finally {
                     rotated?.recycle()
                     if (closed) {

@@ -21,6 +21,7 @@ import com.agrelius.wasegmul.repository.WasteRepository
 import com.agrelius.wasegmul.utils.SettingsManager
 import com.agrelius.wasegmul.gamification.GamificationManager
 import com.agrelius.wasegmul.gamification.XpGainResult
+import com.agrelius.wasegmul.notification.NotificationHelper
 import com.agrelius.wasegmul.EcoImpactCalculator
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.CancellationException
@@ -41,10 +42,12 @@ class ClassificationViewModel(
     // Shared app-scoped ModelManager (WasegMulApp.modelManager). Must be
     // injected so camera + barcode + YOLO do not each hold a TFLite residency
     // (duplicate residency = OOM). Only closed here when we created it.
-    private var modelManager: ModelManager? = null
+    private var modelManager: ModelManager? = null,
+    context: Context? = null
 ) : ViewModel() {
 
     private var ownsModelManager = false
+    private var appContext: Context? = context?.applicationContext
     private var classifyJob: Job? = null
     // Serializes the read-modify-write XP sequence (daily count + total XP).
     private val xpMutex = Mutex()
@@ -82,14 +85,22 @@ class ClassificationViewModel(
     val navigateToResult = _navigateToResult.receiveAsFlow()
 
     fun initModel(context: Context, shared: ModelManager? = null) {
-        if (modelManager == null) {
-            if (shared != null) {
-                modelManager = shared
-                ownsModelManager = false
-            } else {
-                modelManager = ModelManager(context.applicationContext)
-                ownsModelManager = true
+        appContext = context.applicationContext
+        try {
+            if (modelManager == null) {
+                if (shared != null) {
+                    modelManager = shared
+                    ownsModelManager = false
+                } else {
+                    modelManager = ModelManager(context.applicationContext)
+                    ownsModelManager = true
+                }
             }
+        } catch (t: Throwable) {
+            Log.e(TAG, "ModelManager creation failed", t)
+            _modelInitError.value =
+                "The AI models failed to load. Check storage space and retry."
+            return
         }
         // Pre-warm off-Main; surface failures for the model-init error UI.
         viewModelScope.launch(Dispatchers.IO) {
@@ -98,8 +109,8 @@ class ClassificationViewModel(
                 _modelInitError.value = null
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: Exception) {
-                Log.e(TAG, "Model pre-warm failed", e)
+            } catch (t: Throwable) {
+                Log.e(TAG, "Model pre-warm failed", t)
                 _modelInitError.value =
                     "The AI models failed to load. Check storage space and retry."
             }
@@ -114,8 +125,8 @@ class ClassificationViewModel(
                 _modelInitError.value = null
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: Exception) {
-                Log.e(TAG, "Model retry failed", e)
+            } catch (t: Throwable) {
+                Log.e(TAG, "Model retry failed", t)
                 _modelInitError.value =
                     "The AI models failed to load. Check storage space and retry."
             }
@@ -143,10 +154,7 @@ class ClassificationViewModel(
             if (targetW == bitmap.width && targetH == bitmap.height) {
                 bitmap
             } else {
-                val scaled = Bitmap.createScaledBitmap(bitmap, targetW, targetH, true)
-                // Ownership transferred to this VM: free the oversized source now.
-                runCatching { if (scaled !== bitmap && !bitmap.isRecycled) bitmap.recycle() }
-                scaled
+                Bitmap.createScaledBitmap(bitmap, targetW, targetH, true)
             }
         } catch (e: OutOfMemoryError) {
             Log.e(TAG, "Bitmap too large to retain", e)
@@ -279,6 +287,15 @@ class ClassificationViewModel(
                                     settingsManager.setTotalXp(xpResult.newTotalXp)
                                 }
                                 _lastXpGain.value = xpResult
+                                if (xpResult.didLevelUp) {
+                                    appContext?.let { ctx ->
+                                        NotificationHelper.showLevelUpNotification(
+                                            ctx,
+                                            xpResult.newLevel,
+                                            xpResult.xpEarned
+                                        )
+                                    }
+                                }
                             }
                         } catch (e: Exception) {
                             Log.w(TAG, "XP calculation failed", e)
@@ -287,9 +304,8 @@ class ClassificationViewModel(
                             _lastXpGain.value = null
                         }
 
-                        // Uncertain / zero-impact scans never celebrate: the
-                        // overlay would otherwise reward an unidentified item.
-                        _isFreshScan.value = !isUncertain && estimatedWeight > 0.0
+                        // Fresh scans celebrate unless the classification was uncertain.
+                        _isFreshScan.value = !isUncertain
                         if (!_isFreshScan.value) {
                             _lastXpGain.value = null
                         }
@@ -322,8 +338,8 @@ class ClassificationViewModel(
             } catch (e: OutOfMemoryError) {
                 Log.e(TAG, "Out of memory during classification", e)
                 _error.value = "That photo is too large to process on this device. Try a smaller image."
-            } catch (e: Exception) {
-                Log.e(TAG, "Unexpected error during classification", e)
+            } catch (t: Throwable) {
+                Log.e(TAG, "Unexpected error during classification", t)
                 _error.value = "An unexpected error occurred. Please try again."
             } finally {
                 _isLoading.value = false
@@ -392,14 +408,16 @@ class ClassificationViewModel(
         }
     }
 
-    fun loadRecord(recordId: Long) {
+    fun loadRecord(recordId: Long, keepCelebration: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
             _classificationResult.value = null
             _currentRecord.value = null
             // Drop any large camera bitmap while viewing history to halve memory.
             _capturedBitmap.value = null
-            _isFreshScan.value = false
-            _lastXpGain.value = null
+            if (!keepCelebration) {
+                _isFreshScan.value = false
+                _lastXpGain.value = null
+            }
             try {
                 val record = repository.getRecordById(recordId)
                 if (record == null) {
@@ -441,6 +459,11 @@ class ClassificationViewModel(
         }
     }
 
+    fun setScanCelebration(xpGain: XpGainResult?, isFresh: Boolean = true) {
+        _lastXpGain.value = xpGain
+        _isFreshScan.value = isFresh
+    }
+
     override fun onCleared() {
         super.onCleared()
         // Only close a manager we created; the app singleton outlives us.
@@ -464,12 +487,13 @@ class ClassificationViewModel(
     class Factory(
         private val repository: WasteRepository,
         private val settingsManager: SettingsManager,
-        private val modelManager: ModelManager? = null
+        private val modelManager: ModelManager? = null,
+        private val context: Context? = null
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(ClassificationViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return ClassificationViewModel(repository, settingsManager, modelManager) as T
+                return ClassificationViewModel(repository, settingsManager, modelManager, context) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

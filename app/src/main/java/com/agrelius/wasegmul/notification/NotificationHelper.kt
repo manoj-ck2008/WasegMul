@@ -11,15 +11,22 @@ import androidx.core.app.NotificationManagerCompat
 import com.agrelius.wasegmul.MainActivity
 import com.agrelius.wasegmul.R
 
+import com.agrelius.wasegmul.gamification.EcoLevel
+
 object NotificationHelper {
 
     const val CHANNEL_ID_DAILY_IMPACT = "eco_daily_report"
     private const val CHANNEL_NAME = "Daily Eco Impact"
     private const val CHANNEL_DESCRIPTION = "Your daily environmental impact summary from WasegMul"
 
+    const val CHANNEL_ID_LEVEL_UP = "eco_level_up"
+    private const val CHANNEL_NAME_LEVEL_UP = "Level Up & Achievements"
+    private const val CHANNEL_DESC_LEVEL_UP = "Notifications when you reach a new Eco Level in WasegMul"
+    const val NOTIFICATION_ID_LEVEL_UP = 1002
+
     fun createNotificationChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
+            val dailyChannel = NotificationChannel(
                 CHANNEL_ID_DAILY_IMPACT,
                 CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_DEFAULT
@@ -31,8 +38,21 @@ object NotificationHelper {
                 vibrationPattern = longArrayOf(0, 200, 100, 200)
             }
 
+            val levelUpChannel = NotificationChannel(
+                CHANNEL_ID_LEVEL_UP,
+                CHANNEL_NAME_LEVEL_UP,
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = CHANNEL_DESC_LEVEL_UP
+                enableLights(true)
+                lightColor = 0xFFFFD700.toInt()
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 300, 150, 300)
+            }
+
             val manager = context.getSystemService(NotificationManager::class.java)
-            manager?.createNotificationChannel(channel)
+            manager?.createNotificationChannel(dailyChannel)
+            manager?.createNotificationChannel(levelUpChannel)
         }
     }
 
@@ -103,6 +123,61 @@ object NotificationHelper {
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setColor(0xFF00FF94.toInt())
+    }
+
+    fun buildLevelUpNotification(
+        context: Context,
+        newLevel: EcoLevel,
+        xpEarned: Int
+    ): NotificationCompat.Builder {
+        val launchIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            1,
+            launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val title = "\uD83C\uDF89 LEVEL UP: You are now an ${newLevel.name}!"
+        val shortBody = "${newLevel.iconEmoji} Fantastic work! You reached Level ${newLevel.level}: ${newLevel.name} with +${xpEarned} XP!"
+        val expandedBody = buildString {
+            appendLine("${newLevel.iconEmoji} CONGRATULATIONS!")
+            appendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            appendLine("You reached Level ${newLevel.level}: ${newLevel.name}!")
+            if (xpEarned > 0) {
+                appendLine("⚡ XP Earned: +$xpEarned XP")
+            }
+            appendLine("🌱 Minimum XP: ${newLevel.xpRequired} XP")
+            appendLine()
+            appendLine("Every item you classify helps keep waste out of landfills and protects our planet's future. Keep up the extraordinary work!")
+        }
+
+        return NotificationCompat.Builder(context, CHANNEL_ID_LEVEL_UP)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle(title)
+            .setContentText(shortBody)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(expandedBody))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setColor(0xFFFFD700.toInt())
+    }
+
+    fun showLevelUpNotification(
+        context: Context,
+        newLevel: EcoLevel,
+        xpEarned: Int
+    ) {
+        try {
+            if (hasNotificationPermission(context)) {
+                val notification = buildLevelUpNotification(context, newLevel, xpEarned).build()
+                NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_LEVEL_UP, notification)
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("NotificationHelper", "Could not show level up notification", e)
+        }
     }
 
     fun hasNotificationPermission(context: Context): Boolean {

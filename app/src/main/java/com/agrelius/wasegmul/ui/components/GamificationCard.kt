@@ -135,7 +135,12 @@ fun GamificationCard(
                 text = stringResource(R.string.gamification_co2_fmt, totalCo2Kg),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
+                // Long values ("262.500 kg") clipped mid-glyph in the
+                // half-width card on-device; wrap instead (row is
+                // height-matched, so both cards stay equal).
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = stringResource(R.string.gamification_carbon_offset),

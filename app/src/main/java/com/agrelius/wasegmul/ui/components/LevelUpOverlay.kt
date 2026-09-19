@@ -44,8 +44,8 @@ fun LevelUpOverlay(
     newLevel: EcoLevel,
     xpEarned: Int,
     onDismiss: () -> Unit,
-    // Timed auto-dismiss is optional and pauses once the user interacts.
-    autoDismiss: Boolean = true
+    // Timed auto-dismiss is optional and defaults to false so the user can enjoy their achievement.
+    autoDismiss: Boolean = false
 ) {
     var animationPhase by rememberSaveable { mutableIntStateOf(0) }
     var userInteracted by rememberSaveable { mutableStateOf(false) }
@@ -172,15 +172,15 @@ fun LevelUpOverlay(
                         Button(
                             onClick = { dismissByUser() },
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp),
+                                 .fillMaxWidth()
+                                 .heightIn(min = 48.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary,
                                 contentColor = MaterialTheme.colorScheme.onPrimary
                             )
                         ) {
                             Text(
-                                text = stringResource(R.string.overlay_continue),
+                                text = "Awesome! Keep Protecting Earth \uD83C\uDF0D",
                                 fontWeight = FontWeight.Bold
                             )
                         }

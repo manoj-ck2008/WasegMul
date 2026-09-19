@@ -1,5 +1,6 @@
 package com.agrelius.wasegmul.ui.barcode
 
+import android.content.Context
 import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -16,6 +17,7 @@ import com.agrelius.wasegmul.ml.ClassificationOutcome
 import com.agrelius.wasegmul.ml.ModelManager
 import com.agrelius.wasegmul.network.OffPackagingComponentDto
 import com.agrelius.wasegmul.network.OffProductDto
+import com.agrelius.wasegmul.notification.NotificationHelper
 import com.agrelius.wasegmul.repository.BarcodeRepository
 import com.agrelius.wasegmul.repository.BarcodeResolutionResult
 import com.agrelius.wasegmul.repository.WasteRepository
@@ -80,7 +82,8 @@ class BarcodeScanViewModel(
     private val wasteRepository: WasteRepository,
     private val modelManager: ModelManager? = null,
     val barcodeScanner: BarcodeScanner = BarcodeScanner(),
-    private val settingsManager: com.agrelius.wasegmul.utils.SettingsManager? = null
+    private val settingsManager: com.agrelius.wasegmul.utils.SettingsManager? = null,
+    private val context: Context? = null
 ) : ViewModel() {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -290,6 +293,15 @@ class BarcodeScanViewModel(
                 lastAwardedAtMs = now
                 withContext(Dispatchers.IO) { sm.setTotalXp(xpResult.newTotalXp) }
                 _lastXpGain.value = xpResult
+                if (xpResult.didLevelUp) {
+                    context?.let { ctx ->
+                        NotificationHelper.showLevelUpNotification(
+                            ctx,
+                            xpResult.newLevel,
+                            xpResult.xpEarned
+                        )
+                    }
+                }
             }
         } catch (e: Exception) {
             android.util.Log.w("BarcodeScanViewModel", "XP award failed", e)
@@ -412,8 +424,7 @@ class BarcodeScanViewModel(
      * scanner on every detection). Never throws: called on early-return paths.
      */
     private fun recycleFrameBitmap(bitmap: Bitmap?) {
-        if (bitmap == null || bitmap.isRecycled) return
-        runCatching { bitmap.recycle() }
+        // No-op: let Android GC safely reclaim memory without native race conditions
     }
 
     /**
@@ -485,7 +496,8 @@ class BarcodeScanViewModel(
         private val wasteRepository: WasteRepository,
         private val modelManager: ModelManager? = null,
         private val barcodeScanner: BarcodeScanner? = null,
-        private val settingsManager: com.agrelius.wasegmul.utils.SettingsManager? = null
+        private val settingsManager: com.agrelius.wasegmul.utils.SettingsManager? = null,
+        private val context: Context? = null
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -495,7 +507,8 @@ class BarcodeScanViewModel(
                     wasteRepository = wasteRepository,
                     modelManager = modelManager,
                     barcodeScanner = barcodeScanner ?: BarcodeScanner(),
-                    settingsManager = settingsManager
+                    settingsManager = settingsManager,
+                    context = context
                 ) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")

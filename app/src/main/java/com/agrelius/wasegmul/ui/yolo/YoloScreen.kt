@@ -216,7 +216,12 @@ fun YoloScreen(
                 ) {
                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.error)
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(error.orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 32.dp))
+                    Text(
+                        error.orEmpty(),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 32.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(onClick = {
                         yoloViewModel.clearError()
@@ -224,11 +229,16 @@ fun YoloScreen(
                     }) {
                         Text(stringResource(R.string.common_retry))
                     }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(onClick = onBack) {
+                        Text(stringResource(R.string.common_back))
+                    }
                 }
             } else {
                 CameraPreviewWithDetection(
                     isTorchOn = isTorchOn,
                     onFlashSupported = { hasFlash = it },
+                    onCameraError = { errorMsg -> yoloViewModel.setError(errorMsg) },
                     onFrameCaptured = { bitmap ->
                         // Snapshot writes MUST happen on Main (this callback
                         // runs on the analyzer executor).
@@ -246,25 +256,35 @@ fun YoloScreen(
                             detections.firstOrNull { detectionKey(it) == key }
                         } ?: detections.maxByOrNull { it.confidence }
                         if (captureRequested.compareAndSet(true, false)) {
-                            val raw = if (targetAtCapture != null) {
-                                cropRoi(bitmap, targetAtCapture.boundingBox)
-                            } else {
-                                bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                            try {
+                                val raw = if (targetAtCapture != null) {
+                                    cropRoi(bitmap, targetAtCapture.boundingBox)
+                                } else {
+                                    try {
+                                        bitmap.copy(Bitmap.Config.ARGB_8888, false) ?: bitmap
+                                    } catch (_: Throwable) {
+                                        bitmap
+                                    }
+                                }
+                                val finalBitmap = downscaleForHandoff(raw)
+                                // Do not manually recycle: let GC safely reclaim memory
+                                // without risking native crashes in concurrent threads or Compose transitions.
+                                mainHandler.post { onCaptureAndClassify(finalBitmap) }
+                            } catch (t: Throwable) {
+                                Log.e("YoloScreen", "Capture and classify failed", t)
+                                mainHandler.post { onCaptureAndClassify(bitmap) }
                             }
-                            // Bound the handoff: a full 12 MP frame is ~48 MB and
-                            // killed the process in setBitmap before the VM's own
-                            // 1024 bound could engage. Downscale here, recycle the
-                            // oversized intermediate (never the CameraX-owned frame).
-                            val finalBitmap = downscaleForHandoff(raw)
-                            if (finalBitmap !== raw) raw.recycle()
-                            mainHandler.post { onCaptureAndClassify(finalBitmap) }
                         }
                         // Ownership stays with CameraX pipeline; YoloDetector copies
                         // internally via createScaledBitmap. NEVER recycle here:
                         // detect() reads pixels async and recycling causes native crash.
                         // Inference dispatched off-Main (Dispatchers.Default).
                         scope.launch(Dispatchers.Default) {
-                            yoloViewModel.detectFrame(bitmap)
+                            try {
+                                yoloViewModel.detectFrame(bitmap)
+                            } catch (t: Throwable) {
+                                Log.w("YoloScreen", "Frame detection skipped", t)
+                            }
                         }
                     }
                 )
@@ -454,6 +474,7 @@ fun YoloScreen(
 private fun CameraPreviewWithDetection(
     isTorchOn: Boolean,
     onFlashSupported: (Boolean) -> Unit,
+    onCameraError: (String) -> Unit,
     onFrameCaptured: (Bitmap) -> Unit
 ) {
     val context = LocalContext.current
@@ -467,8 +488,12 @@ private fun CameraPreviewWithDetection(
 
     DisposableEffect(Unit) {
         onDispose {
-            analysisExecutor.shutdownNow()
-            cameraProvider?.unbindAll()
+            try {
+                cameraProvider?.unbindAll()
+            } catch (_: Throwable) { }
+            try {
+                analysisExecutor.shutdown()
+            } catch (_: Throwable) { }
         }
     }
 
@@ -518,65 +543,96 @@ private fun CameraPreviewWithDetection(
     ) {
         AndroidView(
             factory = { ctx ->
-                PreviewView(ctx).apply {
+                val previewView = PreviewView(ctx).apply {
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
                     scaleType = PreviewView.ScaleType.FILL_CENTER
-                    previewViewRef = this
+                }
+                previewViewRef = previewView
 
+                try {
                     val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
                     cameraProviderFuture.addListener({
-                        val cp = cameraProviderFuture.get()
-                        cameraProvider = cp
-
-                        val preview = Preview.Builder().build().also {
-                            it.surfaceProvider = surfaceProvider
-                        }
-
-                        val imageAnalysis = ImageAnalysis.Builder()
-                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-                            .build()
-
-                        imageAnalysis.setAnalyzer(analysisExecutor) { imageProxy ->
-                            if (!isProcessing.compareAndSet(false, true)) {
-                                imageProxy.close()
-                                return@setAnalyzer
-                            }
-                            val bitmap = try {
-                                imageProxy.toBitmap().copy(Bitmap.Config.ARGB_8888, false)
-                            } catch (e: Exception) {
-                                Log.e("YoloScreen", "Frame capture failed", e)
-                                null
-                            } finally {
-                                // Guard released AFTER the proxy is closed:
-                                // releasing first lets the next frame overlap
-                                // and defeats KEEP_ONLY_LATEST backpressure.
-                                imageProxy.close()
-                                isProcessing.set(false)
-                            }
-                            if (bitmap != null) {
-                                onFrameCaptured(bitmap)
-                            }
-                        }
-
                         try {
-                            cp.unbindAll()
-                            val boundCamera = cp.bindToLifecycle(
-                                lifecycleOwner,
-                                CameraSelector.DEFAULT_BACK_CAMERA,
-                                preview,
-                                imageAnalysis
-                            )
-                            camera = boundCamera
-                            onFlashSupported(boundCamera.cameraInfo.hasFlashUnit())
-                        } catch (e: Exception) {
-                            Log.e("YoloScreen", "Camera bind failed", e)
+                            val cp = cameraProviderFuture.get()
+                            cameraProvider = cp
+
+                            val preview = Preview.Builder().build().also {
+                                it.surfaceProvider = previewView.surfaceProvider
+                            }
+
+                            val imageAnalysis = ImageAnalysis.Builder()
+                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+                                .build()
+
+                            imageAnalysis.setAnalyzer(analysisExecutor) { imageProxy ->
+                                if (!isProcessing.compareAndSet(false, true)) {
+                                    imageProxy.close()
+                                    return@setAnalyzer
+                                }
+                                val bitmap = try {
+                                    imageProxy.toBitmap().copy(Bitmap.Config.ARGB_8888, false)
+                                } catch (t: Throwable) {
+                                    Log.e("YoloScreen", "Frame capture failed", t)
+                                    null
+                                } finally {
+                                    // Guard released AFTER the proxy is closed:
+                                    // releasing first lets the next frame overlap
+                                    // and defeats KEEP_ONLY_LATEST backpressure.
+                                    imageProxy.close()
+                                    isProcessing.set(false)
+                                }
+                                if (bitmap != null) {
+                                    onFrameCaptured(bitmap)
+                                }
+                            }
+
+                            // Individually isolate camera availability checks:
+                            // hasCamera throws CameraInfoUnavailableException on failure.
+                            val hasBack = try {
+                                cp.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA)
+                            } catch (_: Throwable) {
+                                false
+                            }
+                            val hasFront = try {
+                                cp.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)
+                            } catch (_: Throwable) {
+                                false
+                            }
+
+                            val cameraSelector = when {
+                                hasBack -> CameraSelector.DEFAULT_BACK_CAMERA
+                                hasFront -> CameraSelector.DEFAULT_FRONT_CAMERA
+                                else -> null
+                            }
+
+                            if (cameraSelector != null) {
+                                cp.unbindAll()
+                                val boundCamera = cp.bindToLifecycle(
+                                    lifecycleOwner,
+                                    cameraSelector,
+                                    preview,
+                                    imageAnalysis
+                                )
+                                camera = boundCamera
+                                onFlashSupported(boundCamera.cameraInfo.hasFlashUnit())
+                            } else {
+                                Log.e("YoloScreen", "No back or front camera available on this device")
+                                onCameraError("No camera hardware detected on this device.")
+                            }
+                        } catch (t: Throwable) {
+                            Log.e("YoloScreen", "Camera initialization or bind failed", t)
+                            onCameraError("Camera initialization failed: ${t.localizedMessage ?: "Hardware error"}")
                         }
                     }, ContextCompat.getMainExecutor(ctx))
+                } catch (t: Throwable) {
+                    Log.e("YoloScreen", "ProcessCameraProvider.getInstance failed", t)
+                    onCameraError("Unable to access camera service: ${t.localizedMessage ?: "Camera error"}")
                 }
+                previewView
             },
             modifier = Modifier.fillMaxSize()
         )
@@ -630,16 +686,29 @@ private fun detectionKey(det: Detection): String {
  * would be mis-scaled here — callers must normalize first.
  */
 private fun cropRoi(src: Bitmap, box: RectF, padFrac: Float = 0.08f): Bitmap {
+    if (src.isRecycled || src.width <= 0 || src.height <= 0) return src
     val padX = (box.right - box.left) * padFrac
     val padY = (box.bottom - box.top) * padFrac
     val l = ((box.left - padX) * src.width).toInt().coerceIn(0, src.width - 1)
     val t = ((box.top - padY) * src.height).toInt().coerceIn(0, src.height - 1)
     val r = ((box.right + padX) * src.width).toInt().coerceIn(l + 1, src.width)
     val b = ((box.bottom + padY) * src.height).toInt().coerceIn(t + 1, src.height)
+    val cropW = (r - l).coerceAtLeast(1)
+    val cropH = (b - t).coerceAtLeast(1)
     return try {
-        Bitmap.createBitmap(src, l, t, r - l, b - t)
-    } catch (e: Exception) {
-        src.copy(Bitmap.Config.ARGB_8888, true)
+        val subset = Bitmap.createBitmap(src, l, t, cropW, cropH)
+        val copy = try {
+            subset.copy(Bitmap.Config.ARGB_8888, false)
+        } catch (_: Throwable) {
+            null
+        }
+        copy ?: subset
+    } catch (t: Throwable) {
+        try {
+            src.copy(Bitmap.Config.ARGB_8888, false) ?: src
+        } catch (_: Throwable) {
+            src
+        }
     }
 }
 
@@ -653,8 +722,9 @@ private fun cropRoi(src: Bitmap, box: RectF, padFrac: Float = 0.08f): Bitmap {
  * frame across the boundary in the first place.
  */
 private fun downscaleForHandoff(src: Bitmap, maxLongEdge: Int = 1024): Bitmap {
+    if (src.isRecycled || src.width <= 0 || src.height <= 0) return src
     val longEdge = maxOf(src.width, src.height)
-    if (longEdge <= maxLongEdge || src.isRecycled) return src
+    if (longEdge <= maxLongEdge) return src
     val scale = maxLongEdge.toFloat() / longEdge.toFloat()
     return try {
         Bitmap.createScaledBitmap(

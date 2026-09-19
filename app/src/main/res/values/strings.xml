@@ -332,5 +332,25 @@
     <string name="decay_toggle_warning">Toggle environmental warning</string>
     <string name="decay_expand">Expand</string>
     <string name="decay_collapse">Collapse</string>
+
+    <!-- Level Up & Achievement Notifications -->
+    <string name="notification_channel_level_up">Level Up &amp; Achievements</string>
+    <string name="notification_channel_level_up_desc">Celebrations when you reach a new Eco Level in WasegMul</string>
+    <string name="notification_level_up_title">\uD83C\uDF89 Level Up: You are now a %1$s!</string>
+    <string name="notification_level_up_body">Congratulations! You reached Level %1$d: %2$s with +%3$d XP. Keep protecting our Earth!</string>
+
+    <!-- History Time Groupings -->
+    <string name="history_group_today">Today</string>
+    <string name="history_group_yesterday">Yesterday</string>
+    <string name="history_group_this_week">This Week</string>
+    <string name="history_group_this_month">This Month</string>
+    <string name="history_group_older">Older Records</string>
+    <string name="history_items_count">%1$d items</string>
+
+    <!-- Enhanced Appreciative Animation -->
+    <string name="overlay_appreciate_badge">PLANET HERO ACTION</string>
+    <string name="overlay_appreciate_title">Thank You for Healing Our Planet!</string>
+    <string name="overlay_appreciate_body">You did something amazing for the world today. Every item you properly classify keeps waste out of landfills and protects our Earth.</string>
+    <string name="overlay_view_report">View Analysis Report</string>
 </resources>
 

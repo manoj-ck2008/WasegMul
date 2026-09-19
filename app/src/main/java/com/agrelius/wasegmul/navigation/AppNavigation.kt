@@ -51,7 +51,12 @@ fun AppNavigation(deepLinkEvents: StateFlow<Intent?>? = null) {
     // Shared app-scoped ModelManager: one TFLite residency for camera,
     // barcode Tier-4 and YOLO-adjacent flows (no duplicate instances).
     val classificationViewModel: ClassificationViewModel = viewModel(
-        factory = ClassificationViewModel.Factory(repository, settingsManager, app.modelManager)
+        factory = ClassificationViewModel.Factory(
+            repository = repository,
+            settingsManager = settingsManager,
+            modelManager = app.modelManager,
+            context = app
+        )
     )
     val homeViewModel: HomeViewModel = viewModel(
         factory = HomeViewModel.Factory(repository)
@@ -132,7 +137,7 @@ fun AppNavigation(deepLinkEvents: StateFlow<Intent?>? = null) {
             val recordId = backStackEntry.arguments?.getLong("recordId") ?: -1L
             LaunchedEffect(recordId) {
                 if (recordId != -1L && classificationViewModel.currentRecord.value?.id != recordId) {
-                    classificationViewModel.loadRecord(recordId)
+                    classificationViewModel.loadRecord(recordId, keepCelebration = classificationViewModel.isFreshScan.value)
                 }
             }
             
@@ -190,13 +195,18 @@ fun AppNavigation(deepLinkEvents: StateFlow<Intent?>? = null) {
                     barcodeRepository = app.barcodeRepository,
                     wasteRepository = app.repository,
                     modelManager = app.modelManager,
-                    settingsManager = app.settingsManager
+                    settingsManager = app.settingsManager,
+                    context = app
                 )
             )
             BarcodeScanScreen(
                 viewModel = barcodeViewModel,
                 onBack = { navController.popBackStack() },
                 onNavigateToResult = { recordId ->
+                    classificationViewModel.setScanCelebration(
+                        xpGain = barcodeViewModel.lastXpGain.value,
+                        isFresh = true
+                    )
                     navController.navigate(Screen.Result.createRoute(recordId))
                 },
                 onFallbackToCamera = {

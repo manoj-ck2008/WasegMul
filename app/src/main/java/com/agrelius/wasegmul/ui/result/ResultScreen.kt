@@ -88,17 +88,19 @@ fun ResultScreen(
         it.category == WasteMapping.UNCERTAIN || it.category == WasteMapping.UNKNOWN
     } ?: (result?.category == WasteMapping.UNCERTAIN || result?.category == WasteMapping.UNKNOWN)
     val xpEarned = lastXpGain?.xpEarned ?: 0
-    val canCelebrate = isFreshScan && !isUncertainRecord && xpEarned > 0
+    val canCelebrate = isFreshScan && !isUncertainRecord
     var thankYouDismissed by rememberSaveable(record?.id) { mutableStateOf(false) }
     var levelUpDismissed by rememberSaveable(record?.id) { mutableStateOf(false) }
     val showThankYou = canCelebrate && !thankYouDismissed
     val showLevelUp = !showThankYou && lastXpGain?.didLevelUp == true &&
-        !levelUpDismissed && !isUncertainRecord && xpEarned > 0
+        !levelUpDismissed && !isUncertainRecord
 
     fun dismissThankYou() {
         thankYouDismissed = true
-        if (lastXpGain?.didLevelUp != true) viewModel.consumeXpGain()
-        viewModel.consumeFreshScan()
+        if (lastXpGain?.didLevelUp != true) {
+            viewModel.consumeXpGain()
+            viewModel.consumeFreshScan()
+        }
     }
     fun dismissLevelUp() {
         levelUpDismissed = true
@@ -735,24 +737,23 @@ fun ResultScreen(
     }
 
     if (showThankYou) {
-        lastXpGain?.let { gain ->
-            val impact = remember(record) {
-                record?.let { EcoImpactCalculator.calculate(listOf(it)) }
-            }
-            val co2Grams = if (gain.co2PreventedGrams > 0.0) {
-                gain.co2PreventedGrams
-            } else {
-                (impact?.co2PreventedKg ?: 0.0) * 1000.0
-            }
-            val waterMl = (impact?.waterSavedLiters ?: 0.0) * 1000.0
-
-            ThankYouOverlay(
-                xpEarned = gain.xpEarned,
-                co2PreventedGrams = co2Grams,
-                waterSavedMl = waterMl,
-                onDismiss = { dismissThankYou() }
-            )
+        val impact = remember(record) {
+            record?.let { EcoImpactCalculator.calculate(listOf(it)) }
         }
+        val gain = lastXpGain
+        val co2Grams = if (gain != null && gain.co2PreventedGrams > 0.0) {
+            gain.co2PreventedGrams
+        } else {
+            (impact?.co2PreventedKg ?: 0.0) * 1000.0
+        }
+        val waterMl = (impact?.waterSavedLiters ?: 0.0) * 1000.0
+
+        ThankYouOverlay(
+            xpEarned = gain?.xpEarned ?: 0,
+            co2PreventedGrams = co2Grams,
+            waterSavedMl = waterMl,
+            onDismiss = { dismissThankYou() }
+        )
     } else if (showLevelUp) {
         lastXpGain?.let { gain ->
             LevelUpOverlay(

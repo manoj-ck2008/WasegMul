@@ -90,10 +90,14 @@ class ModelManager(private val context: Context) {
                 Log.e(TAG, "Out of memory while initialising classifiers", e)
                 cleanup()
                 throw ModelInitException("Not enough memory to load ML models", e)
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to initialise classifiers", e)
+            } catch (t: Throwable) {
+                if (t is CancellationException) {
+                    cleanup()
+                    throw t
+                }
+                Log.e(TAG, "Failed to initialise classifiers", t)
                 cleanup()
-                throw ModelInitException("Could not load ML models", e)
+                throw ModelInitException("Could not load ML models", t)
             }
         }
     }

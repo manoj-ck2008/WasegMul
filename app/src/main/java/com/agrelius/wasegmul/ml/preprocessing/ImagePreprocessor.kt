@@ -90,20 +90,11 @@ object ImagePreprocessor {
                 softwareBitmap
             }
             val cropped = centerCropToSquare(upright)
-            return try {
-                val tensorImage = TensorImage(DataType.FLOAT32)
-                tensorImage.load(cropped)
-                imageProcessor.process(tensorImage)
-            } finally {
-                if (cropped !== upright) {
-                    cropped.recycle()
-                }
-            }
+            val tensorImage = TensorImage(DataType.FLOAT32)
+            tensorImage.load(cropped)
+            return imageProcessor.process(tensorImage)
         } finally {
-            rotated?.let { if (it !== softwareBitmap) it.recycle() }
-            if (softwareBitmap !== bitmap) {
-                softwareBitmap.recycle()
-            }
+            // Let Android GC/NativeAllocationRegistry safely reclaim intermediate bitmaps
         }
     }
 

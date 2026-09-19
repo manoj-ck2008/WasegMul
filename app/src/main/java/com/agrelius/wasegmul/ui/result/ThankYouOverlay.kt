@@ -6,6 +6,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -43,15 +44,15 @@ private data class LeafParams(
     val colorIndex: Int
 )
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun ThankYouOverlay(
     xpEarned: Int,
     co2PreventedGrams: Double,
     waterSavedMl: Double,
     onDismiss: () -> Unit,
-    // Timed auto-dismiss is optional and pauses once the user interacts
-    // (WCAG timed-content): the visible Continue button always works.
-    autoDismiss: Boolean = true
+    // Timed auto-dismiss is optional and defaults to false so user can review their impact.
+    autoDismiss: Boolean = false
 ) {
     var phase by rememberSaveable { mutableIntStateOf(0) }
     var visible by rememberSaveable { mutableStateOf(true) }
@@ -151,25 +152,30 @@ fun ThankYouOverlay(
                 .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.72f)),
             contentAlignment = Alignment.Center
         ) {
-            // Radial glow
+            // Radial glow. RadialGradient requires ending radius > 0, but the
+            // glow animation starts at 0 (phase 0) — drawing unconditionally
+            // crashed entering Result with IllegalArgumentException. Skip the
+            // pass until the radius is positive.
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val centerX = size.width / 2
                 val centerY = size.height * 0.38f
                 val maxRadius = size.width * 0.6f * glowRadius
 
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            primary.copy(alpha = 0.25f * glowPulse),
-                            primary.copy(alpha = 0.08f * glowPulse),
-                            Color.Transparent
+                if (shouldDrawCelebrationGlow(maxRadius)) {
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                primary.copy(alpha = 0.25f * glowPulse),
+                                primary.copy(alpha = 0.08f * glowPulse),
+                                Color.Transparent
+                            ),
+                            center = Offset(centerX, centerY),
+                            radius = maxRadius
                         ),
                         center = Offset(centerX, centerY),
                         radius = maxRadius
-                    ),
-                    center = Offset(centerX, centerY),
-                    radius = maxRadius
-                )
+                    )
+                }
             }
 
             // Leaf particles (pure function of progress — no state mutation).
@@ -206,53 +212,102 @@ fun ThankYouOverlay(
                         .padding(horizontal = 32.dp, vertical = 28.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
-                    // Globe/Leaf icon
+                    // Planet Hero Badge
                     Box(
-                        modifier = Modifier.scale(iconScale),
-                        contentAlignment = Alignment.Center
+                        modifier = Modifier
+                            .background(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                RoundedCornerShape(20.dp)
+                            )
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Eco,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(72.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // "Thank You!" text
-                    AnimatedVisibility(
-                        visible = phase >= 2,
-                        enter = fadeIn(tween(600)) + scaleIn(
-                            tween(600),
-                            initialScale = 0.5f
-                        )
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = stringResource(R.string.overlay_thank_you),
-                                style = MaterialTheme.typography.displaySmall,
+                                text = "✨",
+                                fontSize = 14.sp
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = stringResource(R.string.overlay_appreciate_badge),
+                                style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Black,
                                 color = MaterialTheme.colorScheme.primary,
-                                textAlign = TextAlign.Center,
-                                letterSpacing = 4.sp
+                                letterSpacing = 2.sp
                             )
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = stringResource(R.string.overlay_saved_planet),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                fontStyle = FontStyle.Italic,
-                                lineHeight = 24.sp
+                                text = "🌍",
+                                fontSize = 14.sp
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(28.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Globe/Leaf icon with pulsing aura
+                    Box(
+                        modifier = Modifier.scale(iconScale),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(96.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f * glowPulse),
+                                    CircleShape
+                                )
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(80.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                                    CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Eco,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(48.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Appreciative text
+                    AnimatedVisibility(
+                        visible = phase >= 2,
+                        enter = fadeIn(tween(600)) + scaleIn(
+                            tween(600),
+                            initialScale = 0.7f
+                        )
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = stringResource(R.string.overlay_appreciate_title),
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Black,
+                                color = MaterialTheme.colorScheme.primary,
+                                textAlign = TextAlign.Center,
+                                letterSpacing = 1.sp
+                            )
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Text(
+                                text = stringResource(R.string.overlay_appreciate_body),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 22.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
 
                     // Stats pills
                     AnimatedVisibility(
@@ -282,45 +337,77 @@ fun ThankYouOverlay(
                                 }
                             }
 
-                            // Eco stat pills row
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            // Eco stat pills. FlowRow (not fixed Row): long values
+                            // ("+1125.0L") used to squeeze into half-card width and
+                            // wrap character-by-character. Pills now keep intrinsic
+                            // width and flow onto a second centered row instead.
+                            androidx.compose.foundation.layout.FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(
+                                    12.dp,
+                                    Alignment.CenterHorizontally
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                maxItemsInEachRow = 2
                             ) {
-                                if (co2PreventedGrams > 0.1) {
+                                if (co2PreventedGrams > 0.05) {
                                     EcoStatPill(
-                                        label = "CO\u2082",
+                                        label = "CO\u2082 Saved",
                                         value = "-${formatGrams(co2PreventedGrams)}",
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 }
-                                if (waterSavedMl > 0.1) {
+                                if (waterSavedMl > 0.05) {
                                     EcoStatPill(
                                         label = stringResource(R.string.impact_metric_water),
                                         value = "+${formatMl(waterSavedMl)}",
                                         color = MaterialTheme.colorScheme.secondary
                                     )
                                 }
+                                if (co2PreventedGrams <= 0.05 && waterSavedMl <= 0.05) {
+                                    EcoStatPill(
+                                        label = "Waste Diverted",
+                                        value = "+1 Item",
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
+
+                            Text(
+                                text = "“Small acts, multiplied by millions, can transform the world.”",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontStyle = FontStyle.Italic,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 8.dp).padding(top = 4.dp)
+                            )
                         }
                     }
 
                     Spacer(modifier = Modifier.height(28.dp))
 
-                    // Visible dismiss control (Role.Button via Button).
+                    // Action button: View Analysis Report
                     Button(
                         onClick = { dismissByUser() },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 48.dp),
+                            .height(52.dp),
+                        shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = MaterialTheme.colorScheme.onPrimary
                         )
                     ) {
+                        Icon(
+                            Icons.Default.Eco,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = stringResource(R.string.overlay_continue),
-                            fontWeight = FontWeight.Bold
+                            text = stringResource(R.string.overlay_view_report),
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium
                         )
                     }
                 }
@@ -377,4 +464,17 @@ private fun formatMl(ml: Double): String {
     } else {
         "${"%.0f".format(java.util.Locale.ROOT, ml)}mL"
     }
+}
+
+/**
+ * Gate for the celebration glow pass.
+ *
+ * `android.graphics.RadialGradient` (built by `Brush.radialGradient`)
+ * throws `IllegalArgumentException: ending radius must be > 0` for any
+ * radius ≤ 0. The glow animation starts at 0, so drawing unconditionally
+ * killed the app on the first frame of every Result screen. Only draw for
+ * strictly positive radii; the animation reaches one within ~100 ms.
+ */
+internal fun shouldDrawCelebrationGlow(radiusPx: Float): Boolean {
+    return radiusPx.isFinite() && radiusPx > 0f
 }

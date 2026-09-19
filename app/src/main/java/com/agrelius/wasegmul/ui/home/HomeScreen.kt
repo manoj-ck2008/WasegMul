@@ -2,6 +2,7 @@ package com.agrelius.wasegmul.ui.home
 
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.provider.Settings
@@ -82,6 +83,7 @@ fun HomeScreen(
     val totalScanCount by viewModel.totalCount.collectAsState()
     val vmError by viewModel.error.collectAsState()
     var showImpactDetail by rememberSaveable { mutableStateOf(false) }
+    var showLevelUpPreview by rememberSaveable { mutableStateOf(false) }
     var showPermissionRationale by rememberSaveable { mutableStateOf(false) }
     var showSettingsRedirect by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -118,6 +120,23 @@ fun HomeScreen(
 
     val scope = rememberCoroutineScope()
     val reduceMotion = rememberReduceMotion()
+
+    // Request notification permission on Android 13+ (TIRAMISU) so Level Up
+    // and Daily Impact notifications can post to the system status bar.
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val notifPermissionLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission()
+        ) { /* permission handled */ }
+        LaunchedEffect(Unit) {
+            if (ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
 
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -176,7 +195,12 @@ fun HomeScreen(
                 photoFile
             )
             tempPhotoUri = uri
-            fullCameraLauncher.launch(uri)
+            try {
+                fullCameraLauncher.launch(uri)
+            } catch (e: android.content.ActivityNotFoundException) {
+                android.util.Log.w("HomeScreen", "No system camera app found, opening live scanner", e)
+                onNavigateToYolo()
+            }
         } catch (e: Exception) {
             android.util.Log.e("HomeScreen", "Failed to launch camera via FileProvider, falling back to gallery", e)
             galleryLauncher.launch("image/*")
@@ -511,7 +535,7 @@ fun HomeScreen(
                         text = stringResource(R.string.home_launch_scanner),
                         icon = Icons.Default.CameraAlt,
                         iconContentDescription = stringResource(R.string.home_cd_camera),
-                        onClick = { requestCamera() }
+                        onClick = { onNavigateToYolo() }
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -604,7 +628,19 @@ fun HomeScreen(
             if (showImpactDetail) {
                 ImpactDetailDialog(
                     onDismiss = { showImpactDetail = false },
-                    history = allHistory
+                    history = allHistory,
+                    onPreviewLevelUp = {
+                        showImpactDetail = false
+                        showLevelUpPreview = true
+                    }
+                )
+            }
+
+            if (showLevelUpPreview) {
+                LevelUpOverlay(
+                    newLevel = gamificationState.currentLevel,
+                    xpEarned = totalXp,
+                    onDismiss = { showLevelUpPreview = false }
                 )
             }
         }
@@ -612,7 +648,11 @@ fun HomeScreen(
 }
 
 @Composable
-fun ImpactDetailDialog(onDismiss: () -> Unit, history: List<WasteRecord>) {
+fun ImpactDetailDialog(
+    onDismiss: () -> Unit,
+    history: List<WasteRecord>,
+    onPreviewLevelUp: (() -> Unit)? = null
+) {
     val metrics = remember(history) { EcoImpactCalculator.calculate(history) }
 
     AlertDialog(
@@ -755,6 +795,13 @@ fun ImpactDetailDialog(onDismiss: () -> Unit, history: List<WasteRecord>) {
         },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_acknowledge), color = MaterialTheme.colorScheme.primary) }
+        },
+        dismissButton = onPreviewLevelUp?.let { preview ->
+            {
+                TextButton(onClick = preview) {
+                    Text("\uD83C\uDF89 Preview Level Up", color = MaterialTheme.colorScheme.secondary)
+                }
+            }
         },
         containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(28.dp)

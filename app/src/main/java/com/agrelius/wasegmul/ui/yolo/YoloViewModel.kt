@@ -243,10 +243,10 @@ class YoloViewModel : ViewModel() {
                 d.ensureInitialized()
                 detector = d
                 _error.value = null
-            } catch (e: Exception) {
+            } catch (t: Throwable) {
                 detector = null
                 _error.value = "YOLO model not available. Check bundled models and storage."
-                Log.w("YoloVM", "YOLO init failed: ${e.message}")
+                Log.w("YoloVM", "YOLO init failed: ${t.message}", t)
             }
         }
     }
@@ -300,12 +300,16 @@ class YoloViewModel : ViewModel() {
                     frameCount = 0
                     lastFpsTime = now
                 }
-            } catch (e: Exception) {
-                Log.e("YoloVM", "Detection failed", e)
+            } catch (t: Throwable) {
+                Log.e("YoloVM", "Detection failed", t)
             }
         } finally {
             detectMutex.unlock()
         }
+    }
+
+    fun setError(message: String) {
+        _error.value = message
     }
 
     fun clearError() {

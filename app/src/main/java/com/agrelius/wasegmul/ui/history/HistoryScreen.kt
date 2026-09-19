@@ -221,112 +221,126 @@ fun HistoryScreen(
                     EmptyHistoryState()
                 }
                 else -> {
-                Column(
+                LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 24.dp)
+                        .padding(horizontal = 24.dp),
+                    contentPadding = PaddingValues(bottom = 32.dp)
                 ) {
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    HistoryDashboard(allHistory = allHistory)
-                    Spacer(modifier = Modifier.height(16.dp))
+                    item(key = "dashboard") {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        HistoryDashboard(allHistory = allHistory)
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
 
                     // Search text field
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text(stringResource(R.string.history_search_hint), style = MaterialTheme.typography.bodySmall) },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.history_clear_search), modifier = Modifier.size(16.dp))
+                    item(key = "search") {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text(stringResource(R.string.history_search_hint), style = MaterialTheme.typography.bodySmall) },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.history_clear_search), modifier = Modifier.size(16.dp))
+                                    }
                                 }
-                            }
-                        },
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
                         )
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
 
                     // Filter chips row (localized, canonical keys)
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        items(FILTER_KEYS.size) { index ->
-                            val cat = FILTER_KEYS[index]
-                            FilterChip(
-                                selected = selectedCategory == cat,
-                                onClick = { selectedCategory = cat },
-                                label = { Text(filterLabel(cat), style = MaterialTheme.typography.labelSmall) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = if (cat == "Hazardous") MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
-                                    selectedLabelColor = if (cat == "Hazardous") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                    item(key = "filters") {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(FILTER_KEYS.size) { index ->
+                                val cat = FILTER_KEYS[index]
+                                FilterChip(
+                                    selected = selectedCategory == cat,
+                                    onClick = { selectedCategory = cat },
+                                    label = { Text(filterLabel(cat), style = MaterialTheme.typography.labelSmall) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = if (cat == "Hazardous") MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
+                                        selectedLabelColor = if (cat == "Hazardous") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                    )
                                 )
-                            )
+                            }
                         }
+                        Spacer(modifier = Modifier.height(6.dp))
                     }
-
-                    Spacer(modifier = Modifier.height(6.dp))
 
                     // Sort order chips
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Sort:",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        FilterChip(
-                            selected = sortOrder == HistorySortOrder.NEWEST,
-                            onClick = { sortOrderName = HistorySortOrder.NEWEST.name },
-                            label = { Text(stringResource(R.string.history_sort_newest), style = MaterialTheme.typography.labelSmall) }
-                        )
-                        FilterChip(
-                            selected = sortOrder == HistorySortOrder.OLDEST,
-                            onClick = { sortOrderName = HistorySortOrder.OLDEST.name },
-                            label = { Text(stringResource(R.string.history_sort_oldest), style = MaterialTheme.typography.labelSmall) }
-                        )
-                        FilterChip(
-                            selected = sortOrder == HistorySortOrder.CONFIDENCE,
-                            onClick = { sortOrderName = HistorySortOrder.CONFIDENCE.name },
-                            label = { Text(stringResource(R.string.history_sort_confidence), style = MaterialTheme.typography.labelSmall) }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    if (filteredHistory.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            contentAlignment = Alignment.Center
+                    item(key = "sort") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                stringResource(R.string.history_no_search_results),
-                                style = MaterialTheme.typography.bodyMedium,
+                                text = "Sort:",
+                                style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            FilterChip(
+                                selected = sortOrder == HistorySortOrder.NEWEST,
+                                onClick = { sortOrderName = HistorySortOrder.NEWEST.name },
+                                label = { Text(stringResource(R.string.history_sort_newest), style = MaterialTheme.typography.labelSmall) }
+                            )
+                            FilterChip(
+                                selected = sortOrder == HistorySortOrder.OLDEST,
+                                onClick = { sortOrderName = HistorySortOrder.OLDEST.name },
+                                label = { Text(stringResource(R.string.history_sort_oldest), style = MaterialTheme.typography.labelSmall) }
+                            )
+                            FilterChip(
+                                selected = sortOrder == HistorySortOrder.CONFIDENCE,
+                                onClick = { sortOrderName = HistorySortOrder.CONFIDENCE.name },
+                                label = { Text(stringResource(R.string.history_sort_confidence), style = MaterialTheme.typography.labelSmall) }
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    if (filteredHistory.isEmpty()) {
+                        item(key = "empty_filter_results") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 48.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    stringResource(R.string.history_no_search_results),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     } else {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            contentPadding = PaddingValues(vertical = 12.dp)
-                        ) {
-                            items(filteredHistory, key = { it.id }) { record ->
+                        val groupedSections = groupRecordsByTime(filteredHistory)
+                        val displayedSections = if (sortOrder == HistorySortOrder.OLDEST) {
+                            groupedSections.reversed()
+                        } else {
+                            groupedSections
+                        }
+                        displayedSections.forEach { group ->
+                            item(key = "header_${group.section.name}") {
+                                TimeSectionHeader(
+                                    section = group.section,
+                                    count = group.records.size
+                                )
+                            }
+                            items(group.records, key = { it.id }) { record ->
                                 HistoryCard(
                                     record = record,
                                     onEditFeedback = { editingRecord = record },
@@ -585,6 +599,126 @@ fun FeedbackDialog(
         containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(28.dp)
     )
+}
+
+enum class HistoryTimeSection(val titleRes: Int) {
+    TODAY(R.string.history_group_today),
+    YESTERDAY(R.string.history_group_yesterday),
+    THIS_WEEK(R.string.history_group_this_week),
+    THIS_MONTH(R.string.history_group_this_month),
+    OLDER(R.string.history_group_older)
+}
+
+data class TimeGroupedRecords(
+    val section: HistoryTimeSection,
+    val records: List<WasteRecord>
+)
+
+fun groupRecordsByTime(
+    records: List<WasteRecord>,
+    now: Long = System.currentTimeMillis()
+): List<TimeGroupedRecords> {
+    if (records.isEmpty()) return emptyList()
+
+    val cal = java.util.Calendar.getInstance().apply {
+        timeInMillis = now
+        set(java.util.Calendar.HOUR_OF_DAY, 0)
+        set(java.util.Calendar.MINUTE, 0)
+        set(java.util.Calendar.SECOND, 0)
+        set(java.util.Calendar.MILLISECOND, 0)
+    }
+    val startOfToday = cal.timeInMillis
+    val startOfYesterday = startOfToday - (24L * 60 * 60 * 1000)
+    val startOfWeek = startOfToday - (6L * 24 * 60 * 60 * 1000)
+    val startOfMonth = startOfToday - (29L * 24 * 60 * 60 * 1000)
+
+    val groups = mutableMapOf<HistoryTimeSection, MutableList<WasteRecord>>()
+    for (sec in HistoryTimeSection.entries) {
+        groups[sec] = mutableListOf()
+    }
+
+    for (rec in records) {
+        val t = rec.timestamp
+        val sec = when {
+            t >= startOfToday -> HistoryTimeSection.TODAY
+            t >= startOfYesterday -> HistoryTimeSection.YESTERDAY
+            t >= startOfWeek -> HistoryTimeSection.THIS_WEEK
+            t >= startOfMonth -> HistoryTimeSection.THIS_MONTH
+            else -> HistoryTimeSection.OLDER
+        }
+        groups[sec]?.add(rec)
+    }
+
+    return HistoryTimeSection.entries.mapNotNull { sec ->
+        val list = groups[sec].orEmpty()
+        if (list.isNotEmpty()) {
+            TimeGroupedRecords(sec, list)
+        } else null
+    }
+}
+
+@Composable
+fun TimeSectionHeader(
+    section: HistoryTimeSection,
+    count: Int
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .background(
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                    CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = when (section) {
+                    HistoryTimeSection.TODAY -> Icons.Default.Schedule
+                    HistoryTimeSection.YESTERDAY -> Icons.Default.History
+                    HistoryTimeSection.THIS_WEEK -> Icons.Default.DateRange
+                    HistoryTimeSection.THIS_MONTH -> Icons.Default.CalendarToday
+                    HistoryTimeSection.OLDER -> Icons.Default.Archive
+                },
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = stringResource(section.titleRes),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Box(
+            modifier = Modifier
+                .background(
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    RoundedCornerShape(12.dp)
+                )
+                .padding(horizontal = 8.dp, vertical = 2.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.history_items_count, count),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        )
+    }
 }
 
 @Composable
